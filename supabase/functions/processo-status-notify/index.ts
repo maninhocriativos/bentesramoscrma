@@ -1,5 +1,11 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  buscarMovimentosPendentes,
+  classificarRelevanciaMovimentos,
+  marcarMovimentosNotificados,
+  type MovimentoPendente,
+} from "../_shared/movimento-relevancia.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -147,66 +153,13 @@ async function resolveInstance(supabase: any, cliente: any) {
   return null;
 }
 
-async function explicarMovimentosComIA(
-  movimentos: any[],
-  numProcesso: string,
-  nomeCliente: string,
-): Promise<string | null> {
-  const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-  if (!OPENAI_API_KEY || movimentos.length === 0) return null;
-
-  const movsCtx = movimentos.map((m, i) => {
-    const data = m.dataHoraRaw || m.dataHora || "data não informada";
-    const tipo = m.nome || "Movimentação";
-    const detalhe = (m.complemento || "").trim();
-    return `Movimentação ${i + 1} (${data}):\n  Tipo: ${tipo}\n  Conteúdo: ${detalhe || "sem detalhes adicionais"}`;
-  }).join("\n\n");
-
-  try {
-    const resp = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_API_KEY}` },
-      signal: AbortSignal.timeout(45_000),
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        max_tokens: 500,
-        temperature: 0.4,
-        messages: [
-          {
-            role: "system",
-            content:
-              "Você é a Isa, assistente jurídica do escritório Bentes Ramos Advogados. " +
-              "Explique movimentações processuais em linguagem simples e acolhedora para clientes leigos, " +
-              "sem jargão técnico. Seja clara, direta e empática. " +
-              "Para cada movimentação diga: o que aconteceu, o que isso significa para o cliente, e se há algo que ele precise fazer. " +
-              "Use emojis moderadamente. Formato: lista com ▸ para cada item. Máximo 3 linhas por movimentação.",
-          },
-          {
-            role: "user",
-            content:
-              `Processo: ${numProcesso}\nCliente: ${nomeCliente}\n\n` +
-              `Explique as seguintes movimentações recentes:\n\n${movsCtx}`,
-          },
-        ],
-      }),
-    });
-
-    if (!resp.ok) return null;
-    const json = await resp.json();
-    const texto = json.choices?.[0]?.message?.content?.trim();
-    return texto || null;
-  } catch {
-    return null;
-  }
-}
-
-function buildMovimentosTemplate(movimentos: any[]): string {
+function buildMovimentosTemplate(movimentos: MovimentoPendente[]): string {
   let texto = "\n─────────────────\n\n📌 *Movimentações recentes:*\n\n";
   for (const mov of movimentos) {
-    const dataFormatada = formatarData(mov.dataHoraRaw || mov.dataHora || "");
-    const traducao = traduzirMovimento(mov.nome || "");
-    const raw = (mov.complemento || "").trim();
-    const detalhe = raw && raw.toLowerCase() !== (mov.nome || "").toLowerCase()
+    const dataFormatada = formatarData(mov.data_movimento || "");
+    const traducao = traduzirMovimento(mov.movimento_titulo || "");
+    const raw = (mov.movimento_descricao || "").trim();
+    const detalhe = raw && raw.toLowerCase() !== (mov.movimento_titulo || "").toLowerCase()
       ? `\n     📄 _${raw.length > 200 ? raw.slice(0, 200) + "…" : raw}_`
       : "";
     if (dataFormatada) {
@@ -218,28 +171,31 @@ function buildMovimentosTemplate(movimentos: any[]): string {
   return texto;
 }
 
-async function buildMessage(processo: any, cliente: any): Promise<string> {
+function buildMessage(
+  processo: any,
+  cliente: any,
+  relevantes: MovimentoPendente[],
+  explicacaoIA: string | null,
+): string {
   const nomeCliente = (cliente.nome || "").split(" ")[0] || "";
   const saudacao = nomeCliente ? `Olá, ${nomeCliente}!` : "Olá!";
   const numProcesso = processo.numero_processo || "N/A";
   const statusTraduzido = traduzirStatus(processo.status || "Em Andamento");
   const tribunal = processo.tribunal || "";
 
-  const movimentos = (processo.movimentos_json || []).slice(0, 3);
   let movimentosTexto = "";
 
-  if (movimentos.length > 0) {
-    const explicacaoIA = await explicarMovimentosComIA(movimentos, numProcesso, nomeCliente);
+  if (relevantes.length > 0) {
     if (explicacaoIA) {
       movimentosTexto = `\n─────────────────\n\n📌 *O que aconteceu no seu processo:*\n\n${explicacaoIA}\n\n`;
     } else {
-      movimentosTexto = buildMovimentosTemplate(movimentos);
+      movimentosTexto = buildMovimentosTemplate(relevantes);
     }
   } else {
     movimentosTexto =
       "\n─────────────────\n\n" +
-      "ℹ️ Até o momento, não houve novas movimentações nesta semana.\n" +
-      "Isso é algo normal no andamento processual, já que alguns processos podem permanecer por semanas sem atualizações.\n\n" +
+      "ℹ️ Não houve novidades que exijam sua atenção desde o último contato.\n" +
+      "Isso é algo normal no andamento processual, já que alguns processos podem permanecer por semanas sem atualizações relevantes.\n\n" +
       "Mas fique tranquilo(a): estamos acompanhando tudo de perto e, assim que houver qualquer novidade, você será informado(a).\n\n";
   }
 
@@ -360,6 +316,48 @@ serve(async (req) => {
         .eq("id", processoId);
     };
 
+    // Busca movimentações ainda não avaliadas para notificação (fonte de
+    // verdade: processo_movimentacoes, imune a reordenação/reescrita de
+    // movimentos_json) e classifica quais são relevantes o suficiente para
+    // o cliente — evita reenviar mero expediente ou, pior, movimentação já
+    // comunicada antes. Só roda quando a mensagem é auto-gerada (sem `mensagem`
+    // customizada no payload).
+    let pendentes: MovimentoPendente[] = [];
+    let relevantes: MovimentoPendente[] = [];
+    let explicacaoIA: string | null = null;
+
+    if (!mensagem) {
+      pendentes = await buscarMovimentosPendentes(supabase, processoId);
+      if (pendentes.length > 0) {
+        const classificacao = await classificarRelevanciaMovimentos(
+          pendentes,
+          processo.numero_processo || "N/A",
+          (cliente.nome || "").split(" ")[0] || "",
+        );
+        relevantes = classificacao.relevantes;
+        explicacaoIA = classificacao.explicacaoRelevantes;
+      }
+
+      // Chamada automática (auto-sync) sem nada relevante pra contar: não manda
+      // mensagem nenhuma. O botão manual (force=true) sempre manda algo, mesmo
+      // que seja só a confirmação de "sem novidades", porque foi um pedido
+      // explícito da equipe.
+      if (!force && relevantes.length === 0) {
+        await desfazerReclamacaoDaJanela();
+        if (pendentes.length > 0) {
+          await marcarMovimentosNotificados(supabase, pendentes, relevantes);
+        }
+        return new Response(
+          JSON.stringify({
+            success: true,
+            skipped: true,
+            motivo: pendentes.length === 0 ? "sem_movimentacao_nova" : "sem_novidade_relevante",
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     // Resolve the correct Z-API instance based on client origin
     const instance = await resolveInstance(supabase, cliente);
 
@@ -378,7 +376,7 @@ serve(async (req) => {
     }
 
     // Montar mensagem
-    const textoMensagem = mensagem || await buildMessage(processo, cliente);
+    const textoMensagem = mensagem || buildMessage(processo, cliente, relevantes, explicacaoIA);
 
     // Enviar via Z-API
     const zapiUrl = `https://api.z-api.io/instances/${instance.instanceId}/token/${instance.token}/send-text`;
@@ -418,6 +416,12 @@ serve(async (req) => {
         .from("processos")
         .update({ ultima_notificacao_at: new Date().toISOString() })
         .eq("id", processoId);
+    }
+
+    // Envio confirmado — agora sim marca as movimentações avaliadas como
+    // notificadas (relevantes ou não), pra não reavaliar/reenviar de novo.
+    if (pendentes.length > 0) {
+      await marcarMovimentosNotificados(supabase, pendentes, relevantes);
     }
 
     // Registrar na tabela de mensagens (subscriber_id = zapi_<phone> para aparecer no chat)

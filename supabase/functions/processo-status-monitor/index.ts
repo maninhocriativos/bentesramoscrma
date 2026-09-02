@@ -2,6 +2,12 @@
 import "npm:@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  buscarMovimentosPendentes,
+  classificarRelevanciaMovimentos,
+  marcarMovimentosNotificados,
+  type MovimentoPendente,
+} from "../_shared/movimento-relevancia.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -235,19 +241,22 @@ async function pertenceAoEscritorio(processoDataJud: any, supabase: any): Promis
   return pertence;
 }
 
-// Formata mensagem de atualização para o lead
-function formatarMensagemAtualizacao(processo: any, nomeCliente: string): string {
+// Formata mensagem de atualização para o lead. `houveMudanca` indica se a
+// última movimentação retornada pelo DataJud é realmente posterior à janela
+// de frequência — se não for, é uma movimentação já vista antes e não deve
+// ser mostrada como se fosse novidade desta semana.
+function formatarMensagemAtualizacao(processo: any, nomeCliente: string, houveMudanca: boolean): string {
   const status = determinarStatus(processo);
   const classe = processo.classe?.nome || 'Não informado';
-  const ultimaMovimentacao = processo.movimentos?.[0];
-  
+  const ultimaMovimentacao = houveMudanca ? processo.movimentos?.[0] : null;
+
   let mensagem = `📋 *Atualização do seu Processo*\n\n`;
   mensagem += `Olá, ${nomeCliente}!\n\n`;
   mensagem += `Segue a atualização semanal do seu processo:\n\n`;
   mensagem += `📌 *Número:* ${processo.numeroProcesso}\n`;
   mensagem += `📁 *Classe:* ${classe}\n`;
   mensagem += `📊 *Status Atual:* ${status}\n\n`;
-  
+
   if (ultimaMovimentacao) {
     mensagem += `🔄 *Última Movimentação:*\n`;
     mensagem += `📅 Data: ${formatarData(ultimaMovimentacao.dataHora)}\n`;
@@ -256,16 +265,22 @@ function formatarMensagemAtualizacao(processo: any, nomeCliente: string): string
       const complemento = ultimaMovimentacao.complementosTabelados.map((c: any) => c.nome).join(', ');
       mensagem += `ℹ️ ${complemento}\n`;
     }
+  } else {
+    mensagem += `ℹ️ Sem novidades desde o último aviso. Continuamos acompanhando de perto.\n`;
   }
-  
+
   mensagem += `\n💼 *Bentes & Ramos Advocacia*\n`;
   mensagem += `Qualquer dúvida, estamos à disposição!`;
-  
+
   return mensagem;
 }
 
 
-// Formata mensagem proativa mensal para o cliente (usa movimentos_json do sync diário)
+// Formata mensagem proativa mensal para o cliente. Cada `processos[i]` já
+// vem com `_relevantes` (movimentações não notificadas e classificadas como
+// relevantes pela IA) e `_explicacao` calculados pelo chamador — NUNCA lê
+// `movimentos_json` direto, senão volta a repetir mês após mês a mesma
+// movimentação antiga que já foi comunicada.
 function formatarMensagemMensal(processos: any[], nomeCliente: string): string {
   const nome = (nomeCliente || 'Cliente').split(' ')[0];
   const mes = new Date().toLocaleDateString('pt-BR', {
@@ -283,16 +298,18 @@ function formatarMensagemMensal(processos: any[], nomeCliente: string): string {
     if (p.tribunal) msg += `🏛️ ${p.tribunal}${p.orgao_julgador ? ` — ${p.orgao_julgador}` : ''}\n`;
     msg += `📊 Status: *${p.status || 'Em Andamento'}*\n`;
 
-    const movs: any[] = p.movimentos_json || [];
-    if (movs.length > 0) {
-      const ultima = movs[0];
-      const data = formatarData(ultima.dataHora || ultima.data);
+    const relevantes: any[] = p._relevantes || [];
+    if (p._explicacao) {
+      msg += `📅 Novidade:\n_${p._explicacao}_\n`;
+    } else if (relevantes.length > 0) {
+      const ultima = relevantes[0];
+      const data = formatarData(ultima.data_movimento);
       msg += `📅 Última movimentação (${data}):\n`;
-      msg += `_${ultima.nome || 'Movimentação'}`;
-      if (ultima.complemento) msg += ` — ${String(ultima.complemento).substring(0, 120)}`;
+      msg += `_${ultima.movimento_titulo || 'Movimentação'}`;
+      if (ultima.movimento_descricao) msg += ` — ${String(ultima.movimento_descricao).substring(0, 120)}`;
       msg += '_\n';
     } else {
-      msg += `📅 Sem movimentações registradas ainda\n`;
+      msg += `📅 Sem novidades desde o último aviso\n`;
     }
   }
 
@@ -349,7 +366,9 @@ serve(async (req) => {
         }
         
         const processo = resultado.hits.hits[0]._source;
-        const mensagem = formatarMensagemAtualizacao(processo, lead?.nome || 'Cliente');
+        // Consulta sob demanda (lead perguntou agora) — sempre mostra a última
+        // movimentação conhecida, não é uma notificação periódica.
+        const mensagem = formatarMensagemAtualizacao(processo, lead?.nome || 'Cliente', true);
         
         // Registrar evento
         await supabase.from('system_events').insert({
@@ -533,7 +552,7 @@ serve(async (req) => {
           );
         }
 
-        const mensagem = formatarMensagemAtualizacao(processoAtualizado, lead.nome || 'Cliente');
+        const mensagem = formatarMensagemAtualizacao(processoAtualizado, lead.nome || 'Cliente', houveMudanca);
         // Routing null-safe: tráfego → instância tráfego; qualquer outro → escritório
         const tipoOrigem = lead.tipo_origem ?? 'escritorio';
         const enviado = await enviarViaZapi(supabase, tipoOrigem, lead.telefone, mensagem);
@@ -664,11 +683,34 @@ serve(async (req) => {
         }
 
         try {
-          const mensagem = formatarMensagemMensal(procs, lead.nome);
+          // Por processo: busca movimentações ainda não avaliadas e classifica
+          // relevância por IA — evita repetir no mês seguinte uma movimentação
+          // que já foi comunicada (seja neste digest, seja pela notificação
+          // automática de processo-status-notify; ambas compartilham a mesma
+          // tabela de controle).
+          const nomeClienteCurto = (lead.nome || '').split(' ')[0] || '';
+          const procsComRelevancia = await Promise.all(procs.map(async (p: any) => {
+            const pendentes = await buscarMovimentosPendentes(supabase, p.id);
+            let relevantes: MovimentoPendente[] = [];
+            let explicacao: string | null = null;
+            if (pendentes.length > 0) {
+              const classificacao = await classificarRelevanciaMovimentos(pendentes, p.numero_processo || 'N/A', nomeClienteCurto);
+              relevantes = classificacao.relevantes;
+              explicacao = classificacao.explicacaoRelevantes;
+            }
+            return { ...p, _pendentes: pendentes, _relevantes: relevantes, _explicacao: explicacao };
+          }));
+
+          const mensagem = formatarMensagemMensal(procsComRelevancia, lead.nome);
           const enviado  = await enviarViaZapi(supabase, null, lead.telefone, mensagem);
 
           if (enviado) {
             enviados++;
+            for (const p of procsComRelevancia) {
+              if (p._pendentes.length > 0) {
+                await marcarMovimentosNotificados(supabase, p._pendentes, p._relevantes);
+              }
+            }
             await supabase.from('system_events').insert({
               tipo: 'notificacao_mensal_escritorio',
               fonte: 'processo_status_monitor',
