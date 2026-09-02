@@ -322,6 +322,12 @@ serve(async (req) => {
     // o cliente — evita reenviar mero expediente ou, pior, movimentação já
     // comunicada antes. Só roda quando a mensagem é auto-gerada (sem `mensagem`
     // customizada no payload).
+    //
+    // Sempre que a janela de frequência libera (automático ou manual), manda
+    // uma mensagem — com novidade real ou, na falta dela, a confirmação
+    // tranquilizadora de "sem novidades, seguimos acompanhando" (mesmo modelo
+    // do "Lembrete de monitoramento" de produtos equivalentes do mercado).
+    // Ficar em silêncio pareceria com o sistema não estar rodando.
     let pendentes: MovimentoPendente[] = [];
     let relevantes: MovimentoPendente[] = [];
     let explicacaoIA: string | null = null;
@@ -336,25 +342,6 @@ serve(async (req) => {
         );
         relevantes = classificacao.relevantes;
         explicacaoIA = classificacao.explicacaoRelevantes;
-      }
-
-      // Chamada automática (auto-sync) sem nada relevante pra contar: não manda
-      // mensagem nenhuma. O botão manual (force=true) sempre manda algo, mesmo
-      // que seja só a confirmação de "sem novidades", porque foi um pedido
-      // explícito da equipe.
-      if (!force && relevantes.length === 0) {
-        await desfazerReclamacaoDaJanela();
-        if (pendentes.length > 0) {
-          await marcarMovimentosNotificados(supabase, pendentes, relevantes);
-        }
-        return new Response(
-          JSON.stringify({
-            success: true,
-            skipped: true,
-            motivo: pendentes.length === 0 ? "sem_movimentacao_nova" : "sem_novidade_relevante",
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
       }
     }
 
