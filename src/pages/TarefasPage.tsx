@@ -13,7 +13,7 @@ import { TarefaDetailModal } from '@/components/tarefas/TarefaDetailModal';
 import { TimesheetModal } from '@/components/tarefas/TimesheetModal';
 import { TimesheetTable } from '@/components/tarefas/TimesheetTable';
 import { AnalyticsTab } from '@/components/tarefas/AnalyticsTab';
-import { Tarefa } from '@/types/tarefas';
+import { Tarefa, responsaveisDe, ehResponsavel } from '@/types/tarefas';
 import { buildTarefasReport, tarefasReportFilename } from '@/lib/tarefaReportGenerator';
 import {
   Plus, Clock, AlertTriangle, CheckCircle2, CheckSquare,
@@ -179,7 +179,7 @@ function AlertaItem({ tarefa, onClick, memberMap }: { tarefa: Tarefa; onClick: (
   const atrasada  = !!(dl && isPast(dl) && !isToday(dl));
   const venceHoje = !!(dl && isToday(dl));
   const aguardando = tarefa.aprovacao_status === 'aguardando_aprovacao';
-  const responsavel = tarefa.responsavel_id ? (memberMap[tarefa.responsavel_id] || 'Usuário') : null;
+  const responsavel = responsaveisDe(tarefa).map(id => memberMap[id] || 'Usuário').join(', ') || null;
 
   const reason = atrasada
     ? { label: `Atrasada ${formatDistanceToNow(dl!, { locale: ptBR, addSuffix: true })}`, color: '#dc2626', bg: '#fef2f2', border: 'rgba(220,38,38,0.25)' }
@@ -354,7 +354,7 @@ export default function TarefasPage() {
   const criticalTasks = useMemo(() => {
     if (!user) return [];
     return tarefas
-      .filter(t => t.responsavel_id === user.id && t.status !== 'Concluída' && t.status !== 'Cancelada')
+      .filter(t => ehResponsavel(t, user.id) && t.status !== 'Concluída' && t.status !== 'Cancelada')
       .filter(t => {
         const deadline = t.prazo_fatal || t.data_limite;
         if (!deadline) return false;
@@ -374,10 +374,14 @@ export default function TarefasPage() {
   }, [criticalTasks]);
   const tarefasPorUsuario = useMemo(() => {
     const map: Record<string, Tarefa[]> = {};
+    // Tarefa com vários responsáveis aparece na aba de cada um deles.
     tarefas.forEach(t => {
-      const uid = t.responsavel_id || 'sem_responsavel';
-      if (!map[uid]) map[uid] = [];
-      map[uid].push(t);
+      const ids = responsaveisDe(t);
+      const chaves = ids.length > 0 ? ids : ['sem_responsavel'];
+      chaves.forEach(uid => {
+        if (!map[uid]) map[uid] = [];
+        map[uid].push(t);
+      });
     });
     return map;
   }, [tarefas]);

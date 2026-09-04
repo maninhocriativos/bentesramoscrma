@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { usePerfil } from '@/hooks/usePerfil';
 import { useOfficeSettings } from '@/hooks/useOfficeSettings';
 import { supabase } from '@/integrations/supabase/client';
+import { buildProcessoSearchOr } from '@/lib/processoSearch';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import type { Processo } from '@/types/processos';
@@ -916,10 +917,13 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
   const searchProcessos = async (term: string) => {
     setProcessoSearch(term);
     if (term.length < 2) { setProcessoResults([]); setShowDropdown(false); return; }
+    // Número (com ou sem pontuação do CNJ), título da ação ou cliente.
+    const filtro = buildProcessoSearchOr(term, ['titulo_acao', 'nome_cliente']);
+    if (!filtro) { setProcessoResults([]); setShowDropdown(false); return; }
     const { data } = await supabase
       .from('processos')
       .select('id, numero_processo, titulo_acao, nome_cliente, area, assunto, advogado_responsavel, tribunal, partes_json, cliente_id')
-      .or(`numero_processo.ilike.%${term}%,titulo_acao.ilike.%${term}%,nome_cliente.ilike.%${term}%`)
+      .or(filtro)
       .limit(10);
     setProcessoResults((data as any[]) || []);
     setShowDropdown(true);

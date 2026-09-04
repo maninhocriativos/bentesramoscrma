@@ -32,9 +32,12 @@ import {
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Compromisso, TipoCompromisso, ConfirmacaoStatus } from '@/types/compromissos';
+import { responsaveisDe } from '@/types/tarefas';
+import { buildProcessoSearchOr } from '@/lib/processoSearch';
+import { ResponsaveisSelect, useMembrosEquipe, nomeMembro } from '@/components/shared/ResponsaveisSelect';
 import {
   Loader2, Trash2, X, Pencil, CalendarIcon, Clock, FileText,
-  Briefcase, AlertCircle, Search, Scale, Lock,
+  Briefcase, AlertCircle, Search, Scale, Lock, Users, Video, ListTodo,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePerfil } from '@/contexts/PerfilContext';
@@ -92,6 +95,12 @@ export function CompromissoModal({
   const [isEditing, setIsEditing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  // Vários responsáveis + link da audiência virtual — mesmos campos das
+  // tarefas, porque compromisso e tarefa ficam espelhados por trigger.
+  const [responsaveisIds, setResponsaveisIds] = useState<string[]>([]);
+  const [linkAudiencia, setLinkAudiencia] = useState('');
+  const membros = useMembrosEquipe();
+
   const { isAdmin, isGerente, isSecretaria } = usePerfil();
   const { user } = useAuth();
 
@@ -123,10 +132,13 @@ export function CompromissoModal({
     if (procTimer.current) clearTimeout(procTimer.current);
     if (q.trim().length < 2) { setProcResults([]); setProcOpen(false); return; }
     procTimer.current = setTimeout(async () => {
+      // Busca por cliente OU número — com ou sem a pontuação do CNJ.
+      const filtro = buildProcessoSearchOr(q, ['nome_cliente']);
+      if (!filtro) { setProcResults([]); setProcOpen(false); return; }
       const { data } = await supabase
         .from('processos')
         .select('id,nome_cliente,numero_processo')
-        .or(`nome_cliente.ilike.%${q}%,numero_processo.ilike.%${q}%`)
+        .or(filtro)
         .limit(8);
       setProcResults((data as ProcessoLite[]) || []);
       setProcOpen(true);
@@ -168,6 +180,8 @@ export function CompromissoModal({
         hora_inicio: horaStr,
         tipo: compromisso.tipo as TipoCompromisso,
       });
+      setResponsaveisIds(responsaveisDe(compromisso));
+      setLinkAudiencia(compromisso.link_audiencia || '');
       setIsEditing(false);
       if (compromisso.processo_id) {
         supabase.from('processos').select('id,nome_cliente,numero_processo').eq('id', compromisso.processo_id).maybeSingle()
@@ -182,6 +196,10 @@ export function CompromissoModal({
       const baseDate = selectedDate || new Date();
       const dataStr = format(baseDate, 'yyyy-MM-dd');
       limparProcesso();
+      // Novo: quem está criando já entra como responsável (o backend fazia
+      // isso por baixo dos panos; agora fica visível e editável).
+      setResponsaveisIds(user?.id ? [user.id] : []);
+      setLinkAudiencia('');
       form.reset({
         titulo: '',
         descricao: '',
@@ -191,6 +209,7 @@ export function CompromissoModal({
       });
       setIsEditing(true);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [compromisso, selectedDate, isOpen, form]);
 
   // ─── Submit ────────────────────────────────────────────────────────────────
@@ -206,6 +225,14 @@ export function CompromissoModal({
 
       console.log('[CompromissoModal] Data Manaus:', dataHoraLocal, '→ UTC:', dataIsoUtc);
 
+      // O 1º da lista é o responsável principal (coluna antiga, usada pela RLS
+      // e pelo resto do sistema); o array guarda todos.
+      const responsaveis = {
+        responsavel_id:   responsaveisIds[0] || null,
+        responsaveis_ids: responsaveisIds,
+        link_audiencia:   linkAudiencia.trim() || null,
+      };
+
       if (compromisso) {
         const result = await updateCompromisso(compromisso.id, {
           titulo: data.titulo,
@@ -213,6 +240,7 @@ export function CompromissoModal({
           data_inicio: dataIsoUtc,
           tipo: data.tipo,
           processo_id: procId || null,
+          ...responsaveis,
         });
         if (result?.error) return;
       } else {
@@ -224,7 +252,11 @@ export function CompromissoModal({
           tipo: data.tipo,
           lead_id: null,
           processo_id: procId || null,
-          responsavel_id: null,
+          // 'agenda' = criado por esta tela → o banco cria a tarefa espelho
+          // automaticamente (trigger). Outras origens (chat, Google, AdvBox)
+          // não viram tarefa.
+          origem: 'agenda',
+          ...responsaveis,
         });
         if (result?.error) return;
       }
@@ -452,6 +484,20 @@ export function CompromissoModal({
                   )}
                 />
 
+                <FormItem>
+                  <FormLabel htmlFor="cmp-responsaveis" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+                    <Users className="h-3 w-3" /> Responsáveis
+                  </FormLabel>
+                  <ResponsaveisSelect
+                    id="cmp-responsaveis"
+                    value={responsaveisIds}
+                    onChange={setResponsaveisIds}
+                    membros={membros}
+                    className="h-auto rounded-xl"
+                  />
+                  <p className="text-[10px] text-muted-foreground">Pode marcar mais de uma pessoa. O primeiro é o responsável principal.</p>
+                </FormItem>
+
                 <div className="grid grid-cols-2 gap-3">
                   <FormField
                     control={form.control}
@@ -508,7 +554,7 @@ export function CompromissoModal({
                       <FormControl>
                         <Textarea
                           id="cmp-descricao"
-                          placeholder="Detalhes do compromisso, link de reunião, observações..."
+                          placeholder="Detalhes do compromisso, observações..."
                           className="resize-none rounded-xl"
                           rows={3}
                           autoComplete="off"
@@ -519,6 +565,31 @@ export function CompromissoModal({
                     </FormItem>
                   )}
                 />
+
+                <FormItem>
+                  <FormLabel htmlFor="cmp-link" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+                    <Video className="h-3 w-3" /> Link da audiência virtual / reunião online (opcional)
+                  </FormLabel>
+                  <div className="relative">
+                    <Video className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input
+                      id="cmp-link"
+                      type="url"
+                      value={linkAudiencia}
+                      onChange={e => setLinkAudiencia(e.target.value)}
+                      placeholder="https://..."
+                      autoComplete="off"
+                      className="h-10 rounded-xl pl-9"
+                    />
+                  </div>
+                </FormItem>
+
+                {isNew && (
+                  <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 rounded-xl px-3 py-2 bg-muted/30 border border-border/40">
+                    <ListTodo className="h-3.5 w-3.5 shrink-0" />
+                    Este compromisso também vai aparecer na página de Tarefas (e no processo vinculado), já sincronizado.
+                  </p>
+                )}
 
                 {/* Botões */}
                 <div className="flex gap-2 pt-3 border-t border-border/40">
@@ -580,6 +651,33 @@ export function CompromissoModal({
                   <p className="text-[10px] text-muted-foreground">Manaus (AMT)</p>
                 </div>
               </div>
+
+              {compromisso && responsaveisDe(compromisso).length > 0 && (
+                <div className="rounded-xl p-3 border border-border/40 bg-muted/20">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1.5 mb-2">
+                    <Users className="h-3 w-3" /> Responsáveis
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {responsaveisDe(compromisso).map(idResp => (
+                      <Badge key={idResp} variant="secondary" className="text-[11px] font-semibold">
+                        {nomeMembro(membros.find(m => m.id === idResp))}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {compromisso?.link_audiencia && (
+                <div className="rounded-xl p-3 border border-border/40 bg-muted/20">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1.5 mb-1">
+                    <Video className="h-3 w-3" /> Link da audiência / reunião
+                  </p>
+                  <a href={compromisso.link_audiencia} target="_blank" rel="noreferrer"
+                    className="text-sm font-semibold text-blue-600 hover:underline break-all">
+                    {compromisso.link_audiencia}
+                  </a>
+                </div>
+              )}
 
               {compromisso?.descricao && (
                 <div className="rounded-xl p-3 border border-border/40 bg-muted/20">

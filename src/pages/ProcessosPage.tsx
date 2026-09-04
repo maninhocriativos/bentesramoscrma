@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspense, memo
 import { PageSkeleton } from '@/components/ui/PageSkeleton';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { numeroProcessoCasa } from '@/lib/processoSearch';
 import { ProcessosTable } from '@/components/processos/ProcessosTable';
 import { useProcessos } from '@/hooks/useProcessos';
 import { usePerfil } from '@/hooks/usePerfil';
@@ -306,8 +307,10 @@ function ProcessosPage() {
 
   const filteredProcessos = useMemo(() => processos.filter(p => {
     const s = searchTerm.toLowerCase();
-    const matchSearch = !s || [
-      p.numero_processo, p.titulo_acao, p.advogado_responsavel,
+    // Número de processo casa com ou sem a pontuação do CNJ
+    // ("70491919220268220001" acha "7049191-92.2026.8.22.0001").
+    const matchSearch = !s || numeroProcessoCasa(p.numero_processo, searchTerm) || [
+      p.titulo_acao, p.advogado_responsavel,
       p.assunto, p.orgao_julgador, p.nome_cliente, p.cpf_cliente, p.classe_cnj,
     ].some(v => v?.toLowerCase().includes(s));
     let matchStatus = true;

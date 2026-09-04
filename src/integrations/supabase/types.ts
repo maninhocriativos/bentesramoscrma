@@ -679,6 +679,8 @@ export type Database = {
           origem: string | null
           processo_id: string | null
           responsavel_id: string | null
+          responsaveis_ids: string[]
+          link_audiencia: string | null
           subscriber_id: string | null
           tarefa_id: string | null
           telefone_contato: string | null
@@ -709,6 +711,8 @@ export type Database = {
           origem?: string | null
           processo_id?: string | null
           responsavel_id?: string | null
+          responsaveis_ids?: string[]
+          link_audiencia?: string | null
           subscriber_id?: string | null
           tarefa_id?: string | null
           telefone_contato?: string | null
@@ -739,6 +743,8 @@ export type Database = {
           origem?: string | null
           processo_id?: string | null
           responsavel_id?: string | null
+          responsaveis_ids?: string[]
+          link_audiencia?: string | null
           subscriber_id?: string | null
           tarefa_id?: string | null
           telefone_contato?: string | null
@@ -3942,6 +3948,7 @@ export type Database = {
           notificacao_ativa: boolean | null
           numero_complementar: string | null
           numero_processo: string | null
+          numero_processo_digits: string | null
           orgao_julgador: string | null
           origem_cliente: string | null
           partes_json: Json | null
@@ -4010,6 +4017,7 @@ export type Database = {
           notificacao_ativa?: boolean | null
           numero_complementar?: string | null
           numero_processo?: string | null
+          numero_processo_digits?: string | null
           orgao_julgador?: string | null
           origem_cliente?: string | null
           partes_json?: Json | null
@@ -4078,6 +4086,7 @@ export type Database = {
           notificacao_ativa?: boolean | null
           numero_complementar?: string | null
           numero_processo?: string | null
+          numero_processo_digits?: string | null
           orgao_julgador?: string | null
           origem_cliente?: string | null
           partes_json?: Json | null
@@ -4360,8 +4369,10 @@ export type Database = {
           prioridade: string | null
           processo_id: string | null
           responsavel_id: string | null
+          responsaveis_ids: string[]
           started_at: string | null
           status: string | null
+          tipo: string
           titulo: string
           updated_at: string
         }
@@ -4391,8 +4402,10 @@ export type Database = {
           prioridade?: string | null
           processo_id?: string | null
           responsavel_id?: string | null
+          responsaveis_ids?: string[]
           started_at?: string | null
           status?: string | null
+          tipo?: string
           titulo: string
           updated_at?: string
         }
@@ -4422,8 +4435,10 @@ export type Database = {
           prioridade?: string | null
           processo_id?: string | null
           responsavel_id?: string | null
+          responsaveis_ids?: string[]
           started_at?: string | null
           status?: string | null
+          tipo?: string
           titulo?: string
           updated_at?: string
         }

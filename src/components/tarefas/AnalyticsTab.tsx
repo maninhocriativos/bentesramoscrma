@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Tarefa } from '@/types/tarefas';
+import { Tarefa, responsaveisDe } from '@/types/tarefas';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line, CartesianGrid, Legend,
@@ -71,11 +71,14 @@ export function AnalyticsTab({ tarefas, team }: AnalyticsTabProps) {
   const tempoMedioData = useMemo(() => {
     const map: Record<string, number[]> = {};
     tarefas.forEach(t => {
-      if (!t.started_at || !t.data_conclusao || !t.responsavel_id) return;
+      const ids = responsaveisDe(t);
+      if (!t.started_at || !t.data_conclusao || ids.length === 0) return;
       const hs = (new Date(t.data_conclusao + 'T23:59:59').getTime() - new Date(t.started_at).getTime()) / 3_600_000;
       if (hs <= 0 || hs > 720) return; // ignora anomalias > 30 dias
-      if (!map[t.responsavel_id]) map[t.responsavel_id] = [];
-      map[t.responsavel_id].push(hs);
+      ids.forEach(uid => {
+        if (!map[uid]) map[uid] = [];
+        map[uid].push(hs);
+      });
     });
     return Object.entries(map)
       .map(([uid, vals]) => ({
@@ -96,7 +99,7 @@ export function AnalyticsTab({ tarefas, team }: AnalyticsTabProps) {
   // ── Tarefas por usuário (stacked status) ────────────────────────────────────
   const cargaData = useMemo(() => {
     return team.map(m => {
-      const ts = tarefas.filter(t => t.responsavel_id === m.id && t.status !== 'Cancelada');
+      const ts = tarefas.filter(t => responsaveisDe(t).includes(m.id) && t.status !== 'Cancelada');
       return {
         nome: m.nome || m.fullName.split(' ')[0],
         Pendente:     ts.filter(t => t.status === 'Pendente').length,
@@ -138,7 +141,7 @@ export function AnalyticsTab({ tarefas, team }: AnalyticsTabProps) {
     const taxaPrazo = concluidas.length ? Math.round((noPrazo / concluidas.length) * 100) : null;
     const topUser = (() => {
       const m: Record<string, number> = {};
-      concluidas.forEach(t => { if (t.responsavel_id) m[t.responsavel_id] = (m[t.responsavel_id] || 0) + 1; });
+      concluidas.forEach(t => { responsaveisDe(t).forEach(uid => { m[uid] = (m[uid] || 0) + 1; }); });
       const best = Object.entries(m).sort((a, b) => b[1] - a[1])[0];
       return best ? (memberMap[best[0]] || 'N/A') : 'N/A';
     })();

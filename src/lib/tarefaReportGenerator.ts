@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import { format, isValid, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Tarefa } from '@/types/tarefas';
+import { Tarefa, responsaveisDe } from '@/types/tarefas';
 
 interface TarefasKpis {
   pendentes: number;
@@ -148,7 +148,7 @@ export function buildTarefasReport(
     doc.setTextColor(30, 30, 30);
     let x = margin + 2;
     doc.text(truncate(doc, t.titulo, cols[0].w - 4), x, y); x += cols[0].w;
-    doc.text(truncate(doc, t.responsavel_id ? (memberMap[t.responsavel_id] || 'Usuário') : 'Sem responsável', cols[1].w - 4), x, y); x += cols[1].w;
+    doc.text(truncate(doc, responsaveisDe(t).map(id => memberMap[id] || 'Usuário').join(', ') || 'Sem responsável', cols[1].w - 4), x, y); x += cols[1].w;
     doc.text(t.status, x, y); x += cols[2].w;
     doc.text(t.prioridade, x, y); x += cols[3].w;
     doc.text(fmtDate(t.prazo_fatal || t.data_limite), x, y); x += cols[4].w;

@@ -1,12 +1,12 @@
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { Tarefa } from '@/types/tarefas';
+import { Tarefa, responsaveisDe, ehResponsavel, TIPOS_TAREFA } from '@/types/tarefas';
 import { useAuth } from '@/hooks/useAuth';
 import { usePerfil } from '@/hooks/usePerfil';
 import { useTarefas } from '@/hooks/useTarefas';
 import { useState, useEffect } from 'react';
 import {
   Calendar, User, Clock, CheckCircle2, RotateCcw,
-  Star, Send, Play, Pencil, X, AlertTriangle,
+  Star, Send, Play, Pencil, X, AlertTriangle, Video, Tag,
 } from 'lucide-react';
 import { EntregarTarefaModal } from './EntregarTarefaModal';
 import { AprovarTarefaModal } from './AprovarTarefaModal';
@@ -61,21 +61,27 @@ export function TarefaDetailModal({ open, onOpenChange, tarefa, onEdit, onSucces
   const [responsavelNome, setResponsavelNome] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
 
+  // Todos os responsáveis (não só o principal) — "Ana, Bruno".
+  const responsaveisChave = tarefa ? responsaveisDe(tarefa).join(',') : '';
   useEffect(() => {
-    if (!tarefa?.responsavel_id) { setResponsavelNome(null); return; }
-    supabase.from('perfis').select('nome, sobrenome').eq('id', tarefa.responsavel_id).single()
+    const ids = responsaveisChave ? responsaveisChave.split(',') : [];
+    if (ids.length === 0) { setResponsavelNome(null); return; }
+    supabase.from('perfis').select('id, nome, sobrenome').in('id', ids)
       .then(({ data }) => {
-        if (data) setResponsavelNome([data.nome, data.sobrenome].filter(Boolean).join(' ') || 'Usuário');
+        if (!data) return;
+        const porId = new Map(data.map(p => [p.id, [p.nome, p.sobrenome].filter(Boolean).join(' ') || 'Usuário']));
+        setResponsavelNome(ids.map(i => porId.get(i) || 'Usuário').join(', '));
       });
-  }, [tarefa?.responsavel_id]);
+  }, [responsaveisChave]);
 
   if (!tarefa) return null;
 
   const prio     = PRIO_CFG[tarefa.prioridade] || PRIO_CFG.Baixa;
   const statusCfg = STATUS_CFG[tarefa.status] || STATUS_CFG['Pendente'];
   const aprov    = tarefa.aprovacao_status ? APROV_CFG[tarefa.aprovacao_status] : null;
+  const tipoCfg  = TIPOS_TAREFA.find(t => t.value === tarefa.tipo);
 
-  const isMyTask    = user?.id === tarefa.responsavel_id;
+  const isMyTask    = ehResponsavel(tarefa, user?.id);
   const canStart    = (isMyTask || isManager) && tarefa.status === 'Pendente';
   const canDeliver  = (isMyTask || isManager) && tarefa.status === 'Em Andamento' && !tarefa.aprovacao_status;
   const canResubmit = (isMyTask || isManager) && tarefa.aprovacao_status === 'devolvida';
@@ -153,8 +159,11 @@ export function TarefaDetailModal({ open, onOpenChange, tarefa, onEdit, onSucces
 
             {/* Grid de info */}
             <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-              <InfoRow icon={User} label="Responsável" value={responsavelNome || 'Não atribuído'} />
+              <InfoRow icon={User} label="Responsáveis" value={responsavelNome || 'Não atribuído'} />
               <InfoRow icon={AlertTriangle} label="Prioridade" value={prio.label} accent={prio.dot} />
+              {tipoCfg && tipoCfg.value !== 'Tarefa' && (
+                <InfoRow icon={Tag} label="Tipo" value={`${tipoCfg.emoji} ${tipoCfg.label}`} />
+              )}
               <InfoRow icon={Calendar} label="Prazo Fatal"
                 value={fmtDate(tarefa.prazo_fatal || tarefa.data_limite)}
                 alert={!!(tarefa.prazo_fatal || tarefa.data_limite)} />
@@ -167,6 +176,25 @@ export function TarefaDetailModal({ open, onOpenChange, tarefa, onEdit, onSucces
                   value={fmtDate(tarefa.data_conclusao)} accent="#16a34a" />
               )}
             </div>
+
+            {/* Link da audiência virtual / reunião online */}
+            {tarefa.link_audiencia && (
+              <a
+                href={tarefa.link_audiencia}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 rounded-xl p-3 transition-all hover:opacity-80"
+                style={{ background: 'rgba(37,99,235,0.06)', border: '0.5px solid rgba(37,99,235,0.25)' }}
+              >
+                <Video style={{ width: 14, height: 14, color: '#2563eb' }} className="shrink-0" />
+                <div className="min-w-0">
+                  <p style={{ fontSize: 10, fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    Link da audiência / reunião
+                  </p>
+                  <p className="truncate" style={{ fontSize: 12, color: '#1d4ed8' }}>{tarefa.link_audiencia}</p>
+                </div>
+              </a>
+            )}
 
             {/* Descrição */}
             {tarefa.descricao && (

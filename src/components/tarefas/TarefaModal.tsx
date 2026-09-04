@@ -2,15 +2,15 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { useTarefas } from '@/hooks/useTarefas';
-import { Tarefa } from '@/types/tarefas';
+import { Tarefa, TipoTarefa, TIPOS_TAREFA, responsaveisDe } from '@/types/tarefas';
 import { supabase } from '@/integrations/supabase/client';
-import { Trash2, X, Plus, Save, Search, Scale } from 'lucide-react';
+import { buildProcessoSearchOr } from '@/lib/processoSearch';
+import { ResponsaveisSelect } from '@/components/shared/ResponsaveisSelect';
+import { Trash2, X, Plus, Save, Search, Scale, Video } from 'lucide-react';
 
 const BROWN  = '#3d2b1f';
 const GOLD   = '#c9a96e';
 const GOLD_D = '#b8922a';
-
-interface TeamMember { id: string; nome: string | null; sobrenome: string | null; email: string | null; }
 
 interface TarefaModalProps {
   open: boolean;
@@ -20,13 +20,14 @@ interface TarefaModalProps {
   onSuccess?: () => void;
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
   return (
     <div>
       <label style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.07em', display: 'block', marginBottom: 6 }}>
         {label}
       </label>
       {children}
+      {hint && <p style={{ fontSize: 10, color: '#9ca3af', marginTop: 4 }}>{hint}</p>}
     </div>
   );
 }
@@ -44,15 +45,15 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete, onSuccess }:
   const { createTarefa, updateTarefa } = useTarefas();
   const [saving, setSaving] = useState(false);
   const [titulo, setTitulo]           = useState('');
+  const [tipo, setTipo]               = useState<TipoTarefa>('Tarefa');
   const [descricao, setDescricao]     = useState('');
   const [prioridade, setPrioridade]   = useState<Tarefa['prioridade']>('Media');
   const [status, setStatus]           = useState<Tarefa['status']>('Pendente');
-  const [responsavelId, setResponsavelId] = useState('none');
+  const [responsaveisIds, setResponsaveisIds] = useState<string[]>([]);
   const [prazoSeguranca, setPrazoSeguranca] = useState('');
   const [prazoFatal, setPrazoFatal]   = useState('');
   const [horario, setHorario]         = useState('');
   const [linkAudiencia, setLinkAudiencia] = useState('');
-  const [members, setMembers]         = useState<TeamMember[]>([]);
 
   // Vínculo com processo — sem isso, a tarefa nunca aparece na aba "Tarefas
   // do Processo" (ProcessoModalExpanded), mesmo mencionando o caso no título.
@@ -66,17 +67,19 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete, onSuccess }:
   const procTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isEditing = !!tarefa;
-  const ehAudiencia = /audi[eê]nc/i.test(titulo);
 
   const buscarProcesso = (q: string) => {
     setProcQuery(q);
     if (procTimer.current) clearTimeout(procTimer.current);
     if (q.trim().length < 2) { setProcResults([]); setProcOpen(false); return; }
     procTimer.current = setTimeout(async () => {
+      // Busca por cliente OU número — com ou sem a pontuação do CNJ.
+      const filtro = buildProcessoSearchOr(q, ['nome_cliente']);
+      if (!filtro) { setProcResults([]); setProcOpen(false); return; }
       const { data } = await supabase
         .from('processos')
         .select('id,nome_cliente,numero_processo,cliente_id')
-        .or(`nome_cliente.ilike.%${q}%,numero_processo.ilike.%${q}%`)
+        .or(filtro)
         .limit(8);
       setProcResults((data as ProcessoLite[]) || []);
       setProcOpen(true);
@@ -93,14 +96,26 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete, onSuccess }:
 
   const limparProcesso = () => { setProcId(''); setProcLabel(''); setProcClienteId(null); };
 
+  // Escolher o tipo preenche o título quando ele ainda está vazio (ou ainda é
+  // só o nome de outro tipo) — dá pra "escolher o título" com um clique e
+  // completar depois ("Audiência" → "Audiência de instrução — João").
+  const escolherTipo = (t: TipoTarefa) => {
+    setTipo(t);
+    const atual = titulo.trim();
+    if (!atual || TIPOS_TAREFA.some(x => x.label === atual)) {
+      setTitulo(TIPOS_TAREFA.find(x => x.value === t)?.label || '');
+    }
+  };
+
   useEffect(() => {
     if (!open) return;
     if (tarefa) {
       setTitulo(tarefa.titulo);
+      setTipo(tarefa.tipo || 'Tarefa');
       setDescricao(tarefa.descricao || '');
       setPrioridade(tarefa.prioridade);
       setStatus(tarefa.status);
-      setResponsavelId(tarefa.responsavel_id || 'none');
+      setResponsaveisIds(responsaveisDe(tarefa));
       setPrazoSeguranca(tarefa.prazo_seguranca || '');
       setPrazoFatal(tarefa.prazo_fatal || tarefa.data_limite || '');
       setHorario(tarefa.horario?.slice(0, 5) || '');
@@ -112,20 +127,11 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete, onSuccess }:
         limparProcesso();
       }
     } else {
-      setTitulo(''); setDescricao(''); setPrioridade('Media'); setStatus('Pendente');
-      setResponsavelId('none'); setPrazoSeguranca(''); setPrazoFatal(''); setHorario('');
+      setTitulo(''); setTipo('Tarefa'); setDescricao(''); setPrioridade('Media'); setStatus('Pendente');
+      setResponsaveisIds([]); setPrazoSeguranca(''); setPrazoFatal(''); setHorario('');
       setLinkAudiencia(''); limparProcesso();
     }
   }, [open, tarefa]);
-
-  useEffect(() => {
-    if (!open) return;
-    supabase.from('perfis').select('id, nome, sobrenome, email').eq('aprovado', true)
-      .then(({ data }) => { if (data) setMembers(data); });
-  }, [open]);
-
-  const getMemberName = (m: TeamMember) =>
-    [m.nome, m.sobrenome].filter(Boolean).join(' ') || m.email || 'Usuário';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -133,6 +139,7 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete, onSuccess }:
     setSaving(true);
     const payload = {
       titulo: titulo.trim(),
+      tipo,
       descricao: descricao.trim() || null,
       prioridade,
       status,
@@ -140,8 +147,11 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete, onSuccess }:
       prazo_seguranca: prazoSeguranca || null,
       prazo_fatal:     prazoFatal || null,
       horario:         horario || null,
-      link_audiencia:  ehAudiencia ? (linkAudiencia.trim() || null) : (tarefa?.link_audiencia ?? null),
-      responsavel_id:  responsavelId !== 'none' ? responsavelId : null,
+      link_audiencia:  linkAudiencia.trim() || null,
+      // O 1º da lista é o responsável principal (coluna antiga, ainda usada
+      // pelo resto do sistema); o array guarda todos.
+      responsavel_id:   responsaveisIds[0] || null,
+      responsaveis_ids: responsaveisIds,
       processo_id:     procId || null,
       cliente_id:      procClienteId,
     };
@@ -213,7 +223,31 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete, onSuccess }:
 
         {/* Formulário */}
         <form onSubmit={handleSubmit}>
-          <div className="px-5 py-4 space-y-4">
+          <div className="px-5 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
+
+            {/* Tipo */}
+            <Field label="Tipo">
+              <div className="flex flex-wrap gap-1.5">
+                {TIPOS_TAREFA.map(t => {
+                  const ativo = tipo === t.value;
+                  return (
+                    <button
+                      key={t.value}
+                      type="button"
+                      onClick={() => escolherTipo(t.value)}
+                      className="px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all"
+                      style={{
+                        background: ativo ? BROWN : `${BROWN}08`,
+                        color: ativo ? GOLD : '#6b7280',
+                        border: `1px solid ${ativo ? BROWN : `${GOLD}40`}`,
+                      }}
+                    >
+                      {t.emoji} {t.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </Field>
 
             {/* Título */}
             <Field label="Título *">
@@ -244,7 +278,7 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete, onSuccess }:
                   <input
                     value={procQuery}
                     onChange={e => buscarProcesso(e.target.value)}
-                    placeholder="Buscar por cliente ou nº do processo..."
+                    placeholder="Buscar por cliente ou nº do processo (com ou sem pontos)..."
                     className={inputFocusClass}
                     style={{ ...inputStyle, paddingLeft: 34 }}
                   />
@@ -279,19 +313,9 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete, onSuccess }:
               />
             </Field>
 
-            {/* Responsável */}
-            <Field label="Responsável">
-              <Select value={responsavelId} onValueChange={setResponsavelId}>
-                <SelectTrigger style={{ height: 38, borderRadius: 10, borderColor: `${GOLD}35`, background: '#faf9f7', fontSize: 13 }}>
-                  <SelectValue placeholder="Selecione o responsável" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Sem responsável</SelectItem>
-                  {members.map(m => (
-                    <SelectItem key={m.id} value={m.id}>{getMemberName(m)}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {/* Responsáveis (vários) */}
+            <Field label="Responsáveis" hint="Pode marcar mais de uma pessoa. O primeiro é o responsável principal.">
+              <ResponsaveisSelect value={responsaveisIds} onChange={setResponsaveisIds} variant="brown" />
             </Field>
 
             {/* Prioridade + Status */}
@@ -335,7 +359,7 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete, onSuccess }:
                   style={inputStyle}
                 />
               </Field>
-              <Field label="Prazo Fatal">
+              <Field label="Prazo Fatal" hint="Com prazo fatal a tarefa entra automaticamente na Agenda.">
                 <input
                   type="date"
                   value={prazoFatal}
@@ -356,22 +380,23 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete, onSuccess }:
               />
             </Field>
 
-            {ehAudiencia && (
-              <Field label="Link da audiência (virtual)">
+            <Field label="Link da audiência virtual / reunião online (opcional)">
+              <div className="relative">
+                <Video className="absolute left-3 top-1/2 -translate-y-1/2" style={{ width: 14, height: 14, color: '#9ca3af' }} />
                 <input
                   type="url"
                   value={linkAudiencia}
                   onChange={e => setLinkAudiencia(e.target.value)}
                   placeholder="https://..."
                   className={inputFocusClass}
-                  style={inputStyle}
+                  style={{ ...inputStyle, paddingLeft: 34 }}
                 />
-              </Field>
-            )}
+              </div>
+            </Field>
           </div>
 
           {/* Footer */}
-          <div className="px-5 pb-5 flex gap-2">
+          <div className="px-5 pb-5 pt-3 flex gap-2" style={{ borderTop: `0.5px solid ${GOLD}20` }}>
             {isEditing && onDelete && (
               <button
                 type="button"

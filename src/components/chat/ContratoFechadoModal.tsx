@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
+import { buildProcessoSearchOr } from '@/lib/processoSearch';
 import { toast } from 'sonner';
 import { useMetaCapi } from '@/hooks/useMetaCapi';
 import {
@@ -225,10 +226,13 @@ export function ContratoFechadoModal({ open, onClose, leadId, leadNome }: Contra
   const buscarProcesso = (q: string) => {
     setProcQuery(q);
     if (q.trim().length < 2) { setProcResults([]); setProcOpen(false); return; }
+    // Cliente OU número — com ou sem a pontuação do CNJ.
+    const filtro = buildProcessoSearchOr(q, ['nome_cliente']);
+    if (!filtro) { setProcResults([]); setProcOpen(false); return; }
     supabase
       .from('processos')
       .select('id,nome_cliente,numero_processo')
-      .or(`nome_cliente.ilike.%${q}%,numero_processo.ilike.%${q}%`)
+      .or(filtro)
       .limit(8)
       .then(({ data }) => {
         setProcResults((data as ProcessoLite[]) || []);

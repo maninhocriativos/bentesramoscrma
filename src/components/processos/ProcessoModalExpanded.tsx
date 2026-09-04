@@ -5,10 +5,12 @@ import {
   FileText, Bell, Hash, FolderOpen, Shield, Pencil, ChevronRight,
   CheckCircle2, Search, Tag, UserPlus, AlertTriangle,
   CheckCircle, PauseCircle, Archive, Trophy, XCircle, Activity,
-  Link2, Link2Off, GitBranch, ListTodo, Send, Play, RotateCcw, Star,
+  Link2, Link2Off, GitBranch, ListTodo, Send, Play, RotateCcw, Star, Video,
 } from 'lucide-react';
 import { useTarefas } from '@/hooks/useTarefas';
-import { Tarefa } from '@/types/tarefas';
+import { Tarefa, TipoTarefa, TIPOS_TAREFA, responsaveisDe } from '@/types/tarefas';
+import { ResponsaveisSelect } from '@/components/shared/ResponsaveisSelect';
+import { buildProcessoSearchOr } from '@/lib/processoSearch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -492,8 +494,12 @@ function TarefaRowModal({ tarefa, membros, onStatusChange }: {
   const prio = PRIO_ROW[tarefa.prioridade] || PRIO_ROW.Baixa;
   const stCfg = STATUS_ROW[tarefa.status] || STATUS_ROW['Pendente'];
   const StatusIcon = stCfg.icon;
-  const membro = membros.find(m => m.id === tarefa.responsavel_id);
-  const membroNome = membro ? ([membro.nome, membro.sobrenome].filter(Boolean).join(' ') || membro.email || 'Usuário') : null;
+  // Todos os responsáveis (não só o principal) — "Ana, Bruno".
+  const membroNome = responsaveisDe(tarefa)
+    .map(idResp => membros.find(m => m.id === idResp))
+    .filter(Boolean)
+    .map(m => [m!.nome, m!.sobrenome].filter(Boolean).join(' ') || m!.email || 'Usuário')
+    .join(', ') || null;
   const isAtrasada = tarefa.prazo_fatal && tarefa.status !== 'Concluída' && tarefa.status !== 'Cancelada'
     && new Date(tarefa.prazo_fatal) < new Date();
   const isConcluida = tarefa.status === 'Concluída';
@@ -536,8 +542,22 @@ function TarefaRowModal({ tarefa, membros, onStatusChange }: {
                 <span className={`inline-flex items-center gap-1 text-[10px] font-medium ${isAtrasada ? 'text-red-600' : 'text-muted-foreground'}`}>
                   <Calendar className="h-2.5 w-2.5" />
                   {new Date(tarefa.prazo_fatal).toLocaleDateString('pt-BR')}
+                  {tarefa.horario && ` · ${tarefa.horario.slice(0, 5)}`}
                   {isAtrasada && <AlertTriangle className="h-2.5 w-2.5" />}
                 </span>
+              )}
+              {/* Link da audiência virtual */}
+              {tarefa.link_audiencia && (
+                <a
+                  href={tarefa.link_audiencia}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={e => e.stopPropagation()}
+                  className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-600 hover:underline"
+                  title={tarefa.link_audiencia}
+                >
+                  <Video className="h-2.5 w-2.5" />Link da audiência
+                </a>
               )}
             </div>
             {/* Aprovação */}
@@ -633,10 +653,13 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
   const [showNovaTarefaForm,   setShowNovaTarefaForm]   = useState(false);
   const [novaTarefaTitulo,     setNovaTarefaTitulo]     = useState('');
   const [novaTarefaDescricao,  setNovaTarefaDescricao]  = useState('');
-  const [novaTarefaResponsavel,setNovaTarefaResponsavel]= useState('none');
+  const [novaTarefaTipo,       setNovaTarefaTipo]       = useState<TipoTarefa>('Tarefa');
+  // Vários responsáveis (o 1º é o principal → responsavel_id).
+  const [novaTarefaResponsaveis, setNovaTarefaResponsaveis] = useState<string[]>([]);
   const [novaTarefaPrioridade, setNovaTarefaPrioridade] = useState<Tarefa['prioridade']>('Media');
   const [novaTarefaPrazoFatal, setNovaTarefaPrazoFatal] = useState('');
   const [novaTarefaHorario,    setNovaTarefaHorario]    = useState('');
+  const [novaTarefaLink,       setNovaTarefaLink]       = useState('');
   const [criandoTarefa,        setCriandoTarefa]        = useState(false);
   const [processoTarefas,      setProcessoTarefas]      = useState<Tarefa[]>([]);
   const [tarefasLoading,       setTarefasLoading]       = useState(false);
@@ -748,10 +771,12 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
     if (term.length < 3 || !processo?.id) { setVinculoResultados([]); return; }
     const t = setTimeout(async () => {
       setVinculoBuscando(true);
-      const like = `%${term}%`;
+      // Número com ou sem pontuação do CNJ, ou título da ação.
+      const filtro = buildProcessoSearchOr(term, ['titulo_acao']);
+      if (!filtro) { setVinculoResultados([]); setVinculoBuscando(false); return; }
       const { data } = await supabase.from('processos')
         .select('id,numero_processo,titulo_acao,status')
-        .or(`numero_processo.ilike.${like},titulo_acao.ilike.${like}`)
+        .or(filtro)
         .neq('id', processo.id)
         .limit(8);
       setVinculoResultados((data || []) as any);
@@ -1194,15 +1219,19 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
     setCriandoTarefa(true);
     const { error } = await supabase.from('tarefas').insert({
       titulo:           novaTarefaTitulo.trim(),
+      tipo:             novaTarefaTipo,
       descricao:        novaTarefaDescricao.trim() || null,
       processo_id:      processo.id,
       cliente_id:       formData.cliente_id && formData.cliente_id !== '__none__' ? formData.cliente_id : null,
-      responsavel_id:   novaTarefaResponsavel !== 'none' ? novaTarefaResponsavel : null,
+      // 1º da lista = responsável principal (coluna antiga); array = todos.
+      responsavel_id:   novaTarefaResponsaveis[0] || null,
+      responsaveis_ids: novaTarefaResponsaveis,
       prioridade:       novaTarefaPrioridade,
       status:           'Pendente',
       prazo_fatal:      novaTarefaPrazoFatal || null,
       data_limite:      novaTarefaPrazoFatal || null,
       horario:          novaTarefaHorario || null,
+      link_audiencia:   novaTarefaLink.trim() || null,
       prazo_seguranca:  null, data_conclusao: null,
       started_at: null, entrega_texto: null, entrega_anexo_url: null,
       entregue_em: null, aprovacao_status: null, aprovacao_nota: null,
@@ -1210,10 +1239,10 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
     });
     if (error) { toast.error('Erro ao criar tarefa', { description: error.message }); }
     else {
-      toast.success('Tarefa criada!');
-      setNovaTarefaTitulo(''); setNovaTarefaDescricao('');
-      setNovaTarefaResponsavel('none'); setNovaTarefaPrioridade('Media');
-      setNovaTarefaPrazoFatal(''); setNovaTarefaHorario(''); setShowNovaTarefaForm(false);
+      toast.success('Tarefa criada!', { description: novaTarefaPrazoFatal ? 'Já está na Agenda e na página de Tarefas.' : 'Visível na página de Tarefas (sem prazo, não entra na Agenda).' });
+      setNovaTarefaTitulo(''); setNovaTarefaDescricao(''); setNovaTarefaTipo('Tarefa');
+      setNovaTarefaResponsaveis([]); setNovaTarefaPrioridade('Media');
+      setNovaTarefaPrazoFatal(''); setNovaTarefaHorario(''); setNovaTarefaLink(''); setShowNovaTarefaForm(false);
     }
     setCriandoTarefa(false);
     fetchProcessoTarefas();
@@ -1913,6 +1942,29 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                       <p className="text-[11px] font-black text-foreground uppercase tracking-widest flex items-center gap-1.5">
                         <Plus className="h-3 w-3 text-primary" /> Nova Tarefa
                       </p>
+                      {/* Tipo — clicar preenche o título quando ele está vazio */}
+                      <div>
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 block">Tipo</label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {TIPOS_TAREFA.map(t => {
+                            const ativo = novaTarefaTipo === t.value;
+                            return (
+                              <button
+                                key={t.value}
+                                type="button"
+                                onClick={() => {
+                                  setNovaTarefaTipo(t.value);
+                                  const atual = novaTarefaTitulo.trim();
+                                  if (!atual || TIPOS_TAREFA.some(x => x.label === atual)) setNovaTarefaTitulo(t.label);
+                                }}
+                                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all ${ativo ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-muted-foreground border-border hover:border-primary/40'}`}
+                              >
+                                {t.emoji} {t.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
                       {/* Título */}
                       <div>
                         <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 block">Título *</label>
@@ -1938,19 +1990,13 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                       {/* Responsável + Prioridade */}
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 block">Responsável</label>
-                          <select
-                            value={novaTarefaResponsavel}
-                            onChange={e => setNovaTarefaResponsavel(e.target.value)}
-                            className="flex h-9 w-full rounded-xl border border-input bg-card px-3 text-sm"
-                          >
-                            <option value="none">Sem responsável</option>
-                            {membros.map(m => (
-                              <option key={m.id} value={m.id}>
-                                {[m.nome, m.sobrenome].filter(Boolean).join(' ') || m.email || 'Usuário'}
-                              </option>
-                            ))}
-                          </select>
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 block">Responsáveis</label>
+                          <ResponsaveisSelect
+                            value={novaTarefaResponsaveis}
+                            onChange={setNovaTarefaResponsaveis}
+                            membros={membros}
+                          />
+                          <p className="text-[10px] text-muted-foreground mt-1">Pode marcar mais de uma pessoa.</p>
                         </div>
                         <div>
                           <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 block">Prioridade</label>
@@ -1987,6 +2033,24 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                           />
                         </div>
                       </div>
+                      {/* Link da audiência virtual */}
+                      <div>
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 block">Link da audiência virtual / reunião online</label>
+                        <div className="relative">
+                          <Video className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                          <Input
+                            type="url"
+                            value={novaTarefaLink}
+                            onChange={e => setNovaTarefaLink(e.target.value)}
+                            placeholder="https://..."
+                            className="h-9 rounded-xl bg-card text-sm pl-9"
+                          />
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground flex items-center gap-1.5">
+                        <Calendar className="h-3 w-3 shrink-0" />
+                        Com prazo fatal, a tarefa entra automaticamente na Agenda e na página de Tarefas.
+                      </p>
                       {/* Botões */}
                       <div className="flex gap-2 pt-1">
                         <Button
@@ -2001,7 +2065,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => { setShowNovaTarefaForm(false); setNovaTarefaTitulo(''); }}
+                          onClick={() => { setShowNovaTarefaForm(false); setNovaTarefaTitulo(''); setNovaTarefaTipo('Tarefa'); setNovaTarefaResponsaveis([]); setNovaTarefaLink(''); }}
                           className="rounded-xl h-9 px-4"
                         >
                           <X className="h-3.5 w-3.5" />

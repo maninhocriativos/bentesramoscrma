@@ -557,6 +557,7 @@ serve(async (req) => {
         if (existente) {
           existente.clienteId = existente.clienteId || c.lead_id || null;
           existente.descricaoTexto = existente.descricaoTexto || c.descricao || c.local_reuniao || null;
+          existente.linkExplicito = existente.linkExplicito || c.link_audiencia || null;
         } else {
           candidatos.set(chave, {
             chave,
@@ -566,7 +567,9 @@ serve(async (req) => {
             dataStr,
             horario: horaStr,
             descricaoTexto: c.descricao || c.local_reuniao || null,
-            linkExplicito: null,
+            // compromissos.link_audiencia (2026-09-04) — campo explícito,
+            // espelhado da tarefa quando vinculado.
+            linkExplicito: c.link_audiencia || null,
           });
         }
       }

@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useState, useEffect, useRef } from 'react';
 import { useHonorarios } from '@/hooks/useFinanceiro';
 import { supabase } from '@/integrations/supabase/client';
+import { buildProcessoSearchOr } from '@/lib/processoSearch';
 import { DollarSign, Loader2, Search, Scale, X } from 'lucide-react';
 
 const fmtBRL = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
@@ -59,10 +60,13 @@ export function HonorarioModal({ open, onOpenChange, clienteId, processoId, onSu
     if (procTimer.current) clearTimeout(procTimer.current);
     if (q.trim().length < 2) { setProcResults([]); setProcOpen(false); return; }
     procTimer.current = setTimeout(async () => {
+      // Cliente OU número — com ou sem a pontuação do CNJ.
+      const filtro = buildProcessoSearchOr(q, ['nome_cliente']);
+      if (!filtro) { setProcResults([]); setProcOpen(false); return; }
       const { data } = await supabase
         .from('processos')
         .select('id,nome_cliente,numero_processo,valor_causa')
-        .or(`nome_cliente.ilike.%${q}%,numero_processo.ilike.%${q}%`)
+        .or(filtro)
         .order('valor_causa', { ascending: false, nullsFirst: false })
         .limit(8);
       setProcResults((data as ProcessoLite[]) || []);

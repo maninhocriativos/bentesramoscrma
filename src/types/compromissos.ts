@@ -11,7 +11,12 @@ export interface Compromisso {
   tipo: TipoCompromisso;
   lead_id: string | null;
   processo_id: string | null;
+  /** Responsável principal (= responsaveis_ids[0], mantido por trigger). */
   responsavel_id: string | null;
+  /** Todos os responsáveis. Opcional porque linhas antigas/realtime podem não trazer. */
+  responsaveis_ids?: string[];
+  /** Link da audiência virtual — espelhado com tarefas.link_audiencia quando vinculado. */
+  link_audiencia?: string | null;
   created_at: string;
   updated_at: string;
   confirmacao_status?: ConfirmacaoStatus;

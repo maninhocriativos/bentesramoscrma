@@ -12,7 +12,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { usePerfil } from '@/hooks/usePerfil';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { Tarefa } from '@/types/tarefas';
+import { Tarefa, responsaveisDe, ehResponsavel } from '@/types/tarefas';
 import { EntregarTarefaModal } from '@/components/tarefas/EntregarTarefaModal';
 import { AprovarTarefaModal } from '@/components/tarefas/AprovarTarefaModal';
 
@@ -47,10 +47,13 @@ export function TeamStatusWidget() {
   const tarefasPorUsuario = useMemo(() => {
     const map: Record<string, Tarefa[]> = {};
     const prioOrder: Record<string, number> = { Urgente: 0, Alta: 1, Media: 2, Baixa: 3 };
+    // Tarefa com vários responsáveis conta pra cada um deles.
     tarefas.forEach(t => {
-      if (t.responsavel_id && (t.status === 'Pendente' || t.status === 'Em Andamento')) {
-        if (!map[t.responsavel_id]) map[t.responsavel_id] = [];
-        map[t.responsavel_id].push(t);
+      if (t.status === 'Pendente' || t.status === 'Em Andamento') {
+        responsaveisDe(t).forEach(uid => {
+          if (!map[uid]) map[uid] = [];
+          map[uid].push(t);
+        });
       }
     });
     Object.values(map).forEach(arr => arr.sort((a, b) => (prioOrder[a.prioridade] ?? 3) - (prioOrder[b.prioridade] ?? 3)));
@@ -227,7 +230,7 @@ export function TeamStatusWidget() {
           {selectedTarefa && (() => {
             const cfg = PRIORIDADE_CONFIG[selectedTarefa.prioridade] || PRIORIDADE_CONFIG.Media;
             const responsavel = team.find(m => m.id === selectedTarefa.responsavel_id);
-            const isMyTask = user?.id === selectedTarefa.responsavel_id;
+            const isMyTask = ehResponsavel(selectedTarefa, user?.id);
             const canDeliver = isMyTask && !selectedTarefa.aprovacao_status && selectedTarefa.status !== 'Concluída';
             const canResubmit = isMyTask && selectedTarefa.aprovacao_status === 'devolvida';
             const canApprove = isManager && selectedTarefa.aprovacao_status === 'aguardando_aprovacao';
