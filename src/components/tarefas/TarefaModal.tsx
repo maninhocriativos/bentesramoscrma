@@ -2,10 +2,11 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { useTarefas } from '@/hooks/useTarefas';
-import { Tarefa, TipoTarefa, TIPOS_TAREFA, responsaveisDe } from '@/types/tarefas';
+import { Tarefa, TipoTarefa, TIPOS_TAREFA, responsaveisDe, inferirTipoTarefa } from '@/types/tarefas';
 import { supabase } from '@/integrations/supabase/client';
 import { buildProcessoSearchOr } from '@/lib/processoSearch';
 import { ResponsaveisSelect } from '@/components/shared/ResponsaveisSelect';
+import { TituloTarefaCombobox } from '@/components/shared/TituloTarefaCombobox';
 import { Trash2, X, Plus, Save, Search, Scale, Video } from 'lucide-react';
 
 const BROWN  = '#3d2b1f';
@@ -105,6 +106,13 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete, onSuccess }:
     if (!atual || TIPOS_TAREFA.some(x => x.label === atual)) {
       setTitulo(TIPOS_TAREFA.find(x => x.value === t)?.label || '');
     }
+  };
+
+  // Escolher o título também ajusta o tipo quando ele ainda é o genérico
+  // ("Audiência de Instrução" → tipo Audiência, que liga o lembrete de WhatsApp).
+  const escolherTitulo = (t: string) => {
+    setTitulo(t);
+    if (tipo === 'Tarefa') setTipo(inferirTipoTarefa(t, 'Tarefa'));
   };
 
   useEffect(() => {
@@ -241,14 +249,7 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete, onSuccess }:
               </Field>
               <div className="col-span-2">
                 <Field label="Título *">
-                  <input
-                    value={titulo}
-                    onChange={e => setTitulo(e.target.value)}
-                    required
-                    placeholder="Digite o título da tarefa"
-                    className={inputFocusClass}
-                    style={inputStyle}
-                  />
+                  <TituloTarefaCombobox value={titulo} onChange={escolherTitulo} variant="brown" />
                 </Field>
               </div>
             </div>

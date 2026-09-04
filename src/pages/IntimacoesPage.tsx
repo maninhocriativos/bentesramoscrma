@@ -3,6 +3,7 @@ import { usePerfil } from '@/hooks/usePerfil';
 import { useOfficeSettings } from '@/hooks/useOfficeSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { buildProcessoSearchOr } from '@/lib/processoSearch';
+import { TITULOS_TAREFA_BASE, inferirTipoTarefa, responsaveisDe } from '@/types/tarefas';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import type { Processo } from '@/types/processos';
@@ -45,7 +46,7 @@ interface TeamMember {
 
 interface AcaoSugerida { titulo: string; descricao: string; prazo_dias: number | null; prioridade: string; }
 interface AnaliseIA { resumo: string; recomendacao: string; acoes: AcaoSugerida[]; }
-interface TarefaVinculada { id: string; titulo: string; status: string; prazo_fatal: string | null; responsavel_id: string | null; }
+interface TarefaVinculada { id: string; titulo: string; status: string; prazo_fatal: string | null; responsavel_id: string | null; responsaveis_ids: string[] | null; }
 
 interface Intimacao {
   id: string;
@@ -874,7 +875,8 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
   const [aprovandoTudo, setAprovandoTudo] = useState(false);
   const { user: currentUser } = useAuth();
 
-  const TAREFAS = ['Manifestação','Recurso de Apelação','Recurso Especial','Recurso Extraordinário','Recurso Ordinário','Recurso Inominado','Embargos de Declaração','Contrarrazões','Alegações Finais','Memoriais','Agravo de Instrumento','Agravo Interno','Sentença','Acórdão','Sessão de Julgamento','Réplica','Perícia'];
+  // Mesmo catálogo de títulos usado no modal do processo e na página de Tarefas.
+  const TAREFAS = TITULOS_TAREFA_BASE;
   const allTarefas = [...new Set([...TAREFAS, ...tarefasCustomDb, ...tarefasCustom])];
   const toggleResponsavelTarefa = (id: string) =>
     setResponsavelIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -1027,7 +1029,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
     setTarefasVinculadasLoading(true);
     const { data, error } = await supabase
       .from('tarefas')
-      .select('id, titulo, status, prazo_fatal, responsavel_id')
+      .select('id, titulo, status, prazo_fatal, responsavel_id, responsaveis_ids')
       .eq('intimacao_id', intimacao.id)
       .order('created_at', { ascending: false });
     if (error) toast.error('Erro ao carregar tarefas vinculadas', { description: error.message });
@@ -1137,23 +1139,24 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
       ].filter(Boolean);
       const descricao = descriptionParts.join('\n\n');
 
-      // Sem tabela de vínculo N:N para responsável, cria uma tarefa por pessoa
-      // selecionada — cada uma aparece normalmente na lista de tarefas de quem
-      // foi atribuído, sem precisar mexer no resto do app (TarefasPage, relatórios
-      // etc. continuam assumindo um responsável por tarefa).
-      let criadas = 0;
+      // UMA tarefa com todos os responsáveis (responsaveis_ids; o 1º vira o
+      // responsavel_id "principal"). Antes criava uma tarefa por pessoa — com o
+      // multi-responsável isso virou duplicata na página de Tarefas e na Agenda
+      // (o trigger cria um compromisso por tarefa). Ver migration 20260904150000.
+      const { data, error } = await supabase.from('tarefas').insert({
+        titulo: selectedTarefaTipo, descricao,
+        tipo: inferirTipoTarefa(selectedTarefaTipo, 'Prazo'),
+        responsavel_id: responsavelIds[0], responsaveis_ids: responsavelIds,
+        processo_id: linkedProcesso?.id || null, cliente_id: linkedClienteId,
+        intimacao_id: intimacao.id,
+        prioridade, status: 'Pendente', data_limite: prazoFatal, prazo_seguranca: prazoSeguranca,
+        prazo_fatal: prazoFatal, horario: horarioTarefa || null, link_audiencia: linkAudienciaVal, data_conclusao: null,
+        entrega_texto: null, entrega_anexo_url: null, entregue_em: null, aprovacao_status: null,
+        aprovacao_nota: null, aprovacao_feedback: null, aprovado_por: null, aprovado_em: null,
+      }).select('id').single();
+      if (error) throw error;
+      // Cada responsável continua recebendo a própria notificação interna.
       for (const responsavel of responsavelIds) {
-        const { data, error } = await supabase.from('tarefas').insert({
-          titulo: selectedTarefaTipo, descricao,
-          responsavel_id: responsavel, processo_id: linkedProcesso?.id || null, cliente_id: linkedClienteId,
-          intimacao_id: intimacao.id,
-          prioridade, status: 'Pendente', data_limite: prazoFatal, prazo_seguranca: prazoSeguranca,
-          prazo_fatal: prazoFatal, horario: horarioTarefa || null, link_audiencia: linkAudienciaVal, data_conclusao: null,
-          entrega_texto: null, entrega_anexo_url: null, entregue_em: null, aprovacao_status: null,
-          aprovacao_nota: null, aprovacao_feedback: null, aprovado_por: null, aprovado_em: null,
-        }).select('id').single();
-        if (error) throw error;
-        criadas++;
         await supabase.from('notificacoes_internas' as any).insert({
           user_id: responsavel, titulo: 'Nova tarefa atribuída',
           mensagem: `${selectedTarefaTipo} - prazo fatal ${format(prazoFat, 'dd/MM/yyyy')}${horarioTarefa ? ` às ${horarioTarefa}` : ''}`,
@@ -1164,7 +1167,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
       setTarefasAdicionadas(prev => prev.includes(selectedTarefaTipo) ? prev : [...prev, selectedTarefaTipo]);
       await fetchTarefasVinculadas();
       setSelectedTarefaTipo(''); setHorarioTarefa(''); setObservacaoTarefa(''); setLinkAudienciaTarefa(''); setTarefaModalOpen(false);
-      toast.success(criadas > 1 ? `Tarefa criada para ${criadas} responsáveis` : 'Tarefa criada e atribuída ao responsável');
+      toast.success(responsavelIds.length > 1 ? `Tarefa criada com ${responsavelIds.length} responsáveis` : 'Tarefa criada e atribuída ao responsável', { description: 'Já está na Agenda, na página de Tarefas e no processo vinculado.' });
     } catch (err: any) {
       toast.error('Erro ao criar tarefa', { description: err.message });
     } finally { setSavingTarefa(false); }
@@ -1172,7 +1175,9 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
 
   const handleAprovarTudo = async () => {
     if (!analise) return;
-    const responsavel = responsavelIds[0] || currentUser?.id;
+    // Todos os responsáveis marcados em "Criar tarefa" (ou quem está logado).
+    const responsaveis = responsavelIds.length > 0 ? responsavelIds : (currentUser?.id ? [currentUser.id] : []);
+    const responsavel = responsaveis[0];
     if (!responsavel) { toast.error('Selecione um responsável em "Criar tarefa" primeiro'); return; }
     setAprovandoTudo(true);
     try {
@@ -1197,7 +1202,9 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
         ].filter(Boolean);
         const { data, error } = await supabase.from('tarefas').insert({
           titulo: acao.titulo, descricao: descriptionParts.join('\n\n'),
-          responsavel_id: responsavel, processo_id: linkedProcesso?.id || null, cliente_id: linkedClienteId,
+          tipo: inferirTipoTarefa(acao.titulo, 'Prazo'),
+          responsavel_id: responsavel, responsaveis_ids: responsaveis,
+          processo_id: linkedProcesso?.id || null, cliente_id: linkedClienteId,
           intimacao_id: intimacao.id,
           prioridade, status: 'Pendente', data_limite: fatalStr, prazo_seguranca: fatalStr, prazo_fatal: fatalStr,
           horario: null, data_conclusao: null, entrega_texto: null, entrega_anexo_url: null, entregue_em: null,
@@ -1207,12 +1214,14 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
           criadas++;
           titulosExistentes.add(acao.titulo);
           setTarefasAdicionadas(prev => [...prev, acao.titulo]);
-          await supabase.from('notificacoes_internas' as any).insert({
-            user_id: responsavel, titulo: 'Nova tarefa atribuída',
-            mensagem: `${acao.titulo} - prazo fatal ${format(fatal, 'dd/MM/yyyy')}`,
-            tipo: prioridade === 'Urgente' ? 'alerta' : 'info', lida: false, link: '/tarefas',
-            dados: { source: 'intimacoes', intimacao_id: intimacao.id, tarefa_id: data?.id },
-          } as any);
+          for (const r of responsaveis) {
+            await supabase.from('notificacoes_internas' as any).insert({
+              user_id: r, titulo: 'Nova tarefa atribuída',
+              mensagem: `${acao.titulo} - prazo fatal ${format(fatal, 'dd/MM/yyyy')}`,
+              tipo: prioridade === 'Urgente' ? 'alerta' : 'info', lida: false, link: '/tarefas',
+              dados: { source: 'intimacoes', intimacao_id: intimacao.id, tarefa_id: data?.id },
+            } as any);
+          }
         }
       }
       if (criadas > 0) { toast.success(`${criadas} tarefa(s) criada(s)`); await fetchTarefasVinculadas(); }
@@ -1410,7 +1419,12 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
             ) : tarefasVinculadas.length > 0 ? (
               <div className="flex flex-col gap-2">
                 {tarefasVinculadas.map(t => {
-                  const member = members.find(m => m.id === t.responsavel_id);
+                  // Todos os responsáveis ("Ana, Bruno"), não só o principal.
+                  const nomesResp = responsaveisDe(t)
+                    .map(idR => members.find(m => m.id === idR))
+                    .filter(Boolean)
+                    .map(m => getMemberName(m!))
+                    .join(', ');
                   const statusBadge =
                     t.status === 'Concluída' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'
                     : t.status === 'Em Andamento' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200'
@@ -1420,7 +1434,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
                       <div className="min-w-0">
                         <p className="text-sm font-semibold truncate">{t.titulo}</p>
                         <p className="text-[11px] text-muted-foreground">
-                          {member ? getMemberName(member) : 'Sem responsável'}
+                          {nomesResp || 'Sem responsável'}
                           {t.prazo_fatal ? ` · prazo ${format(parseISO(t.prazo_fatal), 'dd/MM/yyyy')}` : ''}
                         </p>
                       </div>

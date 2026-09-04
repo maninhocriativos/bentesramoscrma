@@ -10,6 +10,31 @@ export const TIPOS_TAREFA: { value: TipoTarefa; label: string }[] = [
   { value: 'Outro',     label: 'Outro' },
 ];
 
+/**
+ * Títulos padrão de tarefa (peças/atos processuais). Era uma lista fixa só da
+ * página de Intimações; agora é o mesmo catálogo em todo lugar que cria tarefa
+ * (modal do processo, página de Tarefas, Intimações). Títulos digitados à mão
+ * também ficam disponíveis depois — o combobox busca os já usados no banco.
+ */
+export const TITULOS_TAREFA_BASE: string[] = [
+  'Manifestação', 'Emenda à Inicial', 'Réplica', 'Contestação', 'Contrarrazões',
+  'Alegações Finais', 'Memoriais',
+  'Recurso de Apelação', 'Recurso Especial', 'Recurso Extraordinário', 'Recurso Ordinário',
+  'Recurso Inominado', 'Embargos de Declaração', 'Agravo de Instrumento', 'Agravo Interno',
+  'Audiência de Conciliação Virtual', 'Audiência de Conciliação Presencial',
+  'Audiência de Instrução', 'Sessão de Julgamento', 'Perícia',
+  'Sentença', 'Acórdão', 'Cumprimento de Sentença', 'Pagamento',
+  'Reunião com cliente', 'Coleta de documentos',
+];
+
+/** Sugere o tipo a partir do título ("Audiência de ..." → Audiência). */
+export function inferirTipoTarefa(titulo: string, fallback: TipoTarefa = 'Tarefa'): TipoTarefa {
+  const t = titulo.toLowerCase();
+  if (/audi[eê]nc|sess[aã]o de julgamento/.test(t)) return 'Audiência';
+  if (/reuni[aã]o/.test(t)) return 'Reunião';
+  return fallback;
+}
+
 export interface Tarefa {
   id: string;
   processo_id: string | null;

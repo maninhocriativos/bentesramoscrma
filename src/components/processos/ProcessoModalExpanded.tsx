@@ -8,8 +8,9 @@ import {
   Link2, Link2Off, GitBranch, ListTodo, Send, Play, RotateCcw, Star, Video,
 } from 'lucide-react';
 import { useTarefas } from '@/hooks/useTarefas';
-import { Tarefa, TipoTarefa, TIPOS_TAREFA, responsaveisDe } from '@/types/tarefas';
+import { Tarefa, TipoTarefa, TIPOS_TAREFA, responsaveisDe, inferirTipoTarefa } from '@/types/tarefas';
 import { ResponsaveisSelect } from '@/components/shared/ResponsaveisSelect';
+import { TituloTarefaCombobox } from '@/components/shared/TituloTarefaCombobox';
 import { buildProcessoSearchOr } from '@/lib/processoSearch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -1968,12 +1969,14 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                         </div>
                         <div className="col-span-2">
                           <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 block">Título *</label>
-                          <Input
+                          <TituloTarefaCombobox
                             value={novaTarefaTitulo}
-                            onChange={e => setNovaTarefaTitulo(e.target.value)}
+                            onChange={t => {
+                              setNovaTarefaTitulo(t);
+                              // "Audiência de ..." → tipo Audiência (liga o lembrete de WhatsApp)
+                              if (novaTarefaTipo === 'Tarefa') setNovaTarefaTipo(inferirTipoTarefa(t, 'Tarefa'));
+                            }}
                             placeholder="O que precisa ser feito?"
-                            className="h-9 rounded-xl bg-card text-sm"
-                            autoFocus
                           />
                         </div>
                       </div>
