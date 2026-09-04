@@ -225,41 +225,33 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete, onSuccess }:
         <form onSubmit={handleSubmit}>
           <div className="px-5 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
 
-            {/* Tipo */}
-            <Field label="Tipo">
-              <div className="flex flex-wrap gap-1.5">
-                {TIPOS_TAREFA.map(t => {
-                  const ativo = tipo === t.value;
-                  return (
-                    <button
-                      key={t.value}
-                      type="button"
-                      onClick={() => escolherTipo(t.value)}
-                      className="px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all"
-                      style={{
-                        background: ativo ? BROWN : `${BROWN}08`,
-                        color: ativo ? GOLD : '#6b7280',
-                        border: `1px solid ${ativo ? BROWN : `${GOLD}40`}`,
-                      }}
-                    >
-                      {t.emoji} {t.label}
-                    </button>
-                  );
-                })}
+            {/* Tipo (dropdown) + Título — escolher o tipo preenche o título vazio */}
+            <div className="grid grid-cols-3 gap-3">
+              <Field label="Tipo">
+                <Select value={tipo} onValueChange={v => escolherTipo(v as TipoTarefa)}>
+                  <SelectTrigger style={{ height: 38, borderRadius: 10, borderColor: `${GOLD}35`, background: '#faf9f7', fontSize: 13 }}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TIPOS_TAREFA.map(t => (
+                      <SelectItem key={t.value} value={t.value}>{t.emoji} {t.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <div className="col-span-2">
+                <Field label="Título *">
+                  <input
+                    value={titulo}
+                    onChange={e => setTitulo(e.target.value)}
+                    required
+                    placeholder="Digite o título da tarefa"
+                    className={inputFocusClass}
+                    style={inputStyle}
+                  />
+                </Field>
               </div>
-            </Field>
-
-            {/* Título */}
-            <Field label="Título *">
-              <input
-                value={titulo}
-                onChange={e => setTitulo(e.target.value)}
-                required
-                placeholder="Digite o título da tarefa"
-                className={inputFocusClass}
-                style={inputStyle}
-              />
-            </Field>
+            </div>
 
             {/* Processo vinculado — sem isso a tarefa não aparece na aba
                 "Tarefas do Processo" dentro do modal do processo. */}

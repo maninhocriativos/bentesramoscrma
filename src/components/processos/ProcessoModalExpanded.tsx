@@ -1942,39 +1942,36 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                       <p className="text-[11px] font-black text-foreground uppercase tracking-widest flex items-center gap-1.5">
                         <Plus className="h-3 w-3 text-primary" /> Nova Tarefa
                       </p>
-                      {/* Tipo — clicar preenche o título quando ele está vazio */}
-                      <div>
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 block">Tipo</label>
-                        <div className="flex flex-wrap gap-1.5">
-                          {TIPOS_TAREFA.map(t => {
-                            const ativo = novaTarefaTipo === t.value;
-                            return (
-                              <button
-                                key={t.value}
-                                type="button"
-                                onClick={() => {
-                                  setNovaTarefaTipo(t.value);
-                                  const atual = novaTarefaTitulo.trim();
-                                  if (!atual || TIPOS_TAREFA.some(x => x.label === atual)) setNovaTarefaTitulo(t.label);
-                                }}
-                                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all ${ativo ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-muted-foreground border-border hover:border-primary/40'}`}
-                              >
-                                {t.emoji} {t.label}
-                              </button>
-                            );
-                          })}
+                      {/* Tipo (dropdown) + Título — escolher o tipo preenche o título quando ele está vazio */}
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 block">Tipo</label>
+                          <select
+                            value={novaTarefaTipo}
+                            onChange={e => {
+                              const t = TIPOS_TAREFA.find(x => x.value === e.target.value);
+                              if (!t) return;
+                              setNovaTarefaTipo(t.value);
+                              const atual = novaTarefaTitulo.trim();
+                              if (!atual || TIPOS_TAREFA.some(x => x.label === atual)) setNovaTarefaTitulo(t.label);
+                            }}
+                            className="flex h-9 w-full rounded-xl border border-input bg-card px-3 text-sm"
+                          >
+                            {TIPOS_TAREFA.map(t => (
+                              <option key={t.value} value={t.value}>{t.emoji} {t.label}</option>
+                            ))}
+                          </select>
                         </div>
-                      </div>
-                      {/* Título */}
-                      <div>
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 block">Título *</label>
-                        <Input
-                          value={novaTarefaTitulo}
-                          onChange={e => setNovaTarefaTitulo(e.target.value)}
-                          placeholder="O que precisa ser feito?"
-                          className="h-9 rounded-xl bg-card text-sm"
-                          autoFocus
-                        />
+                        <div className="col-span-2">
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 block">Título *</label>
+                          <Input
+                            value={novaTarefaTitulo}
+                            onChange={e => setNovaTarefaTitulo(e.target.value)}
+                            placeholder="O que precisa ser feito?"
+                            className="h-9 rounded-xl bg-card text-sm"
+                            autoFocus
+                          />
+                        </div>
                       </div>
                       {/* Descrição */}
                       <div>
