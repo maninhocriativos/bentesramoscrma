@@ -162,7 +162,7 @@ export function TarefaDetailModal({ open, onOpenChange, tarefa, onEdit, onSucces
               <InfoRow icon={User} label="Responsáveis" value={responsavelNome || 'Não atribuído'} />
               <InfoRow icon={AlertTriangle} label="Prioridade" value={prio.label} accent={prio.dot} />
               {tipoCfg && tipoCfg.value !== 'Tarefa' && (
-                <InfoRow icon={Tag} label="Tipo" value={`${tipoCfg.emoji} ${tipoCfg.label}`} />
+                <InfoRow icon={Tag} label="Tipo" value={tipoCfg.label} />
               )}
               <InfoRow icon={Calendar} label="Prazo Fatal"
                 value={fmtDate(tarefa.prazo_fatal || tarefa.data_limite)}

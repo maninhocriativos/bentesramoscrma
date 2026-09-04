@@ -234,7 +234,7 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete, onSuccess }:
                   </SelectTrigger>
                   <SelectContent>
                     {TIPOS_TAREFA.map(t => (
-                      <SelectItem key={t.value} value={t.value}>{t.emoji} {t.label}</SelectItem>
+                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

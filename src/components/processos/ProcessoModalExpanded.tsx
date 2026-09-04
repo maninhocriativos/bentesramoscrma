@@ -1946,21 +1946,25 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                       <div className="grid grid-cols-3 gap-3">
                         <div>
                           <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 block">Tipo</label>
-                          <select
+                          <Select
                             value={novaTarefaTipo}
-                            onChange={e => {
-                              const t = TIPOS_TAREFA.find(x => x.value === e.target.value);
+                            onValueChange={v => {
+                              const t = TIPOS_TAREFA.find(x => x.value === v);
                               if (!t) return;
                               setNovaTarefaTipo(t.value);
                               const atual = novaTarefaTitulo.trim();
                               if (!atual || TIPOS_TAREFA.some(x => x.label === atual)) setNovaTarefaTitulo(t.label);
                             }}
-                            className="flex h-9 w-full rounded-xl border border-input bg-card px-3 text-sm"
                           >
-                            {TIPOS_TAREFA.map(t => (
-                              <option key={t.value} value={t.value}>{t.emoji} {t.label}</option>
-                            ))}
-                          </select>
+                            <SelectTrigger className="h-9 rounded-xl bg-card text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl">
+                              {TIPOS_TAREFA.map(t => (
+                                <SelectItem key={t.value} value={t.value} className="text-sm">{t.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
                         <div className="col-span-2">
                           <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 block">Título *</label>

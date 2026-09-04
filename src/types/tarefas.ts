@@ -2,12 +2,12 @@
 // por trigger (tarefa <-> compromisso), então o tipo precisa ser o mesmo.
 export type TipoTarefa = 'Reunião' | 'Audiência' | 'Prazo' | 'Tarefa' | 'Outro';
 
-export const TIPOS_TAREFA: { value: TipoTarefa; label: string; emoji: string }[] = [
-  { value: 'Tarefa',    label: 'Tarefa',    emoji: '📋' },
-  { value: 'Audiência', label: 'Audiência', emoji: '⚖️' },
-  { value: 'Prazo',     label: 'Prazo',     emoji: '⏰' },
-  { value: 'Reunião',   label: 'Reunião',   emoji: '🤝' },
-  { value: 'Outro',     label: 'Outro',     emoji: '📌' },
+export const TIPOS_TAREFA: { value: TipoTarefa; label: string }[] = [
+  { value: 'Tarefa',    label: 'Tarefa' },
+  { value: 'Audiência', label: 'Audiência' },
+  { value: 'Prazo',     label: 'Prazo' },
+  { value: 'Reunião',   label: 'Reunião' },
+  { value: 'Outro',     label: 'Outro' },
 ];
 
 export interface Tarefa {
