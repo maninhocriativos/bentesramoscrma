@@ -398,6 +398,23 @@ A partir daqui cada entrada tem: **o que**, **por quê / causa raiz**, **commit(
 - Ver [[project_alertas_globais_relatorio_advbox_20260907]] na memória do
   Claude Code para detalhe técnico completo.
 
+### 2026-09-07 (mesmo dia, terceira sessão) — Teste visual com Playwright habilitado
+- Usuário pediu pra instalar o navegador no projeto pra permitir teste visual.
+  O binário do Chromium do Playwright já estava no cache global da máquina
+  (`C:\Users\conta\AppData\Local\ms-playwright`), só faltava confirmar que
+  funcionava a partir deste projeto — `@playwright/test` já é dependência
+  (`playwright.config.ts` já existia, projeto `chromium`).
+- Verificado ao vivo: subiu o dev server (`npm run dev`, porta 8080), abriu
+  `/auth` com `playwright-core` num script `.mjs` dentro da pasta do projeto,
+  capturou console/pageerror (só warnings inofensivos de future-flag do React
+  Router) e tirou um screenshot real — renderizou perfeitamente com o tema
+  visual da marca. Servidor derrubado depois pelo PID certo (nunca
+  `taskkill /F /IM node.exe /T`, que mata todo Node da máquina).
+- Documentado em `docs/GUIA_DEPLOY_E_GIT.md` seção 7 ("Teste visual no
+  navegador") — padrão de comandos pronto pra reusar, e o lembrete de que isso
+  não elimina a necessidade de smoke-test do usuário pra telas atrás de login
+  (sem credencial de teste neste ambiente).
+
 ---
 
 ## 4. Pendências abertas (consolidado em 2026-09-07)

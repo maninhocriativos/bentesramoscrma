@@ -302,7 +302,10 @@ fazer o primeiro push. Até lá, commite localmente com frequência.
 - **GitHub API sem `gh`**: `git credential fill` devolve o token que o git já tem; a
   linha `password=` serve de Bearer pra `api.github.com`.
 - **Chrome/Edge** existem em `C:\Program Files` pra Playwright (`channel: 'chrome'`).
-  Não há Chromium do Playwright instalado.
+- **Playwright** (`@playwright/test`, já em `package.json`) — o binário do Chromium
+  está instalado no cache global da máquina (`C:\Users\conta\AppData\Local\ms-playwright`,
+  fora do repo, não precisa reinstalar a cada sessão). Ver seção "Teste visual" abaixo
+  pra como usar.
 - **Node 24** (roda `.ts` direto com type-stripping). Supabase CLI e GitHub CLI via
   winget/npm.
 
@@ -337,7 +340,69 @@ fazer o primeiro push. Até lá, commite localmente com frequência.
 
 ---
 
-## 7. Verificação: o que significa "pronto" aqui
+## 7. Teste visual no navegador (Playwright)
+
+Desde 2026-09-07 dá pra abrir o CRM de verdade num navegador headless e olhar o
+resultado, em vez de confiar só em `tsc`/`build`. O Chromium do Playwright já está
+instalado (cache global da máquina, fora do repo — não precisa `npx playwright
+install` de novo; rode só se `npx playwright install --dry-run chromium` disser que
+falta algo).
+
+**Padrão de uso** — subir o dev server, navegar, tirar screenshot, olhar com o Read
+tool (a imagem é lida diretamente, multimodal) e derrubar o servidor pelo PID certo:
+
+```bash
+# 1. Subir o dev server em background (porta 8080)
+export PATH="/c/Program Files/nodejs:$PATH"
+(npm run dev > /tmp/dev_server.log 2>&1 &)
+sleep 6
+
+# 2. Script de navegação (escrever dentro da pasta do projeto — import relativo
+#    a node_modules só resolve rodando de lá, não do scratchpad)
+cat > _pw_screenshot.mjs <<'EOF'
+import { chromium } from 'playwright-core';
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+const logs = [];
+page.on('console', m => logs.push(`[console:${m.type()}] ${m.text()}`));
+page.on('pageerror', e => logs.push(`[pageerror] ${e.message}`));
+await page.goto('http://localhost:8080/auth', { waitUntil: 'networkidle' });
+await page.screenshot({ path: '<caminho absoluto no scratchpad>/screenshot.png' });
+console.log('title=', await page.title());
+console.log('LOGS:', JSON.stringify(logs));
+await browser.close();
+EOF
+node _pw_screenshot.mjs
+rm -f _pw_screenshot.mjs
+
+# 3. Derrubar SÓ o dev server (nunca `taskkill /F /IM node.exe /T` — mata
+#    todo processo Node da máquina, dev servers de outros projetos inclusive)
+netstat -ano | grep ":8080" | grep LISTENING   # pega o PID da última coluna
+taskkill //F //PID <PID>
+```
+
+Depois, ler o PNG gerado com o Read tool pra inspecionar visualmente.
+
+**O que dá pra testar assim**: qualquer página pública (`/auth`, `/politica-privacidade`
+etc.), erros de console/JS, layout responsivo (mude o `viewport`), e telas atrás de
+login **desde que se crie uma rota de preview temporária** sem `RequireAuth` em
+`App.tsx` — só fazer isso e **reverter antes de commitar** (`git diff App.tsx` tem
+que voltar vazio). Foi assim que o casco mobile e o AppLayoutRoute foram
+verificados visualmente antes (ver [[project_mobile_app_shell_20260829]] na memória).
+
+**O que NÃO dá pra testar assim**: a aplicação autenticada de verdade — não há
+credencial de login de teste neste ambiente. Pra confirmar uma mudança que só
+aparece logado (ex.: um alerta na sidebar, um dado do Dashboard), a validação final
+continua sendo pedir smoke-test ao usuário, como já era antes do Playwright — o
+navegador headless reduz o que precisa de smoke-test, não elimina.
+
+Playwright também tem `channel: 'chrome'`/`'msedge'` disponível (`playwright.config.ts`
+já usa o projeto `chromium` puro) caso o Chromium baixado apresente algum problema —
+Chrome e Edge do sistema existem em `C:\Program Files`.
+
+---
+
+## 8. Verificação: o que significa "pronto" aqui
 
 | Tipo de mudança | Mínimo antes de dizer que está pronto |
 |---|---|
@@ -353,7 +418,7 @@ Se encontrar no meio do caminho um problema **ativo** de segurança ou de dado d
 
 ---
 
-## 8. Onde registrar o que foi feito
+## 9. Onde registrar o que foi feito
 
 1. **[HISTORICO.md](HISTORICO.md)** — linha do tempo do sistema. Acrescente uma entrada
    datada (AAAA-MM-DD) com: o que mudou, commit(s), o que ficou pendente. É o registro
