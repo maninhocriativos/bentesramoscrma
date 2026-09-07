@@ -426,8 +426,21 @@ Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a dat
    contratos ZapSign (08-28) **sem commit há 10 dias**; os 3 Workers **sem remoto no
    GitHub**. Commitar, criar repos, pushar.
 2. DJEN geoblock: intimações por OAB e por CNJ dependem de IP brasileiro. **Usuário
-   precisa provisionar VPS BR**; depois: proxy + `DJEN_PROXY_URL` em `intimacoes-oab`
-   e `processo-djen-sync`; remover bloco Escavador V1/V2 de `intimacoes-oab`.
+   combinou provisionar a VPS BR em 2026-09-08** (ver VPS + proxy no Brasil já
+   recomendado em [project_intimacoes_djen_geoblock](project_intimacoes_djen_geoblock.md)
+   — DigitalOcean/Vultr/Hostinger/Contabo, ~R$20–35/mês). Depois de provisionada:
+   - Escrever/configurar o proxy (Caddy ou relay Node/nginx simples) pra rotear saída
+     pro `comunicaapi.pje.jus.br`.
+   - **Smoke-test da VPS antes de wirar no CRM**: confirmar da própria VPS (SSH) que
+     `curl https://comunicaapi.pje.jus.br/api/v1/comunicacao?...` retorna 200 (não
+     403) — só then o IP brasileiro está de fato resolvendo o geoblock.
+   - Adicionar `DJEN_PROXY_URL` como secret das Edge Functions e apontar
+     `intimacoes-oab` e `processo-djen-sync` pra usá-lo (`fetchDjen`/`fetchDjenPorProcesso`).
+   - Verificar ao vivo pós-deploy: `processo-djen-sync` voltando a atualizar
+     `ultima_consulta_djen_at` nas últimas 24h (estava zerado desde 08-22, ver
+     sessão 09-07) e novas intimações com `fonte='djen_processo'`.
+   - Remover bloco Escavador V1/V2 de `intimacoes-oab` (decisão já tomada em 08-22,
+     código só não foi limpo ainda).
 3. Fatura do Supabase em aberto (aviso visto em 08-25) — confirmar se foi paga.
 4. `zapi-webhook` ainda consulta `metadata->>message_id` em vez de `message_id_key`
    (linhas ~681 e ~712) — Seq Scan provavelmente continua.
