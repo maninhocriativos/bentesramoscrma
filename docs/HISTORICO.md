@@ -364,6 +364,40 @@ A partir daqui cada entrada tem: **o que**, **por quê / causa raiz**, **commit(
 - Criados `docs/GUIA_DEPLOY_E_GIT.md`, `docs/HISTORICO.md`, `CLAUDE.md` (raiz do
   workspace e do CRM).
 
+### 2026-09-07 (mesmo dia, sessão seguinte) — Alertas globais, relatório AdvBox, fila de intimações destravada (`eba2e2f7`)
+- **Alerta de prazo crítico + chat interno viram globais.** Causa raiz de dois
+  pedidos do usuário ao mesmo tempo: `/chat` (WhatsApp) é a única rota fora do
+  `AppLayoutRoute` compartilhado — por isso quem passa o dia na tela de chat
+  nunca via o popup de tarefa crítica (que só existia em `TarefasPage.tsx`)
+  nem as notificações do chat interno da equipe. Extraído pro hook
+  `useCriticalTasksAlert` + componente `CriticalTasksAlert`, montado em
+  `AppLayout.tsx` e em `ChatPage.tsx` (as duas únicas montagens necessárias).
+- **Relatório de tarefas reescrito** (`src/lib/tarefaReportGenerator.ts`) no
+  formato usado por sistemas jurídicos como o AdvBox: prioridade, data/prazo,
+  e por tarefa vinculada a processo — partes (`processo_partes`), número CNJ
+  e tipo de ação (`processos.assunto`). `handleGenerateReport` busca esses
+  dados sob demanda, só pros processos do filtro atual.
+- **Achado real na investigação de intimações**: a fila automática
+  (`intimacoes-scheduler`→`intimacoes_sync_jobs`→`intimacoes-worker`) estava
+  **100% parada desde 2026-08-27 16:00 UTC (11 dias, zero jobs novos)**.
+  `claim_next_intimacoes_sync_job()` reenfileirava jobs travados em
+  `processing` de volta pra `pending` sem checar se `attempts` já tinha
+  esgotado `max_attempts` — um job da OAB 7526/AM ficou "pending" zumbi pra
+  sempre, e o índice único por OAB bloqueou qualquer job novo desde então
+  (mesmo padrão de "automação reporta sucesso mas não faz nada" do Escavador/
+  Anthropic). O "Sincronizar agora" manual continuava funcionando por chamar
+  a function direto, sem passar pela fila — daí a sensação de "não é 100%".
+  Corrigido via migration `20260907230000_fix_zombie_intimacoes_sync_job.sql`
+  (ensaiada com begin/rollback antes de aplicar) e **verificado ao vivo**:
+  chamada manual ao scheduler pós-deploy retornou `queued:1` e o job
+  completou (636 itens do DJEN, já todos existentes via syncs manuais).
+  **Não confundir com o geoblock do DJEN** (`processo-djen-sync`, sync por
+  CNJ pro buraco do TJAM) — esse é OUTRO problema, ainda ativo (0 processos
+  consultados nas últimas 24h), não corrigido nesta sessão, precisa da VPS
+  BR já pendente desde 2026-08-09 (item 2 da lista de pendências).
+- Ver [[project_alertas_globais_relatorio_advbox_20260907]] na memória do
+  Claude Code para detalhe técnico completo.
+
 ---
 
 ## 4. Pendências abertas (consolidado em 2026-09-07)
@@ -410,6 +444,12 @@ Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a dat
 18. AppLayoutRoute (08-26), fetchAllPaginated (08-25), Tarefas↔Agenda (09-04),
     notificação processual com IA (09-02), push notifications (08-29), casco mobile
     logado (08-29), isa_documentos com lead real, PDF via OpenAI no isa-auto-process.
+26. Alerta de prazo crítico + chat interno no `/chat`, e relatório de tarefas com
+    processo/partes (09-07) — pedir smoke-test real (ver na tela de WhatsApp e gerar
+    um relatório com tarefa vinculada a processo). Confirmar amanhã que os crons
+    `intimacoes-manha/meio-dia/tarde` (10h/16h/21h UTC) voltaram a criar jobs sozinhos
+    (a fila foi destravada e testada manualmente em 09-07, mas o primeiro ciclo 100%
+    automático pós-fix ainda não rodou).
 
 **Em andamento (planos aprovados)**
 19. Contratos/Procuração via templates + ZapSign nativo — Fases 4–9
