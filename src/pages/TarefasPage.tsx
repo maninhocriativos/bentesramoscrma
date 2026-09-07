@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { AppHeader } from '@/components/AppHeader';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -13,15 +13,16 @@ import { TarefaDetailModal } from '@/components/tarefas/TarefaDetailModal';
 import { TimesheetModal } from '@/components/tarefas/TimesheetModal';
 import { TimesheetTable } from '@/components/tarefas/TimesheetTable';
 import { AnalyticsTab } from '@/components/tarefas/AnalyticsTab';
-import { Tarefa, responsaveisDe, ehResponsavel } from '@/types/tarefas';
-import { buildTarefasReport, tarefasReportFilename } from '@/lib/tarefaReportGenerator';
+import { Tarefa, responsaveisDe } from '@/types/tarefas';
+import { buildTarefasReport, tarefasReportFilename, ProcessoInfoReport, OfficeInfoReport } from '@/lib/tarefaReportGenerator';
+import { supabase } from '@/integrations/supabase/client';
 import {
   Plus, Clock, AlertTriangle, CheckCircle2, CheckSquare,
   TrendingUp, Users, Star, Bell, Flame, Calendar,
   ChevronRight, Circle, FileDown, ChevronLeft, Download, User, RefreshCw
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { differenceInCalendarDays, formatDistanceToNow, isPast, isToday, isTomorrow, format } from 'date-fns';
+import { formatDistanceToNow, isPast, isToday, isTomorrow, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 // ── Paleta marrom/dourado ────────────────────────────────────────────────────
@@ -303,7 +304,6 @@ export default function TarefasPage() {
   const [selectedTarefa, setSelectedTarefa] = useState<Tarefa | null>(null);
   const [detailTarefa, setDetailTarefa] = useState<Tarefa | null>(null);
   const [activeUser, setActiveUser] = useState<string>('all');
-  const [criticalPopupOpen, setCriticalPopupOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('kanban');
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<string | null>(null);
@@ -351,27 +351,9 @@ export default function TarefasPage() {
     ].filter((t, i, arr) => arr.findIndex(x => x.id === t.id) === i).slice(0, 20);
   }, [tarefas]);
 
-  const criticalTasks = useMemo(() => {
-    if (!user) return [];
-    return tarefas
-      .filter(t => ehResponsavel(t, user.id) && t.status !== 'Concluída' && t.status !== 'Cancelada')
-      .filter(t => {
-        const deadline = t.prazo_fatal || t.data_limite;
-        if (!deadline) return false;
-        return differenceInCalendarDays(new Date(deadline), new Date()) <= 3;
-      })
-      .sort((a, b) => new Date(a.prazo_fatal || a.data_limite || '').getTime() - new Date(b.prazo_fatal || b.data_limite || '').getTime())
-      .slice(0, 5);
-  }, [tarefas, user]);
-
-  const shownCriticalIdsRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    const newOnes = criticalTasks.filter(t => !shownCriticalIdsRef.current.has(t.id));
-    if (newOnes.length > 0) {
-      newOnes.forEach(t => shownCriticalIdsRef.current.add(t.id));
-      setCriticalPopupOpen(true);
-    }
-  }, [criticalTasks]);
+  // Popup de prazo crítico agora é global (montado no AppLayout + ChatPage,
+  // via CriticalTasksAlert/useCriticalTasksAlert) pra aparecer em qualquer
+  // tela do sistema, não só aqui — ver src/components/tarefas/CriticalTasksAlert.tsx.
   const tarefasPorUsuario = useMemo(() => {
     const map: Record<string, Tarefa[]> = {};
     // Tarefa com vários responsáveis aparece na aba de cada um deles.
@@ -418,13 +400,46 @@ export default function TarefasPage() {
     };
   }, [filteredTarefas, kpis.totalHoras]);
 
-  const handleGenerateReport = () => {
-    const filtroLabel = activeUser === 'all'
-      ? 'Todos os usuários'
-      : (team.find(m => m.id === activeUser)?.nome || team.find(m => m.id === activeUser)?.fullName || 'Usuário');
-    const doc = buildTarefasReport(filteredTarefas, memberMap, reportKpis, filtroLabel);
-    const url = URL.createObjectURL(doc.output('blob'));
-    setReportPreview({ url, filename: tarefasReportFilename() });
+  const [generatingReport, setGeneratingReport] = useState(false);
+
+  const handleGenerateReport = async () => {
+    setGeneratingReport(true);
+    try {
+      const filtroLabel = activeUser === 'all'
+        ? 'Todos os usuários'
+        : (team.find(m => m.id === activeUser)?.nome || team.find(m => m.id === activeUser)?.fullName || 'Usuário');
+
+      // Processo/partes/tipo de ação não vêm na tarefa — busca à parte, só
+      // pros processos realmente presentes neste filtro (lista já limitada).
+      const processoIds = Array.from(new Set(filteredTarefas.map(t => t.processo_id).filter((id): id is string => !!id)));
+
+      const processoMap: Record<string, ProcessoInfoReport> = {};
+      const partesMap: Record<string, string> = {};
+
+      if (processoIds.length > 0) {
+        const [{ data: processos }, { data: partes }] = await Promise.all([
+          supabase.from('processos').select('id, numero_processo, titulo_acao, assunto').in('id', processoIds),
+          supabase.from('processo_partes').select('processo_id, nome').in('processo_id', processoIds),
+        ]);
+        (processos || []).forEach(p => {
+          processoMap[p.id] = { numero_processo: p.numero_processo, titulo_acao: p.titulo_acao, assunto: p.assunto };
+        });
+        const partesPorProcesso: Record<string, string[]> = {};
+        (partes || []).forEach(pt => {
+          (partesPorProcesso[pt.processo_id] ||= []).push(pt.nome);
+        });
+        Object.entries(partesPorProcesso).forEach(([id, nomes]) => { partesMap[id] = nomes.join(', '); });
+      }
+
+      const { data: officeRow } = await supabase.from('office_settings').select('office_name, lawyer_name, address, phone, email, oab_main').maybeSingle();
+      const office: OfficeInfoReport | null = officeRow || null;
+
+      const doc = buildTarefasReport(filteredTarefas, memberMap, reportKpis, filtroLabel, processoMap, partesMap, office);
+      const url = URL.createObjectURL(doc.output('blob'));
+      setReportPreview({ url, filename: tarefasReportFilename() });
+    } finally {
+      setGeneratingReport(false);
+    }
   };
 
   const handleDownloadReport = () => {
@@ -451,9 +466,9 @@ export default function TarefasPage() {
               <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>Controle de demandas, prazos e timesheet da equipe</p>
             </div>
             <div className="flex gap-2">
-              <Button onClick={handleGenerateReport} variant="outline" size="sm"
+              <Button onClick={handleGenerateReport} disabled={generatingReport} variant="outline" size="sm"
                 style={{ borderColor: `${GOLD}60`, color: BROWN, fontSize: 12, fontWeight: 600 }}>
-                <FileDown style={{ width: 14, height: 14, marginRight: 6 }} /> Gerar Relatório
+                <FileDown style={{ width: 14, height: 14, marginRight: 6 }} /> {generatingReport ? 'Gerando…' : 'Gerar Relatório'}
               </Button>
               <Button onClick={() => setTimesheetModal(true)} variant="outline" size="sm"
                 style={{ borderColor: `${GOLD}60`, color: BROWN, fontSize: 12, fontWeight: 600 }}>
@@ -844,145 +859,6 @@ export default function TarefasPage() {
         </div>
       </div>
 
-      {/* ── Modal de Prazo Crítico ── */}
-      <Dialog open={criticalPopupOpen} onOpenChange={setCriticalPopupOpen}>
-        <DialogContent
-          hideCloseButton
-          className="p-0 overflow-hidden gap-0"
-          style={{
-            width: 'calc(100vw - 32px)',
-            maxWidth: 460,
-            borderRadius: 20,
-            border: '1px solid rgba(220,38,38,0.35)',
-            boxShadow: '0 32px 80px rgba(220,38,38,0.18), 0 8px 24px rgba(0,0,0,0.20)',
-          }}
-        >
-          {/* Barra superior vermelha */}
-          <div style={{ height: 4, background: 'linear-gradient(90deg, #7f1d1d, #dc2626, #ef4444)' }} />
-
-          {/* Header dramático */}
-          <div className="px-6 pt-5 pb-4" style={{ background: 'linear-gradient(160deg, #1c0606 0%, #3b0d0d 100%)' }}>
-            <div className="flex items-start gap-4">
-              {/* Ícone pulsante */}
-              <div className="relative shrink-0 mt-0.5">
-                <div className="h-12 w-12 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(220,38,38,0.20)', border: '1px solid rgba(220,38,38,0.40)' }}>
-                  <AlertTriangle className="h-6 w-6 text-red-400" />
-                </div>
-                <span className="absolute -top-1 -right-1 h-3.5 w-3.5 rounded-full bg-red-500 border-2 border-[#1c0606] animate-pulse" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-widest text-red-400/80 mb-0.5">Atenção urgente</p>
-                <h2 className="text-lg font-black text-white leading-tight">
-                  {criticalTasks.length} tarefa{criticalTasks.length !== 1 ? 's' : ''} com prazo crítico
-                </h2>
-                <p className="text-[12px] text-red-200/60 mt-1 leading-snug">
-                  {criticalTasks.filter(t => differenceInCalendarDays(new Date(t.prazo_fatal || t.data_limite || ''), new Date()) < 0).length > 0
-                    ? `${criticalTasks.filter(t => differenceInCalendarDays(new Date(t.prazo_fatal || t.data_limite || ''), new Date()) < 0).length} já vencida${criticalTasks.filter(t => differenceInCalendarDays(new Date(t.prazo_fatal || t.data_limite || ''), new Date()) < 0).length !== 1 ? 's' : ''} — ação imediata necessária`
-                    : 'Prazos fatais próximos — revise e aja agora'}
-                </p>
-              </div>
-              {/* Botão fechar */}
-              <button
-                onClick={() => setCriticalPopupOpen(false)}
-                className="h-8 w-8 rounded-xl flex items-center justify-center transition-all hover:opacity-70 shrink-0"
-                style={{ background: 'rgba(255,255,255,0.08)' }}
-              >
-                <span className="text-white/60 text-sm leading-none">✕</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Lista de tarefas */}
-          <div className="px-4 py-3 space-y-2 max-h-[340px] overflow-y-auto" style={{ background: '#fff' }}>
-            {criticalTasks.map((tarefa, idx) => {
-              const deadline = tarefa.prazo_fatal || tarefa.data_limite;
-              const days = deadline ? differenceInCalendarDays(new Date(deadline), new Date()) : null;
-              const isOverdue = days !== null && days < 0;
-              const isToday0  = days === 0;
-              const overdueDays = isOverdue ? Math.abs(days!) : 0;
-              // Intensidade por dias de atraso
-              const intensity = isOverdue
-                ? overdueDays >= 30 ? 'extreme' : overdueDays >= 7 ? 'high' : 'medium'
-                : isToday0 ? 'today' : 'upcoming';
-              const badgeStyle: Record<string, React.CSSProperties> = {
-                extreme:  { background: '#7f1d1d', color: '#fca5a5' },
-                high:     { background: '#991b1b', color: '#fca5a5' },
-                medium:   { background: '#dc2626', color: '#fff' },
-                today:    { background: '#ea580c', color: '#fff' },
-                upcoming: { background: '#b45309', color: '#fff' },
-              };
-              const rowBorder: Record<string, string> = {
-                extreme: 'rgba(127,29,29,0.50)',
-                high:    'rgba(153,27,27,0.40)',
-                medium:  'rgba(220,38,38,0.30)',
-                today:   'rgba(234,88,12,0.30)',
-                upcoming:'rgba(180,83,9,0.25)',
-              };
-              const rowBg: Record<string, string> = {
-                extreme: 'rgba(127,29,29,0.06)',
-                high:    'rgba(153,27,27,0.05)',
-                medium:  'rgba(220,38,38,0.04)',
-                today:   'rgba(234,88,12,0.04)',
-                upcoming:'rgba(180,83,9,0.04)',
-              };
-              return (
-                <button
-                  key={tarefa.id}
-                  className="w-full text-left rounded-xl p-3 transition-all hover:scale-[1.01] active:scale-[0.99]"
-                  style={{
-                    border: `1px solid ${rowBorder[intensity]}`,
-                    background: rowBg[intensity],
-                    borderLeftWidth: 3,
-                    borderLeftColor: isOverdue ? '#dc2626' : isToday0 ? '#ea580c' : '#b45309',
-                  }}
-                  onClick={() => { setCriticalPopupOpen(false); setDetailTarefa(tarefa); }}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        {isOverdue && <Flame className="h-3.5 w-3.5 text-red-500 shrink-0" />}
-                        {isToday0 && <AlertTriangle className="h-3.5 w-3.5 text-orange-500 shrink-0" />}
-                        <p className="text-sm font-bold text-gray-900 truncate">{tarefa.titulo}</p>
-                      </div>
-                      <p className="text-[11px] text-gray-500 mt-0.5">
-                        Prazo fatal: {deadline ? format(new Date(deadline), "dd/MM/yyyy", { locale: ptBR }) : 'sem prazo'}
-                        {tarefa.horario ? ` às ${tarefa.horario.slice(0, 5)}` : ''}
-                      </p>
-                    </div>
-                    <div className="shrink-0 flex items-center gap-2">
-                      <span
-                        className="rounded-full px-2.5 py-1 text-[10px] font-black whitespace-nowrap"
-                        style={badgeStyle[intensity]}
-                      >
-                        {isOverdue ? `${overdueDays}d atraso` : isToday0 ? 'HOJE' : `${days}d`}
-                      </span>
-                      <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Footer */}
-          <div className="px-4 pb-4 pt-2 flex gap-2" style={{ background: '#fff', borderTop: '0.5px solid rgba(0,0,0,0.08)' }}>
-            <button
-              onClick={() => setCriticalPopupOpen(false)}
-              className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all hover:opacity-80"
-              style={{ background: 'rgba(0,0,0,0.06)', color: '#374151' }}
-            >
-              Ver depois
-            </button>
-            <button
-              onClick={() => setCriticalPopupOpen(false)}
-              className="flex-[2] py-2.5 rounded-xl text-sm font-black transition-all hover:opacity-90"
-              style={{ background: 'linear-gradient(135deg, #991b1b, #dc2626)', color: '#fff' }}
-            >
-              Entendido — Vou resolver
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
       <TarefaDetailModal open={!!detailTarefa} onOpenChange={o => !o && setDetailTarefa(null)} tarefa={detailTarefa}
         onEdit={t => { setDetailTarefa(null); setSelectedTarefa(t); setTarefaModalOpen(true); }}
         onSuccess={fetchTarefas} />

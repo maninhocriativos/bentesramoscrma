@@ -5,6 +5,7 @@ import { AppSidebar } from '@/components/AppSidebar';
 import { OnboardingModal } from '@/components/onboarding/OnboardingModal';
 import { PageTransition } from '@/components/layouts/PageTransition';
 import { ChatInterno } from '@/components/tarefas/ChatInterno';
+import { CriticalTasksAlert } from '@/components/tarefas/CriticalTasksAlert';
 import { PresenceProvider } from '@/contexts/PresenceContext';
 import { MobileTabBar } from '@/components/mobile/MobileTabBar';
 import { MobileMoreSheet } from '@/components/mobile/MobileMoreSheet';
@@ -69,6 +70,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
         {needsOnboarding && <OnboardingModal />}
         <ChatInterno />
+        <CriticalTasksAlert />
       </SidebarProvider>
     </PresenceProvider>
   );
