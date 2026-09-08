@@ -2665,7 +2665,11 @@ const ManyChatInboxContent = () => {
       <div className={`${!showMobileChat ? "hidden md:flex" : "flex"} flex-1 flex-col min-w-0`}>
         {selectedSubscriber ? (
           <>
-            {/* Header Chat */}
+            {/* Header Chat — nome/telefone/tags (flex-1 min-w-[130px]) tem
+                largura mínima garantida; Perdido/Contrato Fechado viraram
+                só ícone (ver abaixo) pra sobrar espaço sem precisar quebrar
+                linha, mesmo com o painel de conversa mais estreito que a
+                janela inteira (lista de conversas aberta ao lado). */}
             <div className={`min-h-[58px] md:min-h-[68px] px-1.5 md:px-4 flex items-center gap-1.5 md:gap-3 backdrop-blur-md border-b ${themeClasses.border} ${isDark ? "bg-gradient-to-r from-[#202C33] to-[#1A252C]" : "bg-gradient-to-r from-[#F0F2F5] to-[#E8EBEE]"}`}>
               <Button variant="ghost" size="icon" onClick={() => { setSelectedSubscriber(null); setShowMobileChat(false); }} className={`md:hidden h-8 w-8 shrink-0 ${themeClasses.iconColor}`}><ArrowLeft className="h-5 w-5" /></Button>
 
@@ -2677,7 +2681,7 @@ const ManyChatInboxContent = () => {
                 {isOnline(selectedSubscriber.subscriber_id) && <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 md:h-3.5 md:w-3.5 rounded-full bg-emerald-500 border-2 border-white" />}
               </div>
 
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-[200px]">
                 <div className="flex items-center gap-1.5 min-w-0">
                   <ChannelIcon canal={selectedSubscriber.canal} size="sm" />
                   {editingLeadName ? (
@@ -2809,7 +2813,15 @@ const ManyChatInboxContent = () => {
                 </div>
               </div>
 
-              <div className="flex items-center gap-1 md:gap-1.5 shrink-0">
+              {/* min-w-0 (não shrink-0) + overflow-x-auto: quando não cabem
+                  todos os ~10 ícones ao lado de um nome legível, essa
+                  fileira rola horizontalmente em vez de espremer o nome a
+                  zero ou quebrar linha — mesmo padrão já usado na fileira
+                  de tags acima. */}
+              <div
+                className="flex items-center gap-1 md:gap-1.5 min-w-0 overflow-x-auto [&::-webkit-scrollbar]:hidden"
+                style={{ scrollbarWidth: 'none' }}
+              >
                 {/* No mobile, Perdido/Contrato Fechado/Lembrete de assinatura saem da
                     barra (lotavam a linha e sobrepunham as tags) e viram itens do
                     menu "..." — ver DropdownMenuItems com md:hidden mais abaixo. */}
@@ -2820,13 +2832,12 @@ const ManyChatInboxContent = () => {
                       size="sm"
                       onClick={() => { setLeadPerdidoMotivo(''); setLeadPerdidoOpen(true); }}
                       title="Marcar lead como perdido"
-                      className="h-7 md:h-8 px-2.5 md:px-3.5 rounded-full gap-1.5 text-[11px] md:text-xs font-semibold
+                      className="h-7 w-7 md:h-8 md:w-8 p-0 rounded-full
                         border border-red-400/60 bg-red-500/10 text-red-500
                         hover:bg-red-500 hover:text-white hover:border-red-500 hover:shadow-md hover:shadow-red-500/25
                         active:scale-95 transition-all duration-150"
                     >
                       <XCircle className="h-3.5 w-3.5 shrink-0" />
-                      <span className="hidden lg:inline">Perdido</span>
                     </Button>
                   )}
 
@@ -2835,13 +2846,12 @@ const ManyChatInboxContent = () => {
                     size="sm"
                     onClick={() => setContratoModalOpen(true)}
                     title="Registrar contrato fechado"
-                    className="h-7 md:h-8 px-2.5 md:px-3.5 rounded-full gap-1.5 text-[11px] md:text-xs font-semibold
+                    className="h-7 w-7 md:h-8 md:w-8 p-0 rounded-full
                       border border-emerald-400/60 bg-emerald-500/10 text-emerald-600 dark:text-emerald-500
                       hover:bg-emerald-500 hover:text-white hover:border-emerald-500 hover:shadow-md hover:shadow-emerald-500/25
                       active:scale-95 transition-all duration-150"
                   >
                     <BadgeCheck className="h-3.5 w-3.5 shrink-0" />
-                    <span className="hidden lg:inline">Contrato Fechado</span>
                   </Button>
 
                   {/* ✍️ LEMBRETE DE ASSINATURA (link real ClickSign/ZapSign do contrato do lead) */}
