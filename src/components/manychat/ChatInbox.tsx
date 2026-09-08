@@ -2783,8 +2783,15 @@ const ManyChatInboxContent = () => {
                     </span>
                   )}
                 </div>
+                {/* Sempre 1 linha rolável (nunca md:flex-wrap): o breakpoint md:
+                    olha a largura da JANELA inteira, não a do painel de
+                    conversa — numa janela larga com a lista de conversas
+                    aberta ao lado, o painel pode ficar estreito mesmo
+                    "no desktop" e as tags empilhavam em várias linhas,
+                    esticando o cabeçalho e espremendo os botões (que ficam
+                    centralizados verticalmente) no meio da pilha. */}
                 <div
-                  className="flex items-center gap-1 mt-[2px] min-w-0 flex-nowrap overflow-x-auto md:flex-wrap md:overflow-visible [&::-webkit-scrollbar]:hidden"
+                  className="flex items-center gap-1 mt-[2px] min-w-0 flex-nowrap overflow-x-auto [&::-webkit-scrollbar]:hidden"
                   style={{ scrollbarWidth: 'none' }}
                 >
                   {getSubscriberTags(selectedSubscriber.subscriber_id).map(st => st.tag && (
