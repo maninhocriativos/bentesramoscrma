@@ -604,6 +604,18 @@ Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a dat
     o cron das 04h Manaus rodou sozinho em produção. Pedir pro usuário criar
     uma de teste pela aba "Recorrentes" e confirmar no dia seguinte que gerou
     sozinha.
+29. **Relatório de Leads (Sheets) não aparecia pra outros usuários** (09-08,
+    usuário testou): pro dono da conta o botão já era o novo, pra colegas
+    ainda parecia antigo. Investigado o mecanismo de auto-update do service
+    worker (PWA) — código parece correto (versiona por timestamp de build,
+    força reload com aviso às abas abertas, checa a cada 60s + em
+    visibilitychange). Hipótese mais provável: colega só não tinha
+    revisitado/dado refresh na tela desde os deploys de hoje — pedido pra
+    tentar Ctrl+Shift+R. **Se persistir mesmo após refresh manual**, investigar
+    mais a fundo o service worker (`public/sw.js`,
+    `src/hooks/useServiceWorkerUpdate.ts`) — pode ser instância de PWA
+    instalada que não estava rodando durante os deploys, ou outro caso de
+    borda não coberto pelo mecanismo atual.
 
 **Em andamento (planos aprovados)**
 19. Contratos/Procuração via templates + ZapSign nativo — Fases 4–9
