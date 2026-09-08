@@ -240,8 +240,13 @@ export function LeadsTableHeader({
             {/* Spacer */}
             <div className="flex-1" />
 
-            {/* Search */}
-            <div className="relative w-full max-w-[240px]">
+            {/* Search — shrink-0 + min-w garante que o campo nunca fique
+                menor que o suficiente pra digitar; sem isso, em telas
+                estreitas o flexbox espremia o <Input> quase a 0px, sobrando
+                só o ícone (que fica visível por ser `absolute`, disfarçando
+                o problema — parecia que só faltava o campo, mas ele
+                "existia" com largura zero). */}
+            <div className="relative w-full max-w-[240px] min-w-[150px] shrink-0">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <Input
                 placeholder="Buscar por nome, email ou telefone..."
@@ -259,8 +264,11 @@ export function LeadsTableHeader({
               )}
             </div>
 
-            {/* Filters */}
-            <div className="hidden lg:flex items-center gap-1.5">
+            {/* Filters — só a partir de xl: entre lg e xl não sobra espaço
+                pro bloco de Ações (Novo/exportar) sem estourar a largura da
+                tela (visto ao vivo em ~1109px). "Etapa" já tem os pills
+                clicáveis logo abaixo do header, então não perde acesso. */}
+            <div className="hidden xl:flex items-center gap-1.5">
               <Select value={filterOrigem} onValueChange={onFilterOrigemChange}>
                 <SelectTrigger className={cn(
                   "w-[110px] h-8 text-[11px] rounded-lg border-border/40 bg-muted/30 transition-all",
