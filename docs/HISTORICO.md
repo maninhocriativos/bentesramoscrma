@@ -445,6 +445,57 @@ A partir daqui cada entrada tem: **o que**, **por quê / causa raiz**, **commit(
   Claude Code para detalhe técnico completo (achados de exploração, decisão de
   não reusar a fila `isa-lembrete-sender`, correção do arquivo OAuth certo).
 
+### 2026-09-08 (mesmo dia, sessão seguinte) — Bug real de mensagens sumidas + credencial Netlify (`050e907c`)
+- Usuário reportou que o botão do chat interno ainda tampava o enviar em `/chat`
+  (`/chat` estreito, tipo janela redimensionada) e que mensagens pro Gabriel
+  tinham sumido do chat interno. Investigado com SQL direto: **não era perda de
+  dado** — `chat_mensagens` tinha 176 linhas, 14 do Gabriel, a última a poucos
+  minutos. **Bug real achado**: `useChatInterno.ts` buscava com
+  `order('created_at', {ascending: true}).limit(120)` — isso pega as 120
+  mensagens **mais antigas**, não as mais recentes. Assim que o total passou de
+  120, tudo que chegou depois ficava invisível a cada reload. Corrigido pra
+  `ascending: false` + `.reverse()`.
+- Diagnóstico do "deploy não subiu" (hash do bundle diferente do build local) foi
+  **falso alarme** — builds do Vite geram hash diferente por ambiente mesmo com
+  código idêntico; confirmado via API do Netlify (`published_deploy.commit_ref`)
+  que o deploy realmente tinha ido ao ar.
+- **Credencial nova**: `NETLIFY_API_TOKEN`/`NETLIFY_SITE_ID` (site `bentesramoscrm`,
+  id `90c23e67-6736-4d11-8535-a1c2ad7eeaef`) adicionados a `docs/SECRETS.local.md`
+  seção 12 — permite consultar status de deploy via API sem depender só do hash
+  do bundle. Arquivo inteiro reorganizado (índice de status no topo) a pedido do
+  usuário — "muito bagunçado".
+
+### 2026-09-08 (mesmo dia, sessão seguinte) — Chat interno: filtros, colar print, formatação (`8f722128`)
+- Filtro por remetente (dropdown) + busca de texto no "Chat da Equipe", aplicados
+  sobre o histórico já carregado (sem query nova).
+- Colar uma imagem da área de transferência (Ctrl+V) na caixa de mensagem agora
+  anexa como print — reaproveita o mesmo fluxo de upload que o botão de anexo já
+  tinha (`pendingFile`), sem infra nova.
+- `MsgText` passa a renderizar `*negrito*`, `_itálico_` e `~riscado~` (padrão
+  WhatsApp) além das @menções que já existiam — antes aparecia com os símbolos
+  literais na tela.
+
+### 2026-09-08 (mesmo dia, sessão seguinte) — Tarefas recorrentes (`5cc098a0`)
+- Nova tabela `tarefas_recorrentes` (template: título, tipo, prioridade,
+  responsáveis, frequência diária/semanal/mensal) + coluna
+  `tarefas.tarefa_recorrente_id`. RLS espelha exatamente a de `tarefas`
+  (checado ao vivo antes de escrever a migration): authenticated lê/cria/edita,
+  só Administrador apaga.
+- Edge function `tarefas-recorrentes-gerar` (cron diário, 04h Manaus) decide se
+  cada recorrência ativa deve gerar hoje e insere em `tarefas` com `prazo_fatal`
+  no mesmo dia — o trigger já existente (`sync_compromisso_da_tarefa`, de
+  09-04) cuida sozinho de espelhar na Agenda, nenhum código novo pra isso.
+  Dedup por `ultima_geracao_em` (não gera 2x no mesmo dia).
+- Nova aba "Recorrentes" em Tarefas: criar/pausar/retomar/editar/excluir séries,
+  reaproveitando `ResponsaveisSelect`/`TituloTarefaCombobox`/`TIPOS_TAREFA` que
+  o modal de tarefa normal já usa.
+- **Testado ao vivo end-to-end antes de entregar**: criada uma recorrência
+  diária de teste via SQL, function invocada manualmente → gerou a tarefa +
+  compromisso espelhado corretamente; invocada de novo no mesmo dia → não
+  duplicou (`total_avaliadas: 0`); dados de teste apagados depois.
+  **Não testado ainda**: criar uma recorrência pela UI de verdade e observar o
+  primeiro ciclo 100% automático do cron (só rodou manual até agora).
+
 ---
 
 ## 4. Pendências abertas (consolidado em 2026-09-07)
@@ -515,6 +566,14 @@ Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a dat
     planilha. Fuso da audiência (Acre) — sem cliente real de UF=AC pra validar
     ao vivo com segurança; só vai se provar na próxima audiência real de lá
     (09-08).
+27. Chat interno: usuário reportou botão de gravar áudio em cima do enviar em
+    `/chat` (mesma causa do botão de enviar texto, já corrigido) — aguardando
+    print novo pra confirmar se persiste pós-deploy (09-08).
+28. Tarefas recorrentes (09-08) — testado manualmente ponta a ponta (function
+    invocada à mão), mas nenhuma recorrência real foi criada pela UI ainda nem
+    o cron das 04h Manaus rodou sozinho em produção. Pedir pro usuário criar
+    uma de teste pela aba "Recorrentes" e confirmar no dia seguinte que gerou
+    sozinha.
 
 **Em andamento (planos aprovados)**
 19. Contratos/Procuração via templates + ZapSign nativo — Fases 4–9
