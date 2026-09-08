@@ -101,12 +101,17 @@ export function useChatInterno() {
   }, [user?.id]);
 
   const fetchMensagens = useCallback(async () => {
+    // ascending + limit pegava as 120 mensagens MAIS ANTIGAS, não as mais
+    // recentes — assim que o total passava de 120, tudo que chegava depois
+    // ficava invisível a cada reload (bug real, achado ao vivo em produção:
+    // 176 mensagens no banco, painel só carregava as 120 primeiras).
+    // Busca as 120 mais recentes (desc) e reverte pra ordem cronológica.
     const { data } = await supabase
       .from('chat_mensagens')
       .select('*, perfis(nome, sobrenome)')
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
       .limit(120);
-    const msgs = (data || []) as ChatMensagem[];
+    const msgs = ((data || []) as ChatMensagem[]).reverse();
     setMensagens(msgs);
     const unseen = msgs.filter(m => m.created_at > lastSeenRef.current && m.sender_id !== user?.id).length;
     setUnread(unseen);
