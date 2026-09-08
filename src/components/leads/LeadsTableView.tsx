@@ -189,6 +189,7 @@ export function LeadsTableView() {
         countTrafego={countTrafego}
         viewMode={headerViewMode as any}
         onViewModeChange={(mode) => setViewMode(mode as ViewMode)}
+        filteredLeads={filteredLeads}
       />
 
       <div className="px-4 lg:px-6 py-2.5 border-b bg-card">

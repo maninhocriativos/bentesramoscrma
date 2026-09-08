@@ -158,6 +158,16 @@ function extrairUfTribunal(tribunal: string | null | undefined): string | null {
   return m ? m[1] : null;
 }
 
+// Fuso do ENDEREÇO do cliente (leads_juridicos.uf) — independente do fuso do
+// tribunal acima, que só ajusta o texto exibido. Usado pra decidir se o ENVIO em
+// si precisa esperar (só quando o cliente está atrás de Manaus — hoje, só AC;
+// mesmo fuso ou à frente já cai num horário normal, sem precisar de nada).
+function offsetClienteEmHoras(uf: string | null | undefined): number {
+  if (!uf) return MANAUS_UTC_OFFSET; // sem endereço cadastrado: mantém como hoje
+  const key = uf.trim().toUpperCase();
+  return UF_UTC_OFFSET[key] ?? -3; // UF conhecida mas fora do mapa: Brasília
+}
+
 // Retorna {dataStr, horario} ajustados pro fuso real do tribunal, a partir
 // dos valores civis salvos (sempre "como se fossem" horário de Manaus).
 function converterParaFusoTribunal(dataStr: string, horario: string | null, tribunal: string | null | undefined): { dataStr: string; horario: string | null } {
@@ -585,7 +595,7 @@ serve(async (req) => {
           [...candidatos.values()].map(a => a.clienteId || (a.processoId ? processosPorId.get(a.processoId)?.cliente_id : null)).filter(Boolean)
         )] as string[];
         const { data: leadsData } = clienteIds.length
-          ? await supabase.from('leads_juridicos').select('id, nome, telefone, tipo_origem, linha_whatsapp').in('id', clienteIds)
+          ? await supabase.from('leads_juridicos').select('id, nome, telefone, tipo_origem, linha_whatsapp, uf, cidade').in('id', clienteIds)
           : { data: [] };
         const leadsPorId = new Map((leadsData || []).map((l: any) => [l.id, l]));
 
@@ -638,16 +648,8 @@ serve(async (req) => {
           // Horário salvo é sempre "como se fosse" de Manaus — reconverte
           // pro fuso real do tribunal antes de mostrar pro cliente.
           const { dataStr: dataReal, horario: horaReal } = converterParaFusoTribunal(audiencia.dataStr, audiencia.horario, processo?.tribunal);
-          const mensagem = montarMensagemAudiencia({
-            nomeCliente,
-            tituloAudiencia: audiencia.titulo,
-            dataFormatada: formatarData(`${dataReal}T12:00:00Z`),
-            horaFormatada: formatarHoraCompacta(horaReal),
-            numeroProcesso: processo?.numero_processo || 'não identificado',
-            reu: extrairReu(processo?.partes_json),
-            modalidade,
-            link,
-          });
+          const numeroProcesso = processo?.numero_processo || 'não identificado';
+          const reu = extrairReu(processo?.partes_json);
 
           // Sem lead, não dá pra resolver a instância pela origem dele —
           // mas audiência é sempre caso já em andamento (nunca tráfego pago),
@@ -655,26 +657,58 @@ serve(async (req) => {
           // "is_default" no cadastro é a de Tráfego, não a do Escritório —
           // não dá pra deixar isso implícito/undefined aqui).
           const instanceId = await resolveInstanceForLead(supabase, lead || { tipo_origem: 'escritorio' });
-          const resultado = await enviarMensagemZapi(supabase, telefone, mensagem, {
-            leadId: lead?.id,
-            subscriberNome: nomeCliente,
-            context: acao,
-            instanceId,
-          });
 
-          // Sem lead, enviarMensagemZapi não grava em manychat_mensagens
-          // (só grava quando tem leadId) — grava aqui pra ficar no histórico.
-          if (resultado.success && !lead) {
-            await supabase.from('manychat_mensagens').insert({
-              subscriber_id: gerarSubscriberId(telefone),
-              subscriber_nome: nomeCliente,
-              conteudo: mensagem,
-              tipo: 'text',
-              direcao: 'saida',
-              lead_id: null,
-              canal: 'whatsapp',
-              metadata: { source: 'zapi', context: acao },
+          // Endereço do cliente (não o tribunal) decide se o ENVIO precisa esperar.
+          // No force (catch-up manual), manda sempre na hora — é um disparo explícito,
+          // não faz sentido também agendar pro fuso do cliente.
+          const atrasoHoras = force ? 0 : MANAUS_UTC_OFFSET - offsetClienteEmHoras(lead?.uf);
+
+          let resultado: { success: boolean; error?: string };
+          let scheduledFor: string | null = null;
+
+          if (atrasoHoras > 0) {
+            // Cliente está atrás de Manaus (hoje, só Acre) — enviar agora chegaria
+            // cedo demais no fuso dele. Agenda pro poller (task
+            // lembretes_audiencia_agendados) mandar na hora certa; guarda o mínimo
+            // pra remontar a mensagem lá (a saudação bom-dia/boa-tarde é recalculada
+            // no envio real, não aqui).
+            const alvo = new Date();
+            alvo.setUTCHours(alvo.getUTCHours() + atrasoHoras, 0, 0, 0);
+            scheduledFor = alvo.toISOString();
+            resultado = { success: true };
+          } else {
+            const mensagem = montarMensagemAudiencia({
+              nomeCliente,
+              tituloAudiencia: audiencia.titulo,
+              dataFormatada: formatarData(`${dataReal}T12:00:00Z`),
+              horaFormatada: formatarHoraCompacta(horaReal),
+              numeroProcesso,
+              reu,
+              modalidade,
+              link,
             });
+
+            resultado = await enviarMensagemZapi(supabase, telefone, mensagem, {
+              leadId: lead?.id,
+              subscriberNome: nomeCliente,
+              context: acao,
+              instanceId,
+            });
+
+            // Sem lead, enviarMensagemZapi não grava em manychat_mensagens
+            // (só grava quando tem leadId) — grava aqui pra ficar no histórico.
+            if (resultado.success && !lead) {
+              await supabase.from('manychat_mensagens').insert({
+                subscriber_id: gerarSubscriberId(telefone),
+                subscriber_nome: nomeCliente,
+                conteudo: mensagem,
+                tipo: 'text',
+                direcao: 'saida',
+                lead_id: null,
+                canal: 'whatsapp',
+                metadata: { source: 'zapi', context: acao },
+              });
+            }
           }
 
           await supabase.from('system_events').insert({
@@ -684,17 +718,90 @@ serve(async (req) => {
             entidade_tipo: 'audiencia',
             entidade_id: audiencia.chave,
             lead_id: lead?.id || null,
-            dados: { enviado: resultado.success, erro: resultado.error, modalidade, janela: janela ?? diffDias, dias_ate: diffDias, processo_id: audiencia.processoId },
+            dados: {
+              enviado: scheduledFor ? null : resultado.success,
+              erro: resultado.error, modalidade, janela: janela ?? diffDias, dias_ate: diffDias, processo_id: audiencia.processoId,
+              ...(scheduledFor ? {
+                pendente_envio: true, scheduled_for: scheduledFor, telefone, instanceId, leadId: lead?.id || null,
+                nomeCliente, tituloAudiencia: audiencia.titulo, numeroProcesso, reu, modalidadeMsg: modalidade, link,
+                dataReal, horaReal,
+              } : {}),
+            },
           });
 
           results.actions.push({
-            tipo: 'audiencia_lembrete',
+            tipo: scheduledFor ? 'audiencia_lembrete_agendado' : 'audiencia_lembrete',
             janela: janela ? `${janela}d` : `${diffDias}d(manual)`,
             audiencia: audiencia.titulo,
             lead: nomeCliente,
             enviado: resultado.success,
+            scheduled_for: scheduledFor,
           });
         }
+      }
+    }
+
+    // ==================== LEMBRETE DE AUDIÊNCIA — ENVIOS AGENDADOS ====================
+    // Poller (cron a cada ~10 min) que entrega os lembretes que o bloco acima
+    // adiou porque o cliente está num fuso atrás de Manaus (hoje, só Acre) — a
+    // mensagem foi decidida como "devida" na hora certa, só o ENVIO ficou pra
+    // depois, guardado no mesmo registro de dedup em system_events.
+    if (task === 'lembretes_audiencia_agendados') {
+      const agoraIso = new Date().toISOString();
+      const { data: pendentes } = await supabase
+        .from('system_events')
+        .select('*')
+        .eq('entidade_tipo', 'audiencia')
+        .eq('dados->>pendente_envio', 'true')
+        .lte('dados->>scheduled_for', agoraIso)
+        .limit(20);
+
+      for (const evento of pendentes || []) {
+        const d = evento.dados || {};
+        // Saudação (bom dia/boa tarde) é recalculada aqui dentro de
+        // montarMensagemAudiencia, refletindo a hora real do envio — não a hora
+        // em que o lembrete foi decidido como devido.
+        const mensagem = montarMensagemAudiencia({
+          nomeCliente: d.nomeCliente,
+          tituloAudiencia: d.tituloAudiencia,
+          dataFormatada: formatarData(`${d.dataReal}T12:00:00Z`),
+          horaFormatada: formatarHoraCompacta(d.horaReal),
+          numeroProcesso: d.numeroProcesso,
+          reu: d.reu,
+          modalidade: d.modalidadeMsg,
+          link: d.link,
+        });
+
+        const resultado = await enviarMensagemZapi(supabase, d.telefone, mensagem, {
+          leadId: d.leadId,
+          subscriberNome: d.nomeCliente,
+          context: evento.acao,
+          instanceId: d.instanceId,
+        });
+
+        if (resultado.success && !d.leadId) {
+          await supabase.from('manychat_mensagens').insert({
+            subscriber_id: gerarSubscriberId(d.telefone),
+            subscriber_nome: d.nomeCliente,
+            conteudo: mensagem,
+            tipo: 'text',
+            direcao: 'saida',
+            lead_id: null,
+            canal: 'whatsapp',
+            metadata: { source: 'zapi', context: evento.acao },
+          });
+        }
+
+        await supabase.from('system_events').update({
+          dados: { ...d, pendente_envio: false, enviado: resultado.success, erro: resultado.error, enviado_em: new Date().toISOString() },
+        }).eq('id', evento.id);
+
+        results.actions.push({
+          tipo: 'audiencia_lembrete_agendado_entregue',
+          audiencia: d.tituloAudiencia,
+          lead: d.nomeCliente,
+          enviado: resultado.success,
+        });
       }
     }
 

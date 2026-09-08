@@ -1,4 +1,4 @@
-import { Search, Download, Plus, Building2, Megaphone, X, LayoutGrid, List, DollarSign, FileBarChart } from 'lucide-react';
+import { Search, Download, Plus, Building2, Megaphone, X, LayoutGrid, List, DollarSign, FileBarChart, FileSpreadsheet } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
@@ -12,8 +12,9 @@ import { LeadModal } from '@/components/LeadModal';
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { ExportTrafegoModal } from './ExportTrafegoModal';
+import { GerarRelatorioLeadsModal } from './GerarRelatorioLeadsModal';
 import { supabase } from '@/integrations/supabase/client';
-import { LeadStatus } from '@/types/leads';
+import { Lead, LeadStatus } from '@/types/leads';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import {
@@ -44,6 +45,7 @@ interface LeadsTableHeaderProps {
   countTrafego: number;
   viewMode?: 'cards' | 'list' | 'board';
   onViewModeChange?: (mode: 'cards' | 'list' | 'board') => void;
+  filteredLeads?: Lead[];
 }
 
 const formatCurrencyCompact = (value: number): string => {
@@ -69,10 +71,12 @@ export function LeadsTableHeader({
   countTrafego,
   viewMode = 'cards',
   onViewModeChange,
+  filteredLeads = [],
 }: LeadsTableHeaderProps) {
   const { toast } = useToast();
   const [isNewLeadModalOpen, setIsNewLeadModalOpen] = useState(false);
   const [isExportTrafegoOpen, setIsExportTrafegoOpen] = useState(false);
+  const [isRelatorioOpen, setIsRelatorioOpen] = useState(false);
 
   const exportToCSV = async () => {
     try {
@@ -334,6 +338,20 @@ export function LeadsTableHeader({
                 <TooltipContent>Exportar CSV</TooltipContent>
               </Tooltip>
 
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setIsRelatorioOpen(true)}
+                    className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground"
+                  >
+                    <FileSpreadsheet className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Gerar Relatório (Google Sheets)</TooltipContent>
+              </Tooltip>
+
               <Button
                 onClick={() => setIsNewLeadModalOpen(true)}
                 size="sm"
@@ -358,6 +376,12 @@ export function LeadsTableHeader({
       <ExportTrafegoModal
         open={isExportTrafegoOpen}
         onOpenChange={setIsExportTrafegoOpen}
+      />
+
+      <GerarRelatorioLeadsModal
+        open={isRelatorioOpen}
+        onOpenChange={setIsRelatorioOpen}
+        leads={filteredLeads}
       />
     </>
   );

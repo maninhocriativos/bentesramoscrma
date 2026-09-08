@@ -137,7 +137,7 @@ serve(async (req) => {
         }
       }
 
-      const scopes = ['https://www.googleapis.com/auth/drive.file', 'https://www.googleapis.com/auth/drive.readonly'].join(' ');
+      const scopes = ['https://www.googleapis.com/auth/drive.file', 'https://www.googleapis.com/auth/drive.readonly', 'https://www.googleapis.com/auth/spreadsheets'].join(' ');
       const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
         `client_id=${clientId}` +
         `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
