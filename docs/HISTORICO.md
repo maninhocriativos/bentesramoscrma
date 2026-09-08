@@ -441,40 +441,39 @@ Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a dat
      sessão 09-07) e novas intimações com `fonte='djen_processo'`.
    - Remover bloco Escavador V1/V2 de `intimacoes-oab` (decisão já tomada em 08-22,
      código só não foi limpo ainda).
-3. Fatura do Supabase em aberto (aviso visto em 08-25) — confirmar se foi paga.
-4. `zapi-webhook` ainda consulta `metadata->>message_id` em vez de `message_id_key`
+3. `zapi-webhook` ainda consulta `metadata->>message_id` em vez de `message_id_key`
    (linhas ~681 e ~712) — Seq Scan provavelmente continua.
-5. Lembretes de compromisso pausados (jobid 6) — decidir se/quando reativar; botão
-   "Testar Lembretes" ainda envia de verdade.
+4. Lembretes de compromisso pausados (jobid 6, confirmado `active: false` em 09-08) —
+   decidir se/quando reativar; botão "Testar Lembretes" ainda envia de verdade.
 
 **Segurança (da auditoria de 08-25)**
-6. ~50 Edge Functions invocáveis sem auth (`zapi-send`, `zapi-bulk-campaign`,
+5. ~50 Edge Functions invocáveis sem auth (`zapi-send`, `zapi-bulk-campaign`,
    `zapsign`, `api-hub`, `isa-actions`, `facebook-leadads`…).
-7. `admin-delete-user`/`admin-approve-invite` checam `perfis.cargo` em vez de `has_role()`.
-8. Sem validação HMAC em `meta-leads-aereo-webhook`/`instagram-webhook`.
-9. ~40 tabelas com `authenticated = tudo` (provavelmente intencional; decisão de design).
+6. `admin-delete-user`/`admin-approve-invite` checam `perfis.cargo` em vez de `has_role()`.
+7. Sem validação HMAC em `meta-leads-aereo-webhook`/`instagram-webhook`.
+8. ~40 tabelas com `authenticated = tudo` (provavelmente intencional; decisão de design).
 
 **Bugs conhecidos não corrigidos**
-10. Botão "Sincronizar contatos" chama `sync-subscriber-names` (função apagada).
-11. Cron `retomada-leads-frios-hourly` chama função inexistente 24×/dia.
-12. `zapi-webhook` cria lead por telefone sem constraint única (lead duplicado + Isa
+9. Botão "Sincronizar contatos" chama `sync-subscriber-names` (função apagada).
+10. Cron `retomada-leads-frios-hourly` chama função inexistente 24×/dia.
+11. `zapi-webhook` cria lead por telefone sem constraint única (lead duplicado + Isa
     abrindo 2×); `clicksign-webhook` sem idempotência; locks da Isa só em aplicação.
-13. Dashboard (🟠 da auditoria 08-22): `RealtimeLeadsMonitor` atribui tudo a tráfego;
+12. Dashboard (🟠 da auditoria 08-22): `RealtimeLeadsMonitor` atribui tudo a tráfego;
     `DashboardFilters` sem "Tráfego Pago"/"Escritório"; "Processos Ativos" conta
     arquivados; "Valor Convertido" varia por cargo sem aviso; taxa de conversão pode
     passar de 100%.
-14. `HistoricoAcessosPage` calcula KPIs do dia só sobre 50 linhas.
-15. `AgendaPrazosWidget` não tem prazo real (DJEN não calcula prazo) — decisão de produto.
-16. Mobile: `MetaLeadsPage`, `FollowupPage` quebrados; `IntimacoesPage` overflow;
+13. `HistoricoAcessosPage` calcula KPIs do dia só sobre 50 linhas.
+14. `AgendaPrazosWidget` não tem prazo real (DJEN não calcula prazo) — decisão de produto.
+15. Mobile: `MetaLeadsPage`, `FollowupPage` quebrados; `IntimacoesPage` overflow;
     `TarefasPage` DnD sem touch. Telas mobile de Processos/Leads/Intimações/Agenda/
     Tarefas/Contratos/Perfil ainda não feitas.
-17. 11 pontos ainda com paginação sequencial (lista em memória de 08-25).
+16. 11 pontos ainda com paginação sequencial (lista em memória de 08-25).
 
 **Verificações pendentes (feito, mas nunca observado ao vivo)**
-18. AppLayoutRoute (08-26), fetchAllPaginated (08-25), Tarefas↔Agenda (09-04),
+17. AppLayoutRoute (08-26), fetchAllPaginated (08-25), Tarefas↔Agenda (09-04),
     notificação processual com IA (09-02), push notifications (08-29), casco mobile
     logado (08-29), isa_documentos com lead real, PDF via OpenAI no isa-auto-process.
-26. Alerta de prazo crítico + chat interno no `/chat`, e relatório de tarefas com
+18. Alerta de prazo crítico + chat interno no `/chat`, e relatório de tarefas com
     processo/partes (09-07) — pedir smoke-test real (ver na tela de WhatsApp e gerar
     um relatório com tarefa vinculada a processo). Confirmar amanhã que os crons
     `intimacoes-manha/meio-dia/tarde` (10h/16h/21h UTC) voltaram a criar jobs sozinhos
