@@ -13,6 +13,7 @@ import { TarefaDetailModal } from '@/components/tarefas/TarefaDetailModal';
 import { TimesheetModal } from '@/components/tarefas/TimesheetModal';
 import { TimesheetTable } from '@/components/tarefas/TimesheetTable';
 import { AnalyticsTab } from '@/components/tarefas/AnalyticsTab';
+import { TarefasRecorrentesTab } from '@/components/tarefas/TarefasRecorrentesTab';
 import { Tarefa, responsaveisDe } from '@/types/tarefas';
 import { buildTarefasReport, tarefasReportFilename, ProcessoInfoReport, OfficeInfoReport } from '@/lib/tarefaReportGenerator';
 import { supabase } from '@/integrations/supabase/client';
@@ -497,9 +498,10 @@ export default function TarefasPage() {
             {/* Tab header + filtro usuário */}
             <div className="flex items-center gap-3 flex-wrap mb-4">
               <TabsList className="h-9" style={{ background: `${GOLD}12`, border: `0.5px solid ${GOLD}30` }}>
-                <TabsTrigger value="kanban"    style={{ fontSize: 12, fontWeight: 600 }}>Quadro</TabsTrigger>
-                <TabsTrigger value="equipe"    style={{ fontSize: 12, fontWeight: 600 }}>Por Usuário</TabsTrigger>
-                <TabsTrigger value="timesheet" style={{ fontSize: 12, fontWeight: 600 }}>Timesheet</TabsTrigger>
+                <TabsTrigger value="kanban"      style={{ fontSize: 12, fontWeight: 600 }}>Quadro</TabsTrigger>
+                <TabsTrigger value="equipe"      style={{ fontSize: 12, fontWeight: 600 }}>Por Usuário</TabsTrigger>
+                <TabsTrigger value="timesheet"   style={{ fontSize: 12, fontWeight: 600 }}>Timesheet</TabsTrigger>
+                <TabsTrigger value="recorrentes" style={{ fontSize: 12, fontWeight: 600 }}>Recorrentes</TabsTrigger>
                 {isAdmin && <TabsTrigger value="analytics" style={{ fontSize: 12, fontWeight: 600 }}>Analytics</TabsTrigger>}
               </TabsList>
 
@@ -662,6 +664,19 @@ export default function TarefasPage() {
                       <p style={{ fontSize: 13, fontWeight: 700, color: BROWN }}>Controle de Horas</p>
                     </div>
                     <div className="p-4"><TimesheetTable registros={registros} loading={loadingTS} /></div>
+                  </div>
+                </TabsContent>
+
+                {/* Recorrentes */}
+                <TabsContent value="recorrentes" className="mt-4">
+                  <div className="rounded-2xl overflow-hidden bg-white" style={{ border: '0.5px solid rgba(201,169,110,0.2)' }}>
+                    <div className="px-5 py-4" style={{ borderBottom: '0.5px solid rgba(201,169,110,0.12)', background: `${GOLD}06` }}>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: BROWN }}>Tarefas Recorrentes</p>
+                      <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
+                        Cadastre uma vez e o sistema cria a tarefa sozinho a cada ciclo (diário, semanal ou mensal).
+                      </p>
+                    </div>
+                    <div className="p-4"><TarefasRecorrentesTab /></div>
                   </div>
                 </TabsContent>
 
