@@ -496,6 +496,36 @@ A partir daqui cada entrada tem: **o que**, **por quê / causa raiz**, **commit(
   **Não testado ainda**: criar uma recorrência pela UI de verdade e observar o
   primeiro ciclo 100% automático do cron (só rodou manual até agora).
 
+### 2026-09-08 (mesmo dia, sessão seguinte) — Login de teste + cabeçalho do chat espremendo nome (`c7054c89`, `7b4626f3`, `f24fbf6b`)
+- **Ajuste no cabeçalho de Leads** (`c7054c89`): campo de busca sem largura
+  mínima virava um `<input>` de 0px em telas menores (o ícone de lupa é
+  `absolute`, ficava visível mesmo com o campo colapsado — parecia que só
+  faltava a caixa). Filtros de Origem/Etapa também empurravam os botões de
+  Ação pra fora da tela entre ~1024-1280px; adiados pra `xl:` (Etapa
+  continua acessível pelos pills clicáveis abaixo do header).
+- **Credencial de teste adicionada**: usuário colocou o próprio login
+  (`CRM_TEST_EMAIL`/`CRM_TEST_PASSWORD`) em `docs/SECRETS.local.md` seção 13,
+  especificamente pra permitir verificação visual com dados reais via
+  Playwright — **primeira vez nesta sessão que dá pra logar de verdade**.
+  Uso combinado: só navegação/screenshot, nunca ação real (enviar mensagem,
+  marcar lead, apagar algo).
+- **Cabeçalho da conversa no chat** — duas rodadas:
+  1. (`7b4626f3`) Tentativa inicial sem login: tags viravam `md:flex-wrap`
+     (várias linhas) baseado na largura da JANELA inteira, não do painel de
+     conversa — corrigido pra sempre 1 linha rolável. Insuficiente sozinho.
+  2. (`f24fbf6b`) **Verificado ao vivo logado** numa conversa real
+     (Josemias Ferreira Amorim): o nome do contato sumia por COMPLETO
+     (largura zero) — não era só as tags, era Perdido/Contrato Fechado
+     (com texto) + ~8 ícones de ação que não cabiam ao lado do nome no
+     painel estreito. Usuário pediu explicitamente pra não quebrar linha.
+     Fix: nome ganha `min-w-[200px]` garantido; Perdido/Contrato Fechado
+     viram só ícone; fileira de ícones de ação rola horizontalmente quando
+     não cabe tudo. Testado em 900/1109/1280px com a conversa real — nome
+     sempre legível, nada mais desaparece.
+- Ver [[project_chat_header_espremendo_nome_20260908]] na memória do
+  Claude Code pra detalhe técnico completo (achados de diagnóstico, script
+  de login usado, decisões de largura mínima).
+
 ---
 
 ## 4. Pendências abertas (consolidado em 2026-09-07)
