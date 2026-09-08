@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { MessageSquare, X, Send, ChevronDown, AtSign, Bell, Paperclip, FileText } from 'lucide-react';
+import { MessageSquare, X, Send, ChevronDown, AtSign, Bell, Paperclip, FileText, Search } from 'lucide-react';
 import { useChatInterno, decodeMencoes, decodeAnexo, type ChatAnexo } from '@/hooks/useChatInterno';
 import { useAuth } from '@/hooks/useAuth';
 import { usePerfil } from '@/hooks/usePerfil';
@@ -28,26 +28,37 @@ function formatMsgTime(iso: string): string {
   return format(d, "dd/MM HH:mm", { locale: ptBR });
 }
 
-// Highlights @word patterns already embedded in message text
+// Highlights @menções e formatação estilo WhatsApp (*negrito*, _itálico_,
+// ~riscado~) já embutidas no texto da mensagem.
+const FORMAT_PATTERN = /(@\S+)|\*([^*\n]+)\*|_([^_\n]+)_|~([^~\n]+)~/g;
+
 function MsgText({ content }: { content: string }) {
   const { text } = decodeMencoes(content);
-  const parts = text.split(/(@\S+)/g);
-  return (
-    <>
-      {parts.map((part, i) => {
-        if (/^@\S/.test(part)) {
-          return (
-            <span key={i}
-              className="font-bold rounded px-0.5"
-              style={{ color: '#c9a96e', background: 'rgba(201,169,110,0.15)' }}>
-              {part}
-            </span>
-          );
-        }
-        return <span key={i}>{part}</span>;
-      })}
-    </>
-  );
+  const nodes: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let key = 0;
+  let m: RegExpExecArray | null;
+  FORMAT_PATTERN.lastIndex = 0;
+  while ((m = FORMAT_PATTERN.exec(text)) !== null) {
+    if (m.index > lastIndex) nodes.push(text.slice(lastIndex, m.index));
+    if (m[1]) {
+      nodes.push(
+        <span key={key++} className="font-bold rounded px-0.5"
+          style={{ color: '#c9a96e', background: 'rgba(201,169,110,0.15)' }}>
+          {m[1]}
+        </span>
+      );
+    } else if (m[2] !== undefined) {
+      nodes.push(<strong key={key++}>{m[2]}</strong>);
+    } else if (m[3] !== undefined) {
+      nodes.push(<em key={key++}>{m[3]}</em>);
+    } else if (m[4] !== undefined) {
+      nodes.push(<s key={key++}>{m[4]}</s>);
+    }
+    lastIndex = FORMAT_PATTERN.lastIndex;
+  }
+  if (lastIndex < text.length) nodes.push(text.slice(lastIndex));
+  return <>{nodes}</>;
 }
 
 export function ChatInterno() {
@@ -73,6 +84,8 @@ export function ChatInterno() {
   const [atQuery,      setAtQuery]     = useState('');
   const [pendingFile,  setPendingFile] = useState<{ file: File; name: string } | null>(null);
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [filterSender, setFilterSender] = useState('all');
+  const [filterQuery,  setFilterQuery]  = useState('');
 
   const { mensagens, loading, unread, enviar, marcarLido, mencaoNotif, dismissMencao, setChatOpenState } =
     useChatInterno();
@@ -226,9 +239,38 @@ export function ChatInterno() {
     return full.includes(atQuery);
   });
 
+  // Remetentes distintos já presentes no histórico carregado — alimenta o
+  // filtro "por pessoa" sem precisar de uma query própria.
+  const senderOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const result: { id: string; nome: string }[] = [];
+    mensagens.forEach(m => {
+      if (seen.has(m.sender_id)) return;
+      seen.add(m.sender_id);
+      const fallback = perfilById.get(m.sender_id);
+      const nome = m.sender_id === user?.id
+        ? 'Você'
+        : (m.perfis?.nome || fallback?.nome || 'Alguém');
+      result.push({ id: m.sender_id, nome });
+    });
+    return result.sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [mensagens, perfilById, user?.id]);
+
+  const mensagensFiltradas = useMemo(() => {
+    const query = filterQuery.trim().toLowerCase();
+    return mensagens.filter(m => {
+      if (filterSender !== 'all' && m.sender_id !== filterSender) return false;
+      if (query) {
+        const { text } = decodeMencoes(m.conteudo);
+        if (!text.toLowerCase().includes(query)) return false;
+      }
+      return true;
+    });
+  }, [mensagens, filterSender, filterQuery]);
+
   type MsgGroup = { date: string; msgs: typeof mensagens };
   const groups: MsgGroup[] = [];
-  mensagens.forEach(m => {
+  mensagensFiltradas.forEach(m => {
     const d = m.created_at.slice(0, 10);
     const last = groups[groups.length - 1];
     if (last && last.date === d) last.msgs.push(m);
@@ -350,6 +392,35 @@ export function ChatInterno() {
               </button>
             </div>
 
+            {/* Filtros */}
+            <div className="flex items-center gap-1.5 px-3 py-2 shrink-0"
+              style={{ borderBottom: `0.5px solid ${GOLD}20`, background: '#faf9f7' }}>
+              <select
+                value={filterSender}
+                onChange={e => setFilterSender(e.target.value)}
+                style={{ fontSize: 11, borderRadius: 8, border: `1px solid ${GOLD}35`, padding: '4px 4px', background: 'white', color: BROWN, maxWidth: 88, flexShrink: 0 }}>
+                <option value="all">Todos</option>
+                {senderOptions.map(o => (
+                  <option key={o.id} value={o.id}>{o.nome}</option>
+                ))}
+              </select>
+              <div style={{ position: 'relative', flex: 1 }}>
+                <Search style={{ width: 11, height: 11, position: 'absolute', left: 7, top: '50%', transform: 'translateY(-50%)', color: `${BROWN}60` }} />
+                <input
+                  value={filterQuery}
+                  onChange={e => setFilterQuery(e.target.value)}
+                  placeholder="Buscar mensagem..."
+                  style={{ width: '100%', fontSize: 11, borderRadius: 8, border: `1px solid ${GOLD}35`, padding: '4px 20px 4px 22px', background: 'white', color: '#1c1917', outline: 'none' }}
+                />
+                {filterQuery && (
+                  <button onClick={() => setFilterQuery('')}
+                    style={{ position: 'absolute', right: 5, top: '50%', transform: 'translateY(-50%)' }}>
+                    <X style={{ width: 11, height: 11, color: `${BROWN}60` }} />
+                  </button>
+                )}
+              </div>
+            </div>
+
             {/* Mensagens */}
             <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1" style={{ background: '#faf9f7' }}>
               {loading ? (
@@ -357,10 +428,12 @@ export function ChatInterno() {
                   <div className="w-5 h-5 border-2 rounded-full animate-spin"
                     style={{ borderColor: `${GOLD}30`, borderTopColor: GOLD }} />
                 </div>
-              ) : mensagens.length === 0 ? (
+              ) : mensagensFiltradas.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full gap-2" style={{ color: '#d1d5db' }}>
                   <MessageSquare style={{ width: 28, height: 28 }} />
-                  <p style={{ fontSize: 12 }}>Nenhuma mensagem ainda</p>
+                  <p style={{ fontSize: 12 }}>
+                    {mensagens.length === 0 ? 'Nenhuma mensagem ainda' : 'Nenhuma mensagem encontrada com esse filtro'}
+                  </p>
                 </div>
               ) : (
                 groups.map(group => (
@@ -558,6 +631,21 @@ export function ChatInterno() {
                   onKeyDown={e => {
                     if (e.key === 'Escape') { setShowAt(false); return; }
                     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
+                  }}
+                  onPaste={e => {
+                    const items = e.clipboardData?.items;
+                    if (!items) return;
+                    for (const item of Array.from(items)) {
+                      if (item.type.startsWith('image/')) {
+                        e.preventDefault();
+                        const file = item.getAsFile();
+                        if (file) {
+                          const named = new File([file], `print_${Date.now()}.png`, { type: file.type });
+                          setPendingFile({ file: named, name: named.name });
+                        }
+                        break;
+                      }
+                    }
                   }}
                   placeholder="Mensagem para a equipe..."
                   style={{
