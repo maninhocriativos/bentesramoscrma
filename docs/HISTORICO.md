@@ -415,6 +415,36 @@ A partir daqui cada entrada tem: **o que**, **por quê / causa raiz**, **commit(
   não elimina a necessidade de smoke-test do usuário pra telas atrás de login
   (sem credencial de teste neste ambiente).
 
+### 2026-09-08 — Relatório de Leads (Google Sheets) + fuso do cliente na audiência (`e3ad752a`, `04e04b8a`)
+- **Confirmado pelo usuário**: fatura do Supabase (aviso de 08-25) estava paga —
+  removida das pendências. Lembretes de compromisso (jobid 6) checados ao vivo,
+  seguem pausados como esperado desde 08-25 (`96e7576c`).
+- **Novo botão "Gerar Relatório" na tela de Leads** (`GerarRelatorioLeadsModal.tsx`):
+  gera planilha do Google Sheets formatada (nome, telefone, email, status, origem,
+  valor da causa, cidade/UF, histórico de interação resumido) a partir dos leads
+  já filtrados na tela, com seleção manual (checkbox) de quem entra. Nova edge
+  function `leads-relatorio-sheets` cria a planilha via API do Sheets, reusando
+  o token OAuth do Google Drive já em produção (`get_office_token`). **Escopo
+  novo** (`spreadsheets`) adicionado em `google-drive/index.ts` — o token
+  conectado hoje não tem esse escopo; usuário precisa clicar em "Conectar
+  Google Drive" de novo (Documentos) pra reautorizar.
+- **Lembrete de audiência agora respeita o fuso do ENDEREÇO do cliente**
+  (`leads_juridicos.uf`), não só o fuso do tribunal (que já ajustava o texto
+  exibido, não o envio). Brasil só tem 3 offsets relativos a Manaus — só quem
+  está atrás (hoje, só Acre) precisa esperar; o resto já cai num horário normal
+  sem mudança nenhuma. Quando precisa esperar, o envio é adiado via
+  `system_events` (mesmo registro de dedup por janela 15/7/3d) e entregue por
+  um novo poller (`isa-scheduler`, task `lembretes_audiencia_agendados`, cron
+  a cada 10 min, migration `20260908120000`) — **ensaiada com begin/rollback**
+  antes de aplicar, e o job novo confirmado `active:true` no banco pós-deploy.
+- **Fix separado no mesmo push**: o widget "Chat da Equipe" (`ChatInterno.tsx`),
+  fixo no canto inferior direito, tampava o botão de enviar mensagem em `/chat`
+  desde que passou a ser montado ali também (sessão 09-07). Sobe acima do
+  compositor só nessa rota; nas demais páginas continua igual.
+- Ver [[project_relatorio_leads_sheets_fuso_audiencia_20260908]] na memória do
+  Claude Code para detalhe técnico completo (achados de exploração, decisão de
+  não reusar a fila `isa-lembrete-sender`, correção do arquivo OAuth certo).
+
 ---
 
 ## 4. Pendências abertas (consolidado em 2026-09-07)
@@ -479,6 +509,12 @@ Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a dat
     `intimacoes-manha/meio-dia/tarde` (10h/16h/21h UTC) voltaram a criar jobs sozinhos
     (a fila foi destravada e testada manualmente em 09-07, mas o primeiro ciclo 100%
     automático pós-fix ainda não rodou).
+26. Relatório de Leads (Sheets) — usuário precisa reconectar o Google Drive
+    (Documentos → "Conectar Google Drive") pra conceder o escopo novo antes de
+    testar; depois, gerar um relatório de teste com 2-3 leads e conferir a
+    planilha. Fuso da audiência (Acre) — sem cliente real de UF=AC pra validar
+    ao vivo com segurança; só vai se provar na próxima audiência real de lá
+    (09-08).
 
 **Em andamento (planos aprovados)**
 19. Contratos/Procuração via templates + ZapSign nativo — Fases 4–9
