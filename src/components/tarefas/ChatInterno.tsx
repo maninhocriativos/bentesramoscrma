@@ -4,6 +4,7 @@ import { useChatInterno, decodeMencoes, decodeAnexo, type ChatAnexo } from '@/ho
 import { useAuth } from '@/hooks/useAuth';
 import { usePerfil } from '@/hooks/usePerfil';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { format, isToday, isYesterday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -51,9 +52,18 @@ function MsgText({ content }: { content: string }) {
 
 export function ChatInterno() {
   const isMobile = useIsMobile();
+  const location = useLocation();
+  // Em /chat o widget fica sobre a própria conversa do WhatsApp — precisa
+  // flutuar acima do compositor de mensagem (input + botão enviar), não no
+  // canto padrão, senão tampa o botão de enviar (visto ao vivo em produção).
+  const isChatPage = location.pathname.startsWith('/chat');
   // No mobile a MobileTabBar (AppLayout) ocupa os ~64px + safe-area do rodapé —
-  // o widget precisa flutuar acima dela, não por baixo.
-  const mobileBottomOffset = 'calc(4.5rem + env(safe-area-inset-bottom))';
+  // o widget precisa flutuar acima dela, não por baixo. Em /chat (tela cheia,
+  // sem tab bar) o que precisa evitar é o compositor de mensagem, não a tab bar.
+  const mobileBottomOffset = isChatPage
+    ? 'calc(5.5rem + env(safe-area-inset-bottom))'
+    : 'calc(4.5rem + env(safe-area-inset-bottom))';
+  const desktopBottomOffset = isChatPage ? '5.5rem' : '1.25rem';
   const [open,         setOpen]        = useState(false);
   const [texto,        setTexto]       = useState('');
   const [onlineUsers,  setOnlineUsers] = useState<OnlineUser[]>([]);
@@ -239,7 +249,7 @@ export function ChatInterno() {
         <div
           className="fixed z-[200] right-5 rounded-2xl overflow-hidden shadow-2xl"
           style={{
-            bottom: isMobile ? `calc(${mobileBottomOffset} + 4.25rem)` : '6rem',
+            bottom: isMobile ? `calc(${mobileBottomOffset} + 4.25rem)` : `calc(${desktopBottomOffset} + 4.75rem)`,
             width: 'min(320px, calc(100vw - 2.5rem))',
             background: BROWN,
             border: `1px solid ${GOLD}40`,
@@ -287,7 +297,7 @@ export function ChatInterno() {
       {/* ── Widget principal ── */}
       <div
         className="fixed right-5 z-50 flex flex-col items-end gap-2"
-        style={{ bottom: isMobile ? mobileBottomOffset : '1.25rem' }}
+        style={{ bottom: isMobile ? mobileBottomOffset : desktopBottomOffset }}
       >
 
         {open && (
