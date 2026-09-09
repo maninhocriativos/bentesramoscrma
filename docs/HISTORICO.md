@@ -655,6 +655,28 @@ A partir daqui cada entrada tem: **o que**, **por quê / causa raiz**, **commit(
   chamada com a MESMA `dedupe_key` voltou em ~1,5s com a resposta idêntica
   já salva, sem contatar o Z-API de novo.
 
+### 2026-09-09 (mesmo dia, sessão seguinte) — Tag comprida cortava sem aviso no cabeçalho do chat, de novo (`ab0e82fb`)
+- Usuário reportou com print (tela da Anelize, notebook ~1366px): tag
+  "ATENDIMENTO ANELIZE" (nome criado manualmente pela equipe) cortava no
+  meio da palavra, sem "...". Reação inicial do usuário: "já fizemos isso
+  ontem e o problema volta" — mas não é regressão do fix de 08-09
+  ([[project_chat_header_espremendo_nome_20260908]]), é outro sintoma do
+  mesmo padrão de design: a fileira de tags já rola horizontalmente
+  (`overflow-x-auto`), mas a barra de rolagem fica escondida de propósito
+  — sem nenhum indício visual, uma tag que não cabe parece cortada/quebrada
+  em vez de "role pra ver mais". Reproduzido local e em produção em
+  1366x768 na MESMA conversa do print (Gilmar Pereira): `scrollWidth` do
+  container de tags (341px) > `clientWidth` (240px), confirmando que o
+  texto realmente ficava fora da área visível sem aviso.
+- Fix: `TagBadge.tsx` — nome da tag ganhou `max-width` (70px tamanho sm,
+  110px md) com `truncate`, em vez de renderizar na largura natural
+  inteira. Tag comprida agora aparece com "..." dentro da área visível
+  (o `title` tooltip já existente mostra o nome completo ao passar o
+  mouse); tags curtas (a maioria dos casos) não mudam nada visualmente —
+  o limite só entra em ação quando o nome já passaria dele.
+- Verificado ao vivo em produção na mesma conversa/tag do print: "Em
+  Atendim..." e "ATENDIMEN..." aparecem inteiros e legíveis no cabeçalho.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
