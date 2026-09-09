@@ -348,11 +348,16 @@ export function TagSelector({
 
       <Dialog open={newTagDialog} onOpenChange={(o) => { setNewTagDialog(o); if (!o) { setNewTagName(''); setNewTagColor('blue'); } }}>
         <DialogContent className="sm:max-w-sm p-0 gap-0 overflow-hidden rounded-2xl">
-          <DialogHeader className="px-5 pt-5 pb-3">
-            <DialogTitle className="text-base">Nova tag personalizada</DialogTitle>
+          <DialogHeader className="px-5 py-4 border-b border-border/60">
+            <DialogTitle className="flex items-center gap-3 text-[15px] font-semibold leading-tight">
+              <div className="h-9 w-9 rounded-full bg-primary/12 flex items-center justify-center shrink-0">
+                <Tag className="h-[18px] w-[18px] text-primary" />
+              </div>
+              Nova tag personalizada
+            </DialogTitle>
           </DialogHeader>
 
-          <div className="px-5 pb-2 space-y-4">
+          <div className="px-5 pt-4 pb-2 space-y-4">
             {/* Preview ao vivo */}
             <div className="flex items-center justify-center py-3 rounded-xl bg-muted/40 border border-border/50">
               {newTagName.trim() ? (

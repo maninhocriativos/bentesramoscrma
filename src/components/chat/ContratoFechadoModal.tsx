@@ -483,16 +483,13 @@ export function ContratoFechadoModal({ open, onClose, leadId, leadNome }: Contra
         {savedInfo ? (
           <>
             {/* ── Tela de confirmação ── */}
-            <div className="relative overflow-hidden">
-              <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-emerald-500 to-emerald-400" />
-              <div className="flex items-center gap-3 px-5 py-4 border-b border-border/60">
-                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-md shadow-emerald-500/25 shrink-0">
-                  <CheckCircle2 className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-sm font-black text-foreground leading-none">Contrato registrado</h2>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">{formData.leadNome}</p>
-                </div>
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-border/60">
+              <div className="h-9 w-9 rounded-full bg-emerald-500/12 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="h-[18px] w-[18px] text-emerald-500" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-[15px] font-semibold leading-tight text-foreground">Contrato registrado</h2>
+                <p className="text-xs text-muted-foreground mt-0.5 truncate">{formData.leadNome}</p>
               </div>
             </div>
 
@@ -552,16 +549,13 @@ export function ContratoFechadoModal({ open, onClose, leadId, leadNome }: Contra
         ) : (
           <>
             {/* Header */}
-            <div className="relative overflow-hidden">
-              <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-emerald-500 to-emerald-400" />
-              <div className="flex items-center gap-3 px-5 py-4 border-b border-border/60">
-                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-md shadow-emerald-500/25 shrink-0">
-                  <FileCheck className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-sm font-black text-foreground leading-none">Contrato Fechado</h2>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">Registrar conversão no sistema</p>
-                </div>
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-border/60">
+              <div className="h-9 w-9 rounded-full bg-emerald-500/12 flex items-center justify-center shrink-0">
+                <FileCheck className="h-[18px] w-[18px] text-emerald-500" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-[15px] font-semibold leading-tight text-foreground">Contrato Fechado</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">Registrar conversão no sistema</p>
               </div>
             </div>
 

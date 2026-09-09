@@ -162,25 +162,27 @@ const AgendarConsultaModal = ({
       </Button>
 
       <Dialog open={isOpen} onOpenChange={(v) => { if (!v) fecharModal(); }}>
-        <DialogContent className="max-w-lg p-0 overflow-hidden gap-0" hideCloseButton>
-          <DialogHeader className="px-6 py-4 border-b bg-[#00A884] text-white">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
+        <DialogContent className="max-w-lg rounded-2xl p-0 overflow-hidden gap-0" hideCloseButton>
+          <DialogHeader className="px-5 py-4 border-b border-border/60">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-3 min-w-0">
                 {step !== 'modalidade' && step !== 'sucesso' && (
                   <button
                     onClick={() => setStep(step === 'confirmar' ? 'horarios' : 'modalidade')}
-                    className="rounded-full p-1 hover:bg-white/20 transition-colors"
+                    className="rounded-full p-1 -ml-1 shrink-0 text-muted-foreground hover:bg-muted transition-colors"
                   >
-                    <ArrowLeft className="h-5 w-5" />
+                    <ArrowLeft className="h-4 w-4" />
                   </button>
                 )}
-                <Calendar className="h-6 w-6" />
-                <DialogTitle className="text-lg font-medium text-white">
+                <div className="h-9 w-9 rounded-full bg-[#00A884]/12 flex items-center justify-center shrink-0">
+                  <Calendar className="h-[18px] w-[18px] text-[#00A884]" />
+                </div>
+                <DialogTitle className="text-[15px] font-semibold leading-tight truncate">
                   Agendar Consulta Jurídica
                 </DialogTitle>
               </div>
-              <button onClick={fecharModal} className="rounded-full p-1.5 hover:bg-white/20 transition-colors">
-                <X className="h-5 w-5" />
+              <button onClick={fecharModal} className="rounded-full p-1.5 shrink-0 text-muted-foreground hover:bg-muted transition-colors">
+                <X className="h-4 w-4" />
               </button>
             </div>
           </DialogHeader>

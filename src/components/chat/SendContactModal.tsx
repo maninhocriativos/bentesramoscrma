@@ -52,11 +52,11 @@ export function SendContactModal({ open, onClose, contacts, onSend }: SendContac
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-md p-0 overflow-hidden gap-0">
-        <DialogHeader className="px-5 pt-5 pb-4 border-b border-border">
-          <DialogTitle className="flex items-center gap-2.5 text-base">
-            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-              <UserRound className="h-4 w-4 text-primary" />
+      <DialogContent className="max-w-md rounded-2xl p-0 overflow-hidden gap-0">
+        <DialogHeader className="px-5 py-4 border-b border-border/60">
+          <DialogTitle className="flex items-center gap-3 text-[15px] font-semibold leading-tight">
+            <div className="h-9 w-9 rounded-full bg-primary/12 flex items-center justify-center shrink-0">
+              <UserRound className="h-[18px] w-[18px] text-primary" />
             </div>
             Enviar contato
           </DialogTitle>

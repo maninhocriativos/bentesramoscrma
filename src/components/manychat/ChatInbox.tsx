@@ -3179,17 +3179,15 @@ const ManyChatInboxContent = () => {
 
       {/* ❌ Confirmação Lead Perdido */}
       <Dialog open={leadPerdidoOpen} onOpenChange={(v: boolean) => { if (!leadPerdidoLoading) setLeadPerdidoOpen(v); }}>
-        <DialogContent className="max-w-sm p-0 overflow-hidden">
-          {/* Header vermelho */}
-          <div className="bg-gradient-to-br from-red-500 to-red-700 px-6 pt-6 pb-5 text-white">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="h-10 w-10 rounded-full bg-white/20 flex items-center justify-center shrink-0">
-                <X className="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <DialogTitle className="text-white text-base font-bold leading-tight">Lead Perdido</DialogTitle>
-                <p className="text-red-100 text-xs mt-0.5">Esta ação notificará a Meta Ads</p>
-              </div>
+        <DialogContent className="max-w-sm rounded-2xl p-0 gap-0 overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center gap-3 px-5 py-4 border-b border-border/60">
+            <div className="h-9 w-9 rounded-full bg-red-500/12 flex items-center justify-center shrink-0">
+              <XCircle className="h-[18px] w-[18px] text-red-500" />
+            </div>
+            <div className="min-w-0">
+              <DialogTitle className="text-[15px] font-semibold leading-tight">Lead Perdido</DialogTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">Esta ação notificará a Meta Ads</p>
             </div>
           </div>
 
