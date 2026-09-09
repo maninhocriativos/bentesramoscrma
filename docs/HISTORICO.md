@@ -763,6 +763,30 @@ A partir daqui cada entrada tem: **o que**, **por quê / causa raiz**, **commit(
   `tsc`/build limpos. Pedir pro usuário confirmar na próxima vez que
   trocar uma tag como admin.
 
+### 2026-09-09 (mesmo dia, sessão seguinte) — Visual unificado dos modais do chat (`04191ade`)
+- Pedido do usuário logo após o redesign do header: "as tags que eu trocar
+  não é para aparecer no sistema [ver item acima], e melhore todos os
+  modais" — escopo confirmado por pergunta de esclarecimento: "Os modais do
+  chat (Lead Perdido, Contrato, Agendar, Enviar contato, Criar tag)".
+- Cada um desses 5 modais tinha um estilo de cabeçalho diferente e datado
+  (banner gradiente vermelho cheio no Lead Perdido, ícone quadrado com
+  barra de destaque no Contrato Fechado, barra sólida teal full-width no
+  Agendar Consulta). Padronizado pra um único padrão: badge circular com
+  ícone tonalizado (12% de opacidade da cor do contexto) + título
+  `text-[15px] font-semibold` + subtítulo cinza, tudo dentro de
+  `flex items-center gap-3 px-5 py-4 border-b border-border/60`, modelado no
+  estilo que já existia em `ChatContractReminder.tsx`.
+- Arquivos: `ContratoFechadoModal.tsx` (as duas visões: confirmação e
+  formulário), `AgendarConsultaModal.tsx` (preservado o botão de voltar
+  condicional por `step` e o botão de fechar), `SendContactModal.tsx`
+  (só padronizado tamanho do ícone/badge, já estava próximo do padrão),
+  `TagSelector.tsx` (dialog "Nova tag personalizada"). O Lead Perdido já
+  tinha sido ajustado dentro do `ChatInbox.tsx`.
+- Verificado ao vivo em produção via Playwright logado (conta real), abrindo
+  os 5 modais numa conversa real (Ciente - Edvan Lima da Cruz): todos
+  renderizando o padrão novo, nenhum erro de console, `tsc`/build limpos
+  antes de subir.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
