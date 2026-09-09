@@ -45,7 +45,7 @@ interface PerfilContextValue {
 const PerfilContext = createContext<PerfilContextValue | null>(null);
 
 export function PerfilProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [perfil, setPerfil]               = useState<Perfil | null>(null);
   const [roles, setRoles]                 = useState<AppRole[]>([]);
   const [loading, setLoading]             = useState(true);
@@ -102,6 +102,19 @@ export function PerfilProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    // useAuth() é chamado de forma independente aqui e em RequireAuth (cada
+    // chamada é sua própria instância do hook, sem Context compartilhado) —
+    // então "user" pode passar por null momentaneamente neste Provider
+    // enquanto a instância do useAuth() aqui ainda não resolveu getSession(),
+    // mesmo que a de RequireAuth já tenha resolvido. Sem esperar authLoading,
+    // esse null transitório era tratado como logout confirmado: loading virava
+    // false com perfil/roles vazios, e RequireAuth decidia permissão (e
+    // redirecionava) com esse estado errado antes do fetchData() real chegar
+    // com os dados corretos — daí o admin sendo jogado pra /tarefas ao abrir
+    // /dashboard, /leads, /processos ou /financeiro direto (recarregar ou
+    // abrir aba nova).
+    if (authLoading) return;
+
     const userId = user?.id ?? null;
 
     if (!userId) {
@@ -122,7 +135,7 @@ export function PerfilProvider({ children }: { children: ReactNode }) {
 
     lastUserIdRef.current = userId;
     fetchData(userId);
-  }, [user?.id]); // ✅ Depende do ID, não do objeto inteiro
+  }, [user?.id, authLoading]); // ✅ Depende do ID (não do objeto inteiro) + se o auth já resolveu
 
   // Escuta mudanças em user_page_permissions para este usuário em tempo real.
   // Quando o admin alterar permissões, o efeito é imediato sem precisar relogar.
