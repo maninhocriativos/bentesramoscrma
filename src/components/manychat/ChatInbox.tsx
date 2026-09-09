@@ -2696,7 +2696,8 @@ const ManyChatInboxContent = () => {
                 {isOnline(selectedSubscriber.subscriber_id) && <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 md:h-3.5 md:w-3.5 rounded-full bg-emerald-500 border-2 border-white" />}
               </div>
 
-              <div className="flex-1 min-w-[200px]">
+              <div className="flex-1 min-w-0 flex flex-col">
+                {/* Linha 1: nome */}
                 <div className="flex items-center gap-1.5 min-w-0">
                   <ChannelIcon canal={selectedSubscriber.canal} size="sm" />
                   {editingLeadName ? (
@@ -2774,143 +2775,134 @@ const ManyChatInboxContent = () => {
                     );
                   })()}
                 </div>
-                {/* Linha 2: status + telefone + tags — separados para não comprimir */}
-                <div className="flex items-center gap-1.5 mt-[3px] min-w-0 overflow-hidden flex-wrap">
-                  <ActivityIndicator subscriber={selectedSubscriber} showText />
-                  {formatPhone(selectedSubscriber.telefone) && (
-                    <>
-                      <span className={`text-[11px] ${themeClasses.secondaryText} opacity-40 shrink-0`}>•</span>
-                      <button
-                        type="button"
-                        title="Copiar número"
-                        onClick={() => {
-                          navigator.clipboard.writeText(formatPhone(selectedSubscriber.telefone) || selectedSubscriber.telefone || "");
-                          toast({ title: "Número copiado" });
-                        }}
-                        className={`group inline-flex items-center gap-1 text-[11px] font-medium tabular-nums ${themeClasses.secondaryText} hover:text-[#00A884] transition-colors shrink-0`}
-                      >
-                        <Phone className="h-3 w-3 opacity-60 group-hover:opacity-100" />
-                        {formatPhone(selectedSubscriber.telefone)}
-                      </button>
-                    </>
-                  )}
-                  {customerTypingIds.has(selectedSubscriber.subscriber_id) ? (
-                    <span className="text-[11px] text-[#00A884] font-medium animate-pulse shrink-0">digitando...</span>
-                  ) : isTyping(selectedSubscriber.subscriber_id) && (
-                    <span className="text-[11px] text-[#00A884] font-medium animate-pulse shrink-0">
-                      {getTypingUserName(selectedSubscriber.subscriber_id) || "alguém"} digitando...
-                    </span>
-                  )}
-                </div>
-                {/* Tags não aparecem mais como fileira de badges (uma tag com
-                    nome longo, ex. "ATENDIMENTO ANELIZE", cortava sem aviso
-                    mesmo com scroll — ver HISTORICO.md 2026-09-09). Agora só
-                    duas dropdowns compactas: "Tarja de lead" (categoria
-                    "origem" — seleção única, já era assim internamente) e
-                    "Adicionar tag" (as demais categorias). Tags aplicadas só
-                    aparecem dentro de cada dropdown, marcadas. */}
-                <div className="flex items-center gap-1.5 mt-[2px] min-w-0 flex-nowrap overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
-                  <TagSelector
-                    subscriberId={selectedSubscriber.subscriber_id}
-                    availableTags={availableTags.filter(t => t.category === 'origem')}
-                    currentTags={getSubscriberTags(selectedSubscriber.subscriber_id)}
-                    onAddTag={(tagId, reason) => addTagToSubscriber(selectedSubscriber.subscriber_id, tagId, reason, selectedSubscriber.lead_id ?? undefined)}
-                    onRemoveTag={tagId => removeTagFromSubscriber(selectedSubscriber.subscriber_id, tagId)}
-                    triggerLabel="Tarja de lead"
-                  />
-                  <TagSelector
-                    subscriberId={selectedSubscriber.subscriber_id}
-                    availableTags={availableTags.filter(t => t.category !== 'origem')}
-                    currentTags={getSubscriberTags(selectedSubscriber.subscriber_id)}
-                    onAddTag={(tagId, reason) => addTagToSubscriber(selectedSubscriber.subscriber_id, tagId, reason, selectedSubscriber.lead_id ?? undefined)}
-                    onRemoveTag={tagId => removeTagFromSubscriber(selectedSubscriber.subscriber_id, tagId)}
-                    onCreateTag={createTag}
-                  />
-                </div>
-              </div>
+                {/* Linha 2, numa linha só (como no mockup do usuário — antes
+                    tarja/tag ficavam empilhadas numa 3ª linha e os ícones
+                    numa coluna à parte, alinhada ao nome; agora tudo fica
+                    alinhado ao telefone, com status/telefone à esquerda e
+                    tarja/tag/pills/ícones à direita, cada lado com seu
+                    próprio scroll horizontal se precisar). */}
+                <div className="flex items-center justify-between gap-2 mt-[3px] min-w-0">
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <ActivityIndicator subscriber={selectedSubscriber} showText />
+                    {formatPhone(selectedSubscriber.telefone) && (
+                      <>
+                        <span className={`text-[11px] ${themeClasses.secondaryText} opacity-40 shrink-0`}>•</span>
+                        <button
+                          type="button"
+                          title="Copiar número"
+                          onClick={() => {
+                            navigator.clipboard.writeText(formatPhone(selectedSubscriber.telefone) || selectedSubscriber.telefone || "");
+                            toast({ title: "Número copiado" });
+                          }}
+                          className={`group inline-flex items-center gap-1 text-[11px] font-medium tabular-nums ${themeClasses.secondaryText} hover:text-[#00A884] transition-colors shrink-0`}
+                        >
+                          <Phone className="h-3 w-3 opacity-60 group-hover:opacity-100" />
+                          {formatPhone(selectedSubscriber.telefone)}
+                        </button>
+                      </>
+                    )}
+                    {customerTypingIds.has(selectedSubscriber.subscriber_id) ? (
+                      <span className="text-[11px] text-[#00A884] font-medium animate-pulse shrink-0">digitando...</span>
+                    ) : isTyping(selectedSubscriber.subscriber_id) && (
+                      <span className="text-[11px] text-[#00A884] font-medium animate-pulse shrink-0">
+                        {getTypingUserName(selectedSubscriber.subscriber_id) || "alguém"} digitando...
+                      </span>
+                    )}
+                  </div>
 
-              {/* min-w-0 (não shrink-0) + overflow-x-auto: quando não cabem
-                  todos os ~10 ícones ao lado de um nome legível, essa
-                  fileira rola horizontalmente em vez de espremer o nome a
-                  zero ou quebrar linha — mesmo padrão já usado na fileira
-                  de tags acima. */}
-              <div
-                className="flex items-center gap-1 md:gap-1.5 min-w-0 overflow-x-auto [&::-webkit-scrollbar]:hidden"
-                style={{ scrollbarWidth: 'none' }}
-              >
-                {/* Lead perdido / Contrato assinado: eram botões só-ícone
-                    (X/check) que só o tooltip explicava — virou pill com
-                    texto, mais fácil de entender de cara. Comportamento
-                    igual a antes: clique abre o mesmo modal pequeno de
-                    sempre. Visíveis em qualquer largura agora (não só
-                    desktop) já que pill com texto cabe bem mais que os
-                    ~10 ícones que existiam antes nesse grupo. */}
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {selectedSubscriber.lead_id && (
+                  <div className="flex items-center gap-1.5 min-w-0 overflow-x-auto [&::-webkit-scrollbar]:hidden shrink-0" style={{ scrollbarWidth: 'none' }}>
+                    {/* Tags não aparecem mais como fileira de badges (uma tag
+                        com nome longo, ex. "ATENDIMENTO ANELIZE", cortava sem
+                        aviso mesmo com scroll — ver HISTORICO.md 2026-09-09).
+                        Duas dropdowns compactas: "Tarja de lead" (categoria
+                        "origem" — seleção única, já era assim internamente) e
+                        "Adicionar tag" (as demais categorias). Tags aplicadas
+                        só aparecem dentro de cada dropdown, marcadas. */}
+                    <TagSelector
+                      subscriberId={selectedSubscriber.subscriber_id}
+                      availableTags={availableTags.filter(t => t.category === 'origem')}
+                      currentTags={getSubscriberTags(selectedSubscriber.subscriber_id)}
+                      onAddTag={(tagId, reason) => addTagToSubscriber(selectedSubscriber.subscriber_id, tagId, reason, selectedSubscriber.lead_id ?? undefined)}
+                      onRemoveTag={tagId => removeTagFromSubscriber(selectedSubscriber.subscriber_id, tagId)}
+                      triggerLabel="Tarja de lead"
+                    />
+                    <TagSelector
+                      subscriberId={selectedSubscriber.subscriber_id}
+                      availableTags={availableTags.filter(t => t.category !== 'origem')}
+                      currentTags={getSubscriberTags(selectedSubscriber.subscriber_id)}
+                      onAddTag={(tagId, reason) => addTagToSubscriber(selectedSubscriber.subscriber_id, tagId, reason, selectedSubscriber.lead_id ?? undefined)}
+                      onRemoveTag={tagId => removeTagFromSubscriber(selectedSubscriber.subscriber_id, tagId)}
+                      onCreateTag={createTag}
+                    />
+
+                    {/* Lead perdido / Contrato assinado: eram botões só-ícone
+                        (X/check) que só o tooltip explicava — virou pill com
+                        texto. Comportamento igual a antes: clique abre o
+                        mesmo modal pequeno de sempre. */}
+                    {selectedSubscriber.lead_id && (
+                      <button
+                        onClick={() => { setLeadPerdidoMotivo(''); setLeadPerdidoOpen(true); }}
+                        title="Marcar lead como perdido"
+                        className="inline-flex items-center gap-1 h-6 px-2.5 rounded-full text-[11px] font-semibold border shrink-0
+                          border-red-400/60 bg-red-500/10 text-red-600 dark:text-red-400
+                          hover:bg-red-500 hover:text-white hover:border-red-500 hover:shadow-sm
+                          active:scale-95 transition-all duration-150"
+                      >
+                        <XCircle className="h-3 w-3 shrink-0" />
+                        Lead perdido
+                        <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
+                      </button>
+                    )}
                     <button
-                      onClick={() => { setLeadPerdidoMotivo(''); setLeadPerdidoOpen(true); }}
-                      title="Marcar lead como perdido"
-                      className="inline-flex items-center gap-1 h-6 px-2.5 rounded-full text-[11px] font-semibold border
-                        border-red-400/60 bg-red-500/10 text-red-600 dark:text-red-400
-                        hover:bg-red-500 hover:text-white hover:border-red-500 hover:shadow-sm
+                      onClick={() => setContratoModalOpen(true)}
+                      title="Registrar contrato fechado"
+                      className="inline-flex items-center gap-1 h-6 px-2.5 rounded-full text-[11px] font-semibold border shrink-0
+                        border-emerald-400/60 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400
+                        hover:bg-emerald-500 hover:text-white hover:border-emerald-500 hover:shadow-sm
                         active:scale-95 transition-all duration-150"
                     >
-                      <XCircle className="h-3 w-3 shrink-0" />
-                      Lead perdido
+                      <BadgeCheck className="h-3 w-3 shrink-0" />
+                      Contrato assinado
                       <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
                     </button>
-                  )}
-                  <button
-                    onClick={() => setContratoModalOpen(true)}
-                    title="Registrar contrato fechado"
-                    className="inline-flex items-center gap-1 h-6 px-2.5 rounded-full text-[11px] font-semibold border
-                      border-emerald-400/60 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400
-                      hover:bg-emerald-500 hover:text-white hover:border-emerald-500 hover:shadow-sm
-                      active:scale-95 transition-all duration-150"
-                  >
-                    <BadgeCheck className="h-3 w-3 shrink-0" />
-                    Contrato assinado
-                    <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
-                  </button>
-                </div>
 
-                <Button variant="ghost" size="icon" onClick={async e => {
-                  e.stopPropagation();
-                  const novoStatus = !selectedSubscriber.atendimento_humano;
-                  const { error } = await supabase.from("manychat_subscribers").update({ atendimento_humano: novoStatus, atendimento_humano_desde: novoStatus ? new Date().toISOString() : null }).eq("subscriber_id", selectedSubscriber.subscriber_id);
-                  if (!error) {
-                    setSelectedSubscriber(prev => prev ? { ...prev, atendimento_humano: novoStatus } : null);
-                    setSubscribers(prev => prev.map(s => s.subscriber_id === selectedSubscriber.subscriber_id ? { ...s, atendimento_humano: novoStatus } : s));
-                    toast({ title: novoStatus ? "🙋 Atendimento Humano" : "🤖 Isa Ativada" });
-                  }
-                }} className={`h-8 w-8 md:h-10 md:w-10 rounded-full transition-all ${selectedSubscriber.atendimento_humano ? "text-amber-500 bg-amber-500/10 hover:bg-amber-500/20" : `${themeClasses.iconColor} ${themeClasses.hoverBtn}`}`}>
-                  {selectedSubscriber.atendimento_humano ? <UserRound className="h-4 w-4 md:h-5 md:w-5" /> : <Bot className="h-4 w-4 md:h-5 md:w-5" />}
-                </Button>
-
-                {/* ✍️ LEMBRETE DE ASSINATURA (link real ClickSign/ZapSign do contrato do lead) */}
-                <ChatContractReminder
-                  leadId={selectedSubscriber.lead_id}
-                  leadNome={getDisplayName(selectedSubscriber)}
-                  leadPhone={selectedSubscriber.telefone}
-                  triggerClassName={`${themeClasses.iconColor} ${themeClasses.hoverBtn}`}
-                />
-
-                {/* Desktop only buttons */}
-                <div className="hidden md:flex items-center gap-1">
-                  <ConversationAssignmentMenu teamMembers={getTeamWithStatus()} currentUserId={user?.id} currentAssignee={selectedSubscriber.assigned_to} onAssign={assignConversation} />
-                  <AgendarConsultaModal subscriberId={selectedSubscriber.subscriber_id} subscriberName={getDisplayName(selectedSubscriber)} subscriberEmail={selectedSubscriber.email} subscriberPhone={selectedSubscriber.telefone} leadId={selectedSubscriber.lead_id} onScheduled={() => toast({ title: "📅 Agendado!" })} />
-                  {selectedSubscriber.lead_id && (
-                    <Button variant="ghost" size="icon" onClick={() => setShowContextPanel(!showContextPanel)} className={`h-10 w-10 rounded-full transition-all ${showContextPanel ? "text-[#00A884] bg-[#00A884]/10 hover:bg-[#00A884]/20" : `${themeClasses.iconColor} ${themeClasses.hoverBtn}`}`}>
-                      {showContextPanel ? <PanelRightClose className="h-5 w-5" /> : <Sparkles className="h-5 w-5" />}
+                    <Button variant="ghost" size="icon" onClick={async e => {
+                      e.stopPropagation();
+                      const novoStatus = !selectedSubscriber.atendimento_humano;
+                      const { error } = await supabase.from("manychat_subscribers").update({ atendimento_humano: novoStatus, atendimento_humano_desde: novoStatus ? new Date().toISOString() : null }).eq("subscriber_id", selectedSubscriber.subscriber_id);
+                      if (!error) {
+                        setSelectedSubscriber(prev => prev ? { ...prev, atendimento_humano: novoStatus } : null);
+                        setSubscribers(prev => prev.map(s => s.subscriber_id === selectedSubscriber.subscriber_id ? { ...s, atendimento_humano: novoStatus } : s));
+                        toast({ title: novoStatus ? "🙋 Atendimento Humano" : "🤖 Isa Ativada" });
+                      }
+                    }} className={`h-8 w-8 md:h-9 md:w-9 rounded-full transition-all shrink-0 ${selectedSubscriber.atendimento_humano ? "text-amber-500 bg-amber-500/10 hover:bg-amber-500/20" : `${themeClasses.iconColor} ${themeClasses.hoverBtn}`}`}>
+                      {selectedSubscriber.atendimento_humano ? <UserRound className="h-4 w-4 md:h-[18px] md:w-[18px]" /> : <Bot className="h-4 w-4 md:h-[18px] md:w-[18px]" />}
                     </Button>
-                  )}
-                </div>
 
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className={`h-8 w-8 md:h-10 md:w-10 rounded-full ${themeClasses.iconColor} ${themeClasses.hoverBtn}`}><MoreVertical className="h-4 w-4 md:h-5 md:w-5" /></Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56 py-1.5">
+                    {/* ✍️ LEMBRETE DE ASSINATURA (link real ClickSign/ZapSign do contrato do lead) */}
+                    <ChatContractReminder
+                      leadId={selectedSubscriber.lead_id}
+                      leadNome={getDisplayName(selectedSubscriber)}
+                      leadPhone={selectedSubscriber.telefone}
+                      triggerClassName={`${themeClasses.iconColor} ${themeClasses.hoverBtn}`}
+                    />
+
+                    {/* Desktop only buttons */}
+                    <div className="hidden md:flex items-center gap-1 shrink-0">
+                      <ConversationAssignmentMenu teamMembers={getTeamWithStatus()} currentUserId={user?.id} currentAssignee={selectedSubscriber.assigned_to} onAssign={assignConversation} />
+                      <AgendarConsultaModal subscriberId={selectedSubscriber.subscriber_id} subscriberName={getDisplayName(selectedSubscriber)} subscriberEmail={selectedSubscriber.email} subscriberPhone={selectedSubscriber.telefone} leadId={selectedSubscriber.lead_id} onScheduled={() => toast({ title: "📅 Agendado!" })} />
+                      {selectedSubscriber.lead_id && (
+                        <Button variant="ghost" size="icon" onClick={() => setShowContextPanel(!showContextPanel)} className={`h-9 w-9 rounded-full transition-all ${showContextPanel ? "text-[#00A884] bg-[#00A884]/10 hover:bg-[#00A884]/20" : `${themeClasses.iconColor} ${themeClasses.hoverBtn}`}`}>
+                          {showContextPanel ? <PanelRightClose className="h-[18px] w-[18px]" /> : <Sparkles className="h-[18px] w-[18px]" />}
+                        </Button>
+                      )}
+                    </div>
+
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className={`h-8 w-8 md:h-9 md:w-9 rounded-full shrink-0 ${themeClasses.iconColor} ${themeClasses.hoverBtn}`}><MoreVertical className="h-4 w-4 md:h-[18px] md:w-[18px]" /></Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-56 py-1.5">
                     {/* Grupo: contato direto — menos usado que responder aqui
                         mesmo, então saiu da barra visível */}
                     {selectedSubscriber.telefone && (
@@ -2991,6 +2983,8 @@ const ManyChatInboxContent = () => {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+                  </div>
+                </div>
               </div>
             </div>
 
