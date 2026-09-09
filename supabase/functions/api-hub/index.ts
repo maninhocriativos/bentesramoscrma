@@ -294,21 +294,11 @@ serve(async (req: Request) => {
           }
         }
         
-        // Buscar por nome
-        if (!leadId && nome && nome !== 'Desconhecido') {
-          const { data: leadByName } = await supabase
-            .from('leads_juridicos')
-            .select('id, nome')
-            .ilike('nome', `%${nome}%`)
-            .limit(1)
-            .maybeSingle();
-          
-          if (leadByName) {
-            leadId = leadByName.id;
-            console.log('[API-HUB] Lead encontrado por nome:', leadByName.nome);
-          }
-        }
-        
+        // NÃO buscar por nome: nome sozinho (ex.: "José", "Raimundo") combina com
+        // qualquer lead que contenha esse substring e mistura pessoas diferentes no
+        // mesmo lead/conversa — cliente A passa a ver e responder mensagens do cliente
+        // B. Sem telefone/email confiável, cria-se um lead novo (fallback abaixo).
+
         // CRIAR LEAD AUTOMATICAMENTE se não encontrou
         // Observação: em canais como Facebook/Instagram, o ManyChat às vezes não envia telefone/email.
         // Nesses casos, criamos um lead “fallback” usando o subscriber_id para não perder a entrada.
