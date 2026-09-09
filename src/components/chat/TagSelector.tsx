@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,11 +17,24 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import {
   Plus, Check, Tag, MapPin, AlertCircle, Scale, Sparkles, ChevronDown,
+  History, Loader2, X as XIcon,
   type LucideIcon,
 } from 'lucide-react';
 import { ChatTag, SubscriberTag, TAG_COLORS } from '@/hooks/useChatTags';
 import { getTagIcon } from './TagBadge';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
+import { formatDistanceToNow } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+
+interface TagChangeLogEntry {
+  id: string;
+  action: 'added' | 'removed';
+  reason: string | null;
+  created_at: string;
+  chat_tags: { name: string; color: string } | null;
+  perfis: { nome: string | null; sobrenome: string | null } | null;
+}
 
 interface TagSelectorProps {
   subscriberId: string;
@@ -74,6 +87,27 @@ export function TagSelector({
   const [newTagDialog, setNewTagDialog] = useState(false);
   const [newTagName, setNewTagName] = useState('');
   const [newTagColor, setNewTagColor] = useState('gray');
+  const [history, setHistory] = useState<TagChangeLogEntry[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  // Histórico de quem adicionou/removeu cada tag — busca só quando abre o
+  // popover (não precisa manter isso carregado o tempo todo pra cada
+  // conversa da lista).
+  useEffect(() => {
+    if (!open) return;
+    setHistoryLoading(true);
+    supabase
+      .from('tag_change_log' as any)
+      .select('id, action, reason, created_at, chat_tags(name, color), perfis(nome, sobrenome)')
+      .eq('subscriber_id', subscriberId)
+      .order('created_at', { ascending: false })
+      .limit(15)
+      .then(({ data, error }) => {
+        if (error) console.error('[TagSelector] Erro ao carregar histórico de tags:', error);
+        setHistory((data as any as TagChangeLogEntry[]) || []);
+        setHistoryLoading(false);
+      });
+  }, [open, subscriberId]);
 
   const currentTagIds = new Set(currentTags.map(t => t.tag_id));
   // Modo triggerLabel: qual das currentTags está dentre as availableTags
@@ -239,6 +273,47 @@ export function TagSelector({
               Criar nova tag
             </Button>
           )}
+
+          {/* Histórico: quem adicionou/removeu cada tag desse lead e quando —
+              já era gravado em tag_change_log a cada ação, só nunca tinha
+              tela pra mostrar. */}
+          <div className="mt-3 pt-3 border-t border-border/60">
+            <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground/70 uppercase tracking-widest px-0.5 pb-2">
+              <History className="h-3 w-3" />
+              Histórico
+            </div>
+            {historyLoading ? (
+              <div className="flex items-center justify-center py-3">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground/50" />
+              </div>
+            ) : history.length === 0 ? (
+              <p className="text-[11px] text-muted-foreground/60 text-center py-2">
+                Nenhuma alteração registrada
+              </p>
+            ) : (
+              <div className="max-h-40 overflow-y-auto space-y-1.5 pr-0.5 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border">
+                {history.map((entry) => {
+                  const colors = TAG_COLORS[entry.chat_tags?.color || 'gray'] || TAG_COLORS.gray;
+                  const nome = [entry.perfis?.nome, entry.perfis?.sobrenome].filter(Boolean).join(' ') || 'Sistema';
+                  return (
+                    <div key={entry.id} className="flex items-start gap-1.5 text-[11px]">
+                      {entry.action === 'added'
+                        ? <Plus className="h-3 w-3 shrink-0 mt-0.5 text-emerald-500" />
+                        : <XIcon className="h-3 w-3 shrink-0 mt-0.5 text-red-500" />}
+                      <div className="min-w-0 flex-1">
+                        <span className={cn('font-medium', colors.text)}>{entry.chat_tags?.name || 'tag removida'}</span>
+                        <span className="text-muted-foreground/70"> — {entry.action === 'added' ? 'adicionada' : 'removida'} por {nome}</span>
+                        {entry.reason && <p className="text-muted-foreground/60 italic truncate" title={entry.reason}>{entry.reason}</p>}
+                      </div>
+                      <span className="text-muted-foreground/50 shrink-0 whitespace-nowrap">
+                        {formatDistanceToNow(new Date(entry.created_at), { addSuffix: true, locale: ptBR })}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </PopoverContent>
       </Popover>
 
