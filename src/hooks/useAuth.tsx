@@ -1,8 +1,28 @@
-import { useState, useEffect, useRef } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
-export function useAuth() {
+interface AuthContextValue {
+  user: User | null;
+  session: Session | null;
+  loading: boolean;
+  signIn: (email: string, password: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string) => Promise<{ error: any }>;
+  signInWithGoogle: () => Promise<{ error: any }>;
+  signOut: () => Promise<{ error: any }>;
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+// Fonte única de autenticação — montada UMA vez em App.tsx (AuthProvider).
+// Antes, useAuth() criava seu próprio estado a cada chamada (~40 arquivos
+// chamavam o hook direto, cada um com sua própria instância de getSession(),
+// onAuthStateChange e o listener de visibilitychange). Isso já causou um bug
+// real: um consumidor via "user" null por um instante antes do outro
+// resolver, e tratava isso como logout confirmado (ver PerfilContext,
+// 2026-09-09). Com Context, todo mundo lê exatamente o mesmo estado — não
+// tem como dois consumidores verem valores diferentes no mesmo instante.
+export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -155,7 +175,7 @@ export function useAuth() {
     return { error };
   };
 
-  return {
+  const value: AuthContextValue = {
     user,
     session,
     loading,
@@ -164,4 +184,14 @@ export function useAuth() {
     signInWithGoogle,
     signOut,
   };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function useAuth(): AuthContextValue {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth() precisa estar dentro de <AuthProvider> (montado em App.tsx)');
+  }
+  return context;
 }

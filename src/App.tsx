@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { PerfilProvider } from "@/contexts/PerfilContext";
+import { AuthProvider } from "@/hooks/useAuth";
 import { useServiceWorkerUpdate } from "@/hooks/useServiceWorkerUpdate";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
@@ -71,6 +72,7 @@ function AppRoutes() {
   useServiceWorkerUpdate();
 
   return (
+    <AuthProvider>
     <PerfilProvider>
       <ErrorBoundary>
       <Suspense fallback={<PageFallback />}>
@@ -130,6 +132,7 @@ function AppRoutes() {
       </Suspense>
       </ErrorBoundary>
     </PerfilProvider>
+    </AuthProvider>
   );
 }
 
