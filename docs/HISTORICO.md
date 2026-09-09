@@ -608,6 +608,21 @@ A partir daqui cada entrada tem: **o que**, **por quê / causa raiz**, **commit(
 
 ---
 
+### 2026-09-09 (mesmo dia, sessão seguinte) — useAuth() virou Context único (`996b827c`)
+- Fecha a pendência 31 (risco arquitetural) registrada mais cedo hoje.
+  `useAuth()` criava seu próprio estado — `getSession()`, `onAuthStateChange`,
+  listener de `visibilitychange` — em CADA um dos ~40 arquivos que chamavam
+  o hook, cada instância resolvendo a sessão no seu próprio tempo (foi assim
+  que o bug do redirect indevido pra `/tarefas` aconteceu mais cedo hoje).
+  Fix: `useAuth.ts` → `useAuth.tsx`, virou Context (`AuthProvider` guarda a
+  lógica, montado uma vez em `App.tsx` acima do `PerfilProvider`; `useAuth()`
+  só lê do Context). A assinatura do hook não mudou — nenhum dos ~40
+  arquivos precisou ser tocado, só `useAuth.tsx` e `App.tsx`. Elimina o
+  risco de corrida entre instâncias (agora só existe uma) e os listeners
+  duplicados. Verificado: `tsc --noEmit` limpo, build ok, 16 cargas frias
+  locais + 9 páginas em produção (incluindo `/chat`) sem erro de console
+  nem redirecionamento indevido.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
@@ -704,12 +719,9 @@ Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a dat
     09-09) — 6 confirmados por conteúdo real de mensagem, script de split
     pronto e ensaiado (`begin/rollback`), só falta decisão do usuário pra
     aplicar. Resto (falso-positivo ou dado de teste) não precisa de ação.
-31. Risco arquitetural: `useAuth()` chamado independente em ~40 arquivos
-    (sem Context compartilhado) — causou o bug de redirect indevido pra
-    `/tarefas` (corrigido só no `PerfilContext`, ver 09-09). Os outros ~39
-    usos têm o mesmo tipo de corrida latente entre si; considerar migrar
-    `useAuth` pra Context compartilhado numa sessão dedicada, não como
-    efeito colateral de outro fix.
+31. ~~Risco arquitetural: `useAuth()` chamado independente em ~40 arquivos~~
+    — **RESOLVIDO em 09-09** (`996b827c`, ver linha do tempo). Virou Context
+    único; nenhum dos ~40 arquivos precisou mudar.
 
 **Em andamento (planos aprovados)**
 19. Contratos/Procuração via templates + ZapSign nativo — Fases 4–9
