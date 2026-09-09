@@ -60,15 +60,21 @@ export function useAuth() {
 
     // Quando o usuário volta para a aba após o computador dormir/hibernar,
     // força renovação do token antes que qualquer query dispare.
-    // Se o refresh token também expirou, faz logout automático.
+    // Antes deslogava na primeira falha de getSession() — mas um soluço
+    // passageiro de rede nesse instante (comum ao acordar o notebook) já
+    // bastava pra derrubar o usuário sem necessidade. Agora tenta 3x com
+    // espera, igual ao tryRefreshToken() do client.ts, e só desloga se as
+    // 3 tentativas falharem de verdade (refresh token expirado/inválido).
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        supabase.auth.getSession().then(({ data: { session: refreshed }, error }) => {
-          if (error || !refreshed) {
-            supabase.auth.signOut();
-          }
-        });
-      }
+      if (document.visibilityState !== 'visible') return;
+      (async () => {
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          const { data: { session: refreshed }, error } = await supabase.auth.getSession();
+          if (!error && refreshed) return;
+          if (attempt < 3) await new Promise(r => setTimeout(r, attempt * 1000));
+        }
+        supabase.auth.signOut();
+      })();
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
