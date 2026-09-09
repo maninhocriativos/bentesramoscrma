@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  Plus, Check, Tag, MapPin, AlertCircle, Scale, Sparkles,
+  Plus, Check, Tag, MapPin, AlertCircle, Scale, Sparkles, ChevronDown,
   type LucideIcon,
 } from 'lucide-react';
 import { ChatTag, SubscriberTag, TAG_COLORS } from '@/hooks/useChatTags';
@@ -30,6 +30,12 @@ interface TagSelectorProps {
   onAddTag: (tagId: string, reason?: string) => Promise<{ error: any }>;
   onRemoveTag: (tagId: string) => Promise<{ error: any }>;
   onCreateTag?: (name: string, color: string) => Promise<{ error: any; data: ChatTag | null }>;
+  /** Rótulo do gatilho quando não há tag selecionada dentre as `availableTags`
+   * passadas (ex.: "Tarja de lead"). Quando informado, o gatilho mostra um
+   * pill de seleção única (nome + cor da tag ativa, ou o rótulo em cinza) em
+   * vez do botão padrão "+ Tag" — usado pra categorias de troca única
+   * (origem/triagem/area) exibidas fora da fileira de badges. */
+  triggerLabel?: string;
 }
 
 const CATEGORY_ICONS: Record<string, LucideIcon> = {
@@ -55,6 +61,7 @@ export function TagSelector({
   onAddTag,
   onRemoveTag,
   onCreateTag,
+  triggerLabel,
 }: TagSelectorProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -69,6 +76,11 @@ export function TagSelector({
   const [newTagColor, setNewTagColor] = useState('gray');
 
   const currentTagIds = new Set(currentTags.map(t => t.tag_id));
+  // Modo triggerLabel: qual das currentTags está dentre as availableTags
+  // passadas (já filtradas pelo chamador, ex.: só categoria "origem").
+  const activeInScope = triggerLabel
+    ? currentTags.find(st => availableTags.some(t => t.id === st.tag_id))
+    : undefined;
 
   const filteredTags = availableTags.filter(tag =>
     tag.name.toLowerCase().includes(search.toLowerCase())
@@ -137,12 +149,26 @@ export function TagSelector({
     <>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <button
-            className="inline-flex items-center gap-1 h-5 px-2 text-[10px] rounded-full font-semibold border border-dashed border-muted-foreground/30 text-muted-foreground hover:border-primary/60 hover:text-primary hover:bg-primary/5 transition-all duration-150 shrink-0"
-          >
-            <Plus className="h-2.5 w-2.5" />
-            Tag
-          </button>
+          {triggerLabel ? (
+            <button
+              className={cn(
+                'inline-flex items-center gap-1 h-6 px-2.5 text-[11px] rounded-full font-semibold border transition-all duration-150 shrink-0 max-w-[160px]',
+                activeInScope?.tag
+                  ? cn(TAG_COLORS[activeInScope.tag.color]?.bg, TAG_COLORS[activeInScope.tag.color]?.text, TAG_COLORS[activeInScope.tag.color]?.border, 'hover:shadow-sm')
+                  : 'border-dashed border-muted-foreground/30 text-muted-foreground hover:border-primary/60 hover:text-primary hover:bg-primary/5',
+              )}
+            >
+              <span className="truncate">{activeInScope?.tag?.name || triggerLabel}</span>
+              <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
+            </button>
+          ) : (
+            <button
+              className="inline-flex items-center gap-1 h-5 px-2 text-[10px] rounded-full font-semibold border border-dashed border-muted-foreground/30 text-muted-foreground hover:border-primary/60 hover:text-primary hover:bg-primary/5 transition-all duration-150 shrink-0"
+            >
+              <Plus className="h-2.5 w-2.5" />
+              Adicionar tag
+            </button>
+          )}
         </PopoverTrigger>
         <PopoverContent className="w-80 p-3 z-[200]" align="start" side="bottom" sideOffset={6}>
           <Input
