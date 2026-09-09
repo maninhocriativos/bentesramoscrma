@@ -718,6 +718,16 @@ A partir daqui cada entrada tem: **o que**, **por quê / causa raiz**, **commit(
   absorve o aperto e rola sozinho). Lição: numa mudança de layout a partir
   de mockup, replicar a árvore de linhas/colunas exata importa tanto quanto
   os elementos em si — ver [[project_chat_mistura_clientes_login_instavel_20260909]].
+- **Segunda correção no mesmo dia** (`d293158f`): usuário mandou o link do
+  Figma de verdade (`SISTEMA-BENTES-E-RAMOS`, node `1:2` "DESKTOP"). Usando
+  `get_design_context` em vez de estimar num rascunho de baixa resolução,
+  saíram 2 erros reais: rótulo é "Tags do lead" (não "Tarja de lead" — erro
+  de leitura no rascunho pequeno) e as 4 pílulas usavam cor errada — "Tags
+  do lead"/"Adicionar tag" são cinza sólido `#d9d9d9` com texto escuro
+  `#1e2930` (eu tinha estilo tracejado/transparente); "Lead perdido" é
+  vermelho puro `#ff0000`; "Contrato assinado" é `#21b849` exato (não o
+  emerald padrão do Tailwind). Corrigido e verificado ao vivo em produção,
+  cores lado a lado com o screenshot do node do Figma batendo.
 
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
