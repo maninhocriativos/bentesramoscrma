@@ -41,11 +41,18 @@ export function TagBadge({ tag, reason, size = 'sm', showRemove, onRemove, dark 
     : 'text-xs px-2 py-0.5 gap-1.5 h-6';
 
   const iconCls = size === 'sm' ? 'h-2.5 w-2.5 shrink-0' : 'h-3 w-3 shrink-0';
+  // Nome truncado com "..." em vez de deixar a tag no tamanho natural: tag
+  // com nome longo (ex.: "ATENDIMENTO ANELIZE", criada manualmente pela
+  // equipe) empurrava a fileira toda pra fora da área visível — a fileira
+  // rola (overflow-x-auto), mas a barra fica escondida de propósito, então
+  // parecia cortada/quebrada sem nenhum indício de que dava pra arrastar
+  // pra ver o resto. O título (tooltip) abaixo já mostra o nome completo.
+  const nameMaxWidth = size === 'sm' ? 'max-w-[70px]' : 'max-w-[110px]';
 
   return (
     <span
       className={cn(
-        'group/tag inline-flex items-center rounded-full border font-medium whitespace-nowrap select-none',
+        'group/tag inline-flex items-center rounded-full border font-medium select-none',
         'shadow-sm transition-all duration-150 hover:shadow',
         colors.bg,
         textCls,
@@ -56,7 +63,7 @@ export function TagBadge({ tag, reason, size = 'sm', showRemove, onRemove, dark 
       title={reason ? `${tag.name}: ${reason}` : tag.name}
     >
       <Icon className={iconCls} />
-      {tag.name}
+      <span className={cn('truncate', nameMaxWidth)}>{tag.name}</span>
       {showRemove && onRemove && (
         <button
           onClick={(e) => { e.stopPropagation(); onRemove(); }}
