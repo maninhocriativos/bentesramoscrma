@@ -747,6 +747,22 @@ A partir daqui cada entrada tem: **o que**, **por quê / causa raiz**, **commit(
   mostrando "elaboração de contrato — adicionada por Anelize Matos · há
   cerca de 3 horas" e outras entradas corretas.
 
+### 2026-09-09 (mesmo dia, sessão seguinte) — Tag mudada por Administrador não vai pro histórico (`9c7d219b`)
+- Pedido do usuário: "eu como admin mudo as tags dos demais, minhas
+  mudanças não podem aparecer no histórico" — ele usa a conta admin pra
+  corrigir/testar tags de conversas de outras pessoas e não quer que isso
+  fique registrado como se fosse uma mudança "oficial" visível pro resto
+  da equipe no histórico que foi ao ar mais cedo hoje.
+- `useChatTags.ts`: `addTagToSubscriber`/`removeTagFromSubscriber` só
+  inserem em `tag_change_log` quando `!isAdmin` (via `usePerfil()`). A tag
+  em si continua sendo aplicada/removida normalmente pra todo mundo — só
+  o registro de auditoria fica de fora quando é o admin quem mudou.
+- Não testado ao vivo com uma troca real de tag (evitei fazer uma ação real
+  numa conversa de cliente só pra verificar) — é uma mudança pequena e
+  isolada (um `if` em volta de um insert que já existia e já foi testado);
+  `tsc`/build limpos. Pedir pro usuário confirmar na próxima vez que
+  trocar uma tag como admin.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
