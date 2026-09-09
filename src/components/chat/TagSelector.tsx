@@ -152,10 +152,10 @@ export function TagSelector({
           {triggerLabel ? (
             <button
               className={cn(
-                'inline-flex items-center gap-1 h-6 px-2.5 text-[11px] rounded-full font-semibold border transition-all duration-150 shrink-0 max-w-[160px]',
+                'inline-flex items-center gap-1 h-6 px-2.5 text-[11px] rounded-full font-semibold transition-all duration-150 shrink-0 max-w-[160px]',
                 activeInScope?.tag
-                  ? cn(TAG_COLORS[activeInScope.tag.color]?.bg, TAG_COLORS[activeInScope.tag.color]?.text, TAG_COLORS[activeInScope.tag.color]?.border, 'hover:shadow-sm')
-                  : 'border-dashed border-muted-foreground/30 text-muted-foreground hover:border-primary/60 hover:text-primary hover:bg-primary/5',
+                  ? cn(TAG_COLORS[activeInScope.tag.color]?.bg, TAG_COLORS[activeInScope.tag.color]?.text, 'hover:shadow-sm')
+                  : 'bg-[#d9d9d9] text-[#1e2930] hover:bg-[#c7c7c7]',
               )}
             >
               <span className="truncate">{activeInScope?.tag?.name || triggerLabel}</span>
@@ -163,9 +163,8 @@ export function TagSelector({
             </button>
           ) : (
             <button
-              className="inline-flex items-center gap-1 h-5 px-2 text-[10px] rounded-full font-semibold border border-dashed border-muted-foreground/30 text-muted-foreground hover:border-primary/60 hover:text-primary hover:bg-primary/5 transition-all duration-150 shrink-0"
+              className="inline-flex items-center gap-1 h-6 px-2.5 text-[11px] rounded-full font-semibold bg-[#d9d9d9] text-[#1e2930] hover:bg-[#c7c7c7] transition-all duration-150 shrink-0"
             >
-              <Plus className="h-2.5 w-2.5" />
               Adicionar tag
             </button>
           )}

@@ -2814,7 +2814,7 @@ const ManyChatInboxContent = () => {
                     {/* Tags não aparecem mais como fileira de badges (uma tag
                         com nome longo, ex. "ATENDIMENTO ANELIZE", cortava sem
                         aviso mesmo com scroll — ver HISTORICO.md 2026-09-09).
-                        Duas dropdowns compactas: "Tarja de lead" (categoria
+                        Duas dropdowns compactas: "Tags do lead" (categoria
                         "origem" — seleção única, já era assim internamente) e
                         "Adicionar tag" (as demais categorias). Tags aplicadas
                         só aparecem dentro de cada dropdown, marcadas. */}
@@ -2824,7 +2824,7 @@ const ManyChatInboxContent = () => {
                       currentTags={getSubscriberTags(selectedSubscriber.subscriber_id)}
                       onAddTag={(tagId, reason) => addTagToSubscriber(selectedSubscriber.subscriber_id, tagId, reason, selectedSubscriber.lead_id ?? undefined)}
                       onRemoveTag={tagId => removeTagFromSubscriber(selectedSubscriber.subscriber_id, tagId)}
-                      triggerLabel="Tarja de lead"
+                      triggerLabel="Tags do lead"
                     />
                     <TagSelector
                       subscriberId={selectedSubscriber.subscriber_id}
@@ -2843,27 +2843,25 @@ const ManyChatInboxContent = () => {
                       <button
                         onClick={() => { setLeadPerdidoMotivo(''); setLeadPerdidoOpen(true); }}
                         title="Marcar lead como perdido"
-                        className="inline-flex items-center gap-1 h-6 px-2.5 rounded-full text-[11px] font-semibold border shrink-0
-                          border-red-400/60 bg-red-500/10 text-red-600 dark:text-red-400
-                          hover:bg-red-500 hover:text-white hover:border-red-500 hover:shadow-sm
-                          active:scale-95 transition-all duration-150"
+                        className="inline-flex items-center gap-1 h-6 px-2.5 rounded-full text-[11px] font-semibold shrink-0
+                          bg-[#ff0000] text-white shadow-sm
+                          hover:bg-[#e00000] active:scale-95 transition-all duration-150"
                       >
                         <XCircle className="h-3 w-3 shrink-0" />
                         Lead perdido
-                        <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
+                        <ChevronDown className="h-3 w-3 shrink-0 opacity-80" />
                       </button>
                     )}
                     <button
                       onClick={() => setContratoModalOpen(true)}
                       title="Registrar contrato fechado"
-                      className="inline-flex items-center gap-1 h-6 px-2.5 rounded-full text-[11px] font-semibold border shrink-0
-                        border-emerald-400/60 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400
-                        hover:bg-emerald-500 hover:text-white hover:border-emerald-500 hover:shadow-sm
-                        active:scale-95 transition-all duration-150"
+                      className="inline-flex items-center gap-1 h-6 px-2.5 rounded-full text-[11px] font-semibold shrink-0
+                        bg-[#21b849] text-white shadow-sm
+                        hover:bg-[#1ca23f] active:scale-95 transition-all duration-150"
                     >
                       <BadgeCheck className="h-3 w-3 shrink-0" />
                       Contrato assinado
-                      <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
+                      <ChevronDown className="h-3 w-3 shrink-0 opacity-80" />
                     </button>
 
                     <Button variant="ghost" size="icon" onClick={async e => {
