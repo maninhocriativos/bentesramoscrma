@@ -10,6 +10,7 @@ type ZapiSendPayload = {
   instance_id?: string;
   message_id?: string;
   caption?: string;
+  dedupe_key?: string;
 };
 
 type ZapiSendResponse = {
@@ -85,9 +86,15 @@ async function callZapiSendDirect(
 export async function invokeZapiSend(
   payload: ZapiSendPayload,
 ): Promise<{ data: ZapiSendResponse | null; error: Error | null; usedFallback: boolean }> {
+  // Chave de idempotência: se a chamada abaixo "falhar" só porque a resposta
+  // não voltou (não porque o envio não aconteceu), o fallback usa a MESMA
+  // chave — o servidor reconhece a repetição e devolve o resultado já
+  // acontecido em vez de mandar a mensagem/documento pro WhatsApp de novo.
+  const payloadWithDedupe = { ...payload, dedupe_key: crypto.randomUUID() };
+
   try {
     const { data, error } = await supabase.functions.invoke('zapi-send', {
-      body: payload,
+      body: payloadWithDedupe,
     });
 
     if (!error) {
@@ -116,7 +123,7 @@ export async function invokeZapiSend(
   }
 
   console.warn('[zapiSendClient] supabase.functions.invoke falhou, usando fetch direto');
-  const fallback = await callZapiSendDirect(payload);
+  const fallback = await callZapiSendDirect(payloadWithDedupe);
 
   return {
     data: fallback.data,

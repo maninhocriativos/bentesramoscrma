@@ -73,9 +73,57 @@ serve(async (req: Request) => {
 
   const startTime = Date.now();
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  // true só a partir do ponto em que de fato chamamos o WhatsApp — usado pra
+  // decidir, no catch, se é seguro liberar um retry (nada foi enviado ainda)
+  // ou se precisamos travar (o envio real pode já ter acontecido).
+  let sendAttempted = false;
+  let dedupeKey: string | undefined;
 
   try {
-    const { to_phone, message, type = 'text', provider = 'zapi', lead_id, file_name, instance_id, message_id, caption } = await req.json();
+    const { to_phone, message, type = 'text', provider = 'zapi', lead_id, file_name, instance_id, message_id, caption, dedupe_key } = await req.json();
+    dedupeKey = dedupe_key;
+
+    // Idempotência: o cliente (invokeZapiSend) tem um fallback que refaz a
+    // chamada quando ACHA que a original falhou por rede — mas às vezes a
+    // original só demorou a responder e já tinha chegado no WhatsApp de
+    // verdade. Sem isso, o retry manda a mesma mensagem/documento uma
+    // segunda vez pro cliente real (ver HISTORICO.md 2026-09-09). Com
+    // dedupe_key, a segunda tentativa espera o resultado da primeira em vez
+    // de enviar de novo.
+    if (dedupe_key) {
+      const { error: dedupeInsertErr } = await supabase
+        .from('zapi_send_dedupe')
+        .insert({ dedupe_key, status: 'pending' });
+
+      // '23505' = violação de chave única (dedupe_key já existe) — é o único
+      // caso em que travamos. Qualquer outro erro (tabela ainda não existe
+      // por causa da ordem dos deploys, RLS, hiccup de rede) é best-effort:
+      // loga e segue o envio normal, sem bloquear o cliente por isso.
+      if (dedupeInsertErr && dedupeInsertErr.code !== '23505') {
+        console.error('[zapi-send] dedupe insert falhou (não é conflito de chave), seguindo sem dedupe:', dedupeInsertErr);
+      } else if (dedupeInsertErr) {
+        // Já existe uma tentativa com essa chave (em andamento ou concluída).
+        for (let i = 0; i < 8; i++) {
+          await new Promise((r) => setTimeout(r, 500));
+          const { data: existing } = await supabase
+            .from('zapi_send_dedupe')
+            .select('status, response')
+            .eq('dedupe_key', dedupe_key)
+            .maybeSingle();
+          if (existing?.status === 'done') {
+            return new Response(JSON.stringify(existing.response), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+        }
+        // Depois de ~4s ainda pendente: mais seguro não mandar de novo do
+        // que arriscar duplicar um envio real que ainda está em andamento.
+        return new Response(
+          JSON.stringify({ success: false, error: 'Tentativa de envio duplicada — aguardando conclusão do envio original.' }),
+          { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+    }
 
     // delete/edit exigem message_id
     if ((type === 'delete' || type === 'edit') && !message_id) {
@@ -154,6 +202,7 @@ serve(async (req: Request) => {
     let result: { success: boolean; data?: any; error?: string; messageId?: string };
     let success = false;
 
+    sendAttempted = true;
     if (provider === 'zapi') {
       result = await sendViaZapi(config.config_json, to_phone, message || '', type, file_name, message_id, caption);
       success = result.success;
@@ -197,18 +246,41 @@ serve(async (req: Request) => {
         .eq('lead_id', lead_id);
     }
 
-    return new Response(JSON.stringify({ 
+    const responseBody = {
       success,
       data: result.data,
       error: result.error,
       messageId: result.messageId
-    }), {
+    };
+
+    if (dedupeKey) {
+      // Fixa o resultado real (a tentativa concorrente/fallback, se existir,
+      // vai receber exatamente essa resposta em vez de mandar de novo).
+      await supabase.from('zapi_send_dedupe').update({ status: 'done', response: responseBody }).eq('dedupe_key', dedupeKey);
+    }
+
+    return new Response(JSON.stringify(responseBody), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('[Send Message] Error:', errorMessage);
+
+    if (dedupeKey) {
+      if (sendAttempted) {
+        // Não sabemos se o WhatsApp chegou a ser chamado antes da exceção —
+        // mais seguro travar um possível retry do que arriscar duplicar.
+        await supabase.from('zapi_send_dedupe').update({
+          status: 'done',
+          response: { success: false, error: errorMessage },
+        }).eq('dedupe_key', dedupeKey);
+      } else {
+        // Exceção antes de qualquer chamada real ao WhatsApp (ex.: request
+        // inválido, config não encontrada) — seguro liberar um retry.
+        await supabase.from('zapi_send_dedupe').delete().eq('dedupe_key', dedupeKey);
+      }
+    }
 
     return new Response(JSON.stringify({ error: errorMessage }), {
       status: 500,
