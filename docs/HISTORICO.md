@@ -708,6 +708,16 @@ A partir daqui cada entrada tem: **o que**, **por quê / causa raiz**, **commit(
 - Usuário avisou que vai desenhar uma versão mais completa no Figma de
   verdade depois — esse commit é a base funcional que a próxima iteração
   deve ajustar visualmente, não uma versão final fechada.
+- **Correção no mesmo dia** (`8ce9913f`): usuário apontou que a estrutura
+  não batia com o print original — lá, Tarja de lead/Adicionar tag/Lead
+  perdido/Contrato assinado/ícones ficam todos na MESMA linha do telefone
+  (empurrados à direita), não empilhados em linhas separadas como saiu na
+  primeira tentativa. Corrigido: linha 2 do cabeçalho virou um único flex
+  `justify-between` — telefone/status à esquerda (`shrink-0`, sempre
+  visível), tarja+tag+pills+ícones à direita (`min-w-0 overflow-x-auto`,
+  absorve o aperto e rola sozinho). Lição: numa mudança de layout a partir
+  de mockup, replicar a árvore de linhas/colunas exata importa tanto quanto
+  os elementos em si — ver [[project_chat_mistura_clientes_login_instavel_20260909]].
 
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
