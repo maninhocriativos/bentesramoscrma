@@ -528,6 +528,52 @@ A partir daqui cada entrada tem: **o que**, **por quê / causa raiz**, **commit(
 
 ---
 
+### 2026-09-09 — Mensagens de chat cruzando entre clientes + login instável (`98f42b6d`, `d835476e`, `40471fdc`)
+- **Chat mandando mensagem pro cliente errado** (`98f42b6d`): contatos do
+  Facebook/Instagram sem telefone caíam num fallback em `api-hub` que
+  buscava lead existente por `ilike('nome', '%nome%')` — substring sem
+  checar telefone/email. Qualquer "José" ou "Raimundo" novo colava no
+  primeiro lead que continha esse nome, misturando pessoas diferentes na
+  mesma conversa (o chat agrupa por `lead_id`). Confirmado no banco: 27
+  leads com 40 subscribers de pessoas distintas coladas por engano (ex.:
+  1 lead "[Raimundo]" com Rai Sales, Raimundo Nonatos, Raimundo Mota e
+  Raimundo Nonato Freitas — 4 pessoas reais diferentes). Fix: sem
+  telefone/email confiável, cria lead novo (fallback que já existia) em
+  vez de arriscar o match por nome. **Pendente**: separar os 27 casos já
+  misturados — 6 confirmados com mensagem real de pessoas distintas
+  (ensaiados com `begin/rollback`, script pronto, aguardando decisão do
+  usuário pra aplicar); resto são falso-positivo (mesma pessoa, telefone
+  em formato diferente) ou dado de teste/placeholder (`test_isa_456`,
+  `{{1.\`Nome do Usuário\`}}`) sem ligação com o bug.
+- **Login caindo sozinho, intermitente** (`d835476e`): `handleVisibilityChange`
+  em `useAuth.ts` deslogava na primeira falha de `getSession()` ao voltar
+  pra aba (troca de aba, notebook saindo de hibernação) — um soluço
+  passageiro de rede já bastava. Agora tenta 3x com espera, igual ao
+  `tryRefreshToken()` do `client.ts`.
+- **Admin (e provavelmente outros cargos) jogado pra `/tarefas` ao abrir
+  Dashboard/Leads/Processos/Financeiro direto** (`40471fdc`) — reproduzido
+  100% das vezes ao abrir aba nova ou dar F5 nessas páginas. Causa: `useAuth()`
+  é chamado de forma independente em ~40 arquivos (sem Context
+  compartilhado); `PerfilContext` tem sua própria instância, que pode ver
+  `user=null` por um instante antes de resolver `getSession()`, mesmo já
+  tendo resolvido na instância do `RequireAuth`. Esse `null` transitório
+  era tratado como logout confirmado (zerava `loading`/roles antes do
+  fetch real terminar), e `RequireAuth` decidia a permissão errado nesse
+  meio-tempo. Corrigido esperando `authLoading` resolver antes de decidir
+  se é logout de verdade. Verificado ao vivo em produção: 7/7 cargas frias
+  em 5 páginas sem redirecionamento indevido (antes falhava sempre).
+  **Risco arquitetural que continua**: os outros ~39 usos de `useAuth()`
+  fora de Context têm o mesmo tipo de corrida latente — não refatorado
+  nesta sessão por ser mudança grande demais pra fazer sob pressão; considerar
+  migrar `useAuth` pra Context compartilhado numa sessão dedicada.
+- **Achado menor, não corrigido a fundo**: presença "quem está atendendo"
+  no chat (`useChatAttending.ts`) tenta limpar o status ao fechar a aba via
+  `navigator.sendBeacon`, mas isso sempre falha por CORS (Supabase retorna
+  `Access-Control-Allow-Origin: *`, incompatível com beacon com credenciais)
+  — suja o console, não afeta login nem envio de mensagem.
+
+---
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
