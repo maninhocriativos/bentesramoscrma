@@ -677,6 +677,38 @@ A partir daqui cada entrada tem: **o que**, **por quê / causa raiz**, **commit(
 - Verificado ao vivo em produção na mesma conversa/tag do print: "Em
   Atendim..." e "ATENDIMEN..." aparecem inteiros e legíveis no cabeçalho.
 
+### 2026-09-09 (mesmo dia, sessão seguinte) — Redesenho do cabeçalho do chat, a partir de mockup do usuário (`0fcec042`)
+- Usuário desenhou um mockup (print, não Figma de verdade) mostrando o
+  cabeçalho da conversa mais compacto: tags escondidas em dropdown em vez
+  de fileira, botões Perdido/Contrato com texto em vez de só ícone, menos
+  ícones na barra. Confirmado com ele por texto antes de implementar (3
+  perguntas: tags só dentro do dropdown, tarja de lead é seleção única,
+  quais ícones ficam) — sem isso teria adivinhado a taxonomia de tags.
+- **Achado que destravou a implementação sem inventar dado novo**: o
+  sistema de tags (`chat_tags`) já tinha categorias de seleção única
+  (`origem`, `triagem`, `area` — troca automática ao escolher outra da
+  mesma categoria) misturadas com categorias multi-select (`custom`,
+  `status`, `outros`) numa fileira só. "Tarja de lead" do mockup é
+  exatamente a categoria `origem` (Bentes Ramos, Desistiu, Indicação,
+  Perdido, Retorno, Tráfego Pago) já pronta pra ser seu próprio dropdown.
+- Mudanças: `TagSelector.tsx` ganhou prop opcional `triggerLabel` (sem
+  quebrar o uso existente — sem o prop, comportamento idêntico a antes) que
+  troca o gatilho "+ Tag" por um pill de seleção única mostrando a tag
+  ativa. `ChatInbox.tsx`: duas instâncias do `TagSelector` (uma filtrada
+  pra `origem` com `triggerLabel="Tarja de lead"`, outra com o resto pra
+  "Adicionar tag") no lugar da fileira de badges; Lead Perdido/Contrato
+  Assinado viraram pills com texto (mesmo onClick de sempre, mesmo modal)
+  e passaram a aparecer em qualquer largura (antes só desktop); WhatsApp
+  Web/Ligar saíram pra dentro do menu "..."; ícone de busca duplicado
+  removido (já existia "Buscar na conversa" no mesmo menu).
+- Verificado ao vivo em produção na mesma conversa real (Gilmar Pereira):
+  histórico de mensagens intacto, dropdowns abrindo e mostrando as tags
+  certas, menu "..." com os itens realocados, zero erro de console, testado
+  também em 1366x768 e mobile (390px) antes de subir.
+- Usuário avisou que vai desenhar uma versão mais completa no Figma de
+  verdade depois — esse commit é a base funcional que a próxima iteração
+  deve ajustar visualmente, não uma versão final fechada.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
