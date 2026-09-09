@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { usePerfil } from '@/hooks/usePerfil';
 
 export interface ChatTag {
   id: string;
@@ -41,6 +42,11 @@ export function useChatTags() {
   const [subscriberTags, setSubscriberTags] = useState<Map<string, SubscriberTag[]>>(new Map());
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  // Administrador troca tag de conversas de outras pessoas pra corrigir/testar
+  // sem que isso apareça pro resto da equipe como "fulano mudou essa tag do
+  // cliente" — pedido explícito do usuário. Isso só afeta o REGISTRO em
+  // tag_change_log; a tag em si continua sendo aplicada normalmente.
+  const { isAdmin } = usePerfil();
 
   // Load all available tags
   const loadTags = useCallback(async () => {
@@ -137,15 +143,18 @@ export function useChatTags() {
     }
 
     // Log de auditoria -- não bloqueia a operação principal se falhar.
-    supabase.from('tag_change_log' as any).insert({
-      subscriber_id: subscriberId,
-      tag_id: tagId,
-      action: 'added',
-      changed_by: userData.user?.id,
-      reason: reason || null,
-    }).then(({ error: logError }) => {
-      if (logError) console.error('[useChatTags] Erro ao registrar log de tag:', logError);
-    });
+    // Administrador não gera registro (pedido do usuário — ver comentário acima).
+    if (!isAdmin) {
+      supabase.from('tag_change_log' as any).insert({
+        subscriber_id: subscriberId,
+        tag_id: tagId,
+        action: 'added',
+        changed_by: userData.user?.id,
+        reason: reason || null,
+      }).then(({ error: logError }) => {
+        if (logError) console.error('[useChatTags] Erro ao registrar log de tag:', logError);
+      });
+    }
 
     // Aplicar efeito real no lead se houver mapeamento
     if (leadId) {
@@ -166,7 +175,7 @@ export function useChatTags() {
 
     await loadSubscriberTags([subscriberId]);
     return { error: null };
-  }, [loadSubscriberTags, tags, toast]);
+  }, [loadSubscriberTags, tags, toast, isAdmin]);
 
   // Remove tag from subscriber
   const removeTagFromSubscriber = useCallback(async (
@@ -188,7 +197,8 @@ export function useChatTags() {
     }
 
     // Log de auditoria -- não bloqueia a operação principal se falhar.
-    supabase.from('tag_change_log' as any).insert({
+    // Administrador não gera registro (pedido do usuário — ver comentário acima).
+    if (!isAdmin) supabase.from('tag_change_log' as any).insert({
       subscriber_id: subscriberId,
       tag_id: tagId,
       action: 'removed',
@@ -204,7 +214,7 @@ export function useChatTags() {
     setSubscriberTags(newMap);
 
     return { error: null };
-  }, [subscriberTags, toast]);
+  }, [subscriberTags, toast, isAdmin]);
 
   // Create new custom tag
   const createTag = useCallback(async (name: string, color: string = 'gray', category?: string) => {
