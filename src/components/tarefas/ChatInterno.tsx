@@ -71,10 +71,40 @@ export function ChatInterno() {
   // No mobile a MobileTabBar (AppLayout) ocupa os ~64px + safe-area do rodapé —
   // o widget precisa flutuar acima dela, não por baixo. Em /chat (tela cheia,
   // sem tab bar) o que precisa evitar é o compositor de mensagem, não a tab bar.
+  // O compositor de mensagem do /chat cresce (barra de preview de áudio/
+  // arquivo, barra de resposta) e o offset fixo abaixo só cobria a altura
+  // "normal" — depois de gravar um áudio, o botão de enviar da prévia sobe
+  // e o widget (parado no offset fixo) ficava em cima dele. Mede a altura
+  // real do compositor (#chat-compose-stack, em ChatInbox.tsx) e soma ao
+  // offset base em vez de assumir uma altura fixa.
+  const [composeExtraHeight, setComposeExtraHeight] = useState(0);
+  useEffect(() => {
+    if (!isChatPage) { setComposeExtraHeight(0); return; }
+    const BASE_HEIGHT = 66; // altura normal do compositor (só a barra de input)
+    let resizeObserver: ResizeObserver | null = null;
+    const attach = (el: Element) => {
+      resizeObserver = new ResizeObserver(entries => {
+        const h = entries[0]?.target.getBoundingClientRect().height ?? BASE_HEIGHT;
+        setComposeExtraHeight(Math.max(0, h - BASE_HEIGHT));
+      });
+      resizeObserver.observe(el);
+    };
+    const existing = document.getElementById('chat-compose-stack');
+    if (existing) attach(existing);
+    // ChatPage é lazy-loaded — o elemento pode não existir ainda no
+    // instante em que isChatPage vira true. Observa o body até aparecer.
+    const mutationObserver = new MutationObserver(() => {
+      if (resizeObserver) return;
+      const el = document.getElementById('chat-compose-stack');
+      if (el) attach(el);
+    });
+    if (!existing) mutationObserver.observe(document.body, { childList: true, subtree: true });
+    return () => { resizeObserver?.disconnect(); mutationObserver.disconnect(); setComposeExtraHeight(0); };
+  }, [isChatPage]);
   const mobileBottomOffset = isChatPage
-    ? 'calc(5.5rem + env(safe-area-inset-bottom))'
+    ? `calc(5.5rem + ${composeExtraHeight}px + env(safe-area-inset-bottom))`
     : 'calc(4.5rem + env(safe-area-inset-bottom))';
-  const desktopBottomOffset = isChatPage ? '5.5rem' : '1.25rem';
+  const desktopBottomOffset = isChatPage ? `calc(5.5rem + ${composeExtraHeight}px)` : '1.25rem';
   const [open,         setOpen]        = useState(false);
   const [texto,        setTexto]       = useState('');
   const [onlineUsers,  setOnlineUsers] = useState<OnlineUser[]>([]);

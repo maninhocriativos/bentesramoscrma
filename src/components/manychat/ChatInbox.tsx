@@ -746,6 +746,25 @@ const ManyChatInboxContent = () => {
     ].sort(compareMessagesChronological);
   };
 
+  // Aplica uma atualização de mensagens (confirmação de envio, erro, etc.) que
+  // acontece DEPOIS de um await — nesse intervalo o atendente pode já ter
+  // trocado de conversa. Sem esse cuidado, setMessages(prev => ...) usa o
+  // "prev" da conversa ATUAL (não da conversa dona da mensagem), injetando a
+  // mensagem no chat errado; quando esse chat recarrega/sincroniza sozinho
+  // depois, a mensagem "some" — o efeito real reportado (mensagem aparece e
+  // desaparece sozinha). O cache (messagesCacheRef) sempre é atualizado, pra
+  // já vir certo se o atendente voltar pra essa conversa; a tela (setMessages)
+  // só é tocada se ele ainda estiver olhando pra ela.
+  const applyMessageUpdate = (subscriberId: string, updateFn: (prev: Message[]) => Message[]) => {
+    const isCurrentlyViewing = selectedSubscriberRef.current?.subscriber_id === subscriberId;
+    if (isCurrentlyViewing) {
+      setMessages(prev => { const updated = updateFn(prev); messagesCacheRef.current.set(subscriberId, updated); return updated; });
+    } else {
+      const updated = updateFn(messagesCacheRef.current.get(subscriberId) || []);
+      messagesCacheRef.current.set(subscriberId, updated);
+    }
+  };
+
   useEffect(() => { if (!isPrependingRef.current) scrollToBottom(); }, [messages]);
 
   // Restaura posição do scroll ao fazer prepend de mensagens antigas
@@ -1595,11 +1614,7 @@ const ManyChatInboxContent = () => {
           });
           if (igError) throw new Error(igError.message || "Erro ao enviar no Instagram");
           if (!igResult?.success) throw new Error(igResult?.error || "Instagram: envio não confirmado");
-          setMessages(prev => {
-            const updated = prev.filter(m => m.id !== tempId);
-            messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated);
-            return updated;
-          });
+          applyMessageUpdate(subscriberSnapshot.subscriber_id, prev => prev.filter(m => m.id !== tempId));
           return;
         }
 
@@ -1617,7 +1632,7 @@ const ManyChatInboxContent = () => {
               const realMsg = existingMsg as Message;
               dedupKeysRef.current.add(getMessageDedupeKey(realMsg));
               dedupKeysRef.current.add(`db_${realMsg.id}`);
-              setMessages(prev => { const withoutTemp = prev.filter(m => m.id !== tempId); const updated = mergeMessageDedup(withoutTemp, realMsg); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
+              applyMessageUpdate(subscriberSnapshot.subscriber_id, prev => mergeMessageDedup(prev.filter(m => m.id !== tempId), realMsg));
             }
           } else {
             // Erro inesperado no insert — superficia para diagnóstico
@@ -1633,7 +1648,7 @@ const ManyChatInboxContent = () => {
           const savedAsMessage = savedMsg as Message;
           dedupKeysRef.current.add(getMessageDedupeKey(savedAsMessage));
           dedupKeysRef.current.add(`db_${savedAsMessage.id}`);
-          setMessages(prev => { const withoutTemp = prev.filter(m => m.id !== tempId); const updated = mergeMessageDedup(withoutTemp, savedAsMessage); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
+          applyMessageUpdate(subscriberSnapshot.subscriber_id, prev => mergeMessageDedup(prev.filter(m => m.id !== tempId), savedAsMessage));
         }
         if (subscriberSnapshot.lead_id) {
           await supabase.from("interacoes").insert({ cliente_id: subscriberSnapshot.lead_id, tipo: "Chat", resumo: `Mensagem via WhatsApp: ${content.substring(0, 100)}...`, detalhes: content, direcao: "saida", data_interacao: new Date().toISOString(), responsavel_id: user?.id || null });
@@ -1657,7 +1672,7 @@ const ManyChatInboxContent = () => {
           } catch {}
         }
       } catch (error: any) {
-        setMessages(prev => { const updated = prev.map(m => m.id === tempId ? { ...m, metadata: { ...((m as any).metadata || {}), send_error: true } } : m); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
+        applyMessageUpdate(subscriberSnapshot.subscriber_id, prev => prev.map(m => m.id === tempId ? { ...m, metadata: { ...((m as any).metadata || {}), send_error: true } } : m));
         toast({ title: "Erro no envio", description: error.message, variant: "destructive" });
       }
     })();
@@ -1709,7 +1724,7 @@ const ManyChatInboxContent = () => {
         const { data: igResult, error: igError } = await supabase.functions.invoke("instagram-send", { body: igBody });
         if (igError) throw new Error(igError.message || "Erro ao enviar no Instagram");
         if (!igResult?.success) throw new Error(igResult?.error || "Instagram: envio não confirmado");
-        setMessages(prev => { const updated = prev.filter(m => m.id !== tempId); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
+        applyMessageUpdate(subscriberSnapshot.subscriber_id, prev => prev.filter(m => m.id !== tempId));
         // Graph API não tem conceito de legenda em anexos: manda o texto como mensagem separada.
         if (caption) {
           try { await supabase.functions.invoke("instagram-send", { body: { subscriber_id: subscriberSnapshot.subscriber_id, text: caption } }); } catch {}
@@ -1727,14 +1742,14 @@ const ManyChatInboxContent = () => {
           const savedAsMessage = savedMsg as Message;
           dedupKeysRef.current.add(getMessageDedupeKey(savedAsMessage));
           dedupKeysRef.current.add(`db_${savedAsMessage.id}`);
-          setMessages(prev => { const withoutTemp = prev.filter(m => m.id !== tempId); const updated = mergeMessageDedup(withoutTemp, savedAsMessage); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
+          applyMessageUpdate(subscriberSnapshot.subscriber_id, prev => mergeMessageDedup(prev.filter(m => m.id !== tempId), savedAsMessage));
         }
       });
       // Documento não aceita legenda nativa: envia o texto digitado como mensagem de texto separada.
       if (followUpCaption) await sendMessage(followUpCaption);
     } catch (error: any) {
       console.error("[Envio mídia] falhou:", error);
-      setMessages(prev => { const updated = prev.map(m => m.id === tempId ? { ...m, conteudo: `❌ Erro no envio de ${originalFileName}`, metadata: { send_error: true } } : m); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
+      applyMessageUpdate(subscriberSnapshot.subscriber_id, prev => prev.map(m => m.id === tempId ? { ...m, conteudo: `❌ Erro no envio de ${originalFileName}`, metadata: { send_error: true } } : m));
       toast({ title: "Erro ao enviar", description: error?.message || error?.error_description || "Falha no upload", variant: "destructive" });
     }
   };
@@ -1833,7 +1848,7 @@ const ManyChatInboxContent = () => {
         if (igError) throw new Error(igError.message || "Erro ao enviar no Instagram");
         if (!igResult?.success) throw new Error(igResult?.error || "Instagram: envio não confirmado");
         URL.revokeObjectURL(localAudioUrl);
-        setMessages(prev => { const updated = prev.filter(m => m.id !== tempId); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
+        applyMessageUpdate(subscriberSnapshot.subscriber_id, prev => prev.filter(m => m.id !== tempId));
         return;
       }
 
@@ -1864,7 +1879,7 @@ const ManyChatInboxContent = () => {
             const savedAsMessage = savedMsg as Message;
             dedupKeysRef.current.add(getMessageDedupeKey(savedAsMessage));
             dedupKeysRef.current.add(`db_${savedAsMessage.id}`);
-            setMessages(prev => { const withoutTemp = prev.filter(m => m.id !== tempId); const updated = mergeMessageDedup(withoutTemp, savedAsMessage); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
+            applyMessageUpdate(subscriberSnapshot.subscriber_id, prev => mergeMessageDedup(prev.filter(m => m.id !== tempId), savedAsMessage));
             // Já trocou pela URL do servidor; libera o blob local (com folga p/ não cortar reprodução em curso).
             setTimeout(() => URL.revokeObjectURL(localAudioUrl), 15000);
           }
@@ -1876,7 +1891,7 @@ const ManyChatInboxContent = () => {
     } catch (error: any) {
       console.error("[Envio áudio] falhou:", error);
       URL.revokeObjectURL(localAudioUrl);
-      setMessages(prev => { const updated = prev.map(m => m.id === tempId ? { ...m, conteudo: "❌ Erro no envio do áudio", metadata: { send_error: true } } : m); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
+      applyMessageUpdate(subscriberSnapshot.subscriber_id, prev => prev.map(m => m.id === tempId ? { ...m, conteudo: "❌ Erro no envio do áudio", metadata: { send_error: true } } : m));
       toast({ title: "Erro ao enviar áudio", description: error?.message || error?.error_description || "Falha no envio", variant: "destructive" });
     }
   };
@@ -3099,6 +3114,11 @@ const ManyChatInboxContent = () => {
               )}
             </div>
 
+            {/* chat-compose-stack: id usado pelo widget de Chat Interno (ChatInterno.tsx)
+                pra medir a altura real do compositor (input + prévia de arquivo/áudio +
+                barra de resposta) e não ficar tampando o botão de enviar quando essa
+                área cresce — ver useEffect de composeExtraHeight em ChatInterno.tsx. */}
+            <div id="chat-compose-stack">
             {/* Preview arquivo */}
             {selectedFile && (
               <div className={`px-4 py-2 ${themeClasses.header} border-t ${themeClasses.border}`}>
@@ -3140,6 +3160,7 @@ const ManyChatInboxContent = () => {
               ) : (
                 <Button variant="ghost" size="icon" onClick={startRecording} disabled={isSending} className={`h-11 w-11 rounded-full ${themeClasses.iconColor} ${themeClasses.hoverBtn}`}><Mic className="h-6 w-6" /></Button>
               )}
+            </div>
             </div>
           </>
         ) : (
