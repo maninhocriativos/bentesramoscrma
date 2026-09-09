@@ -572,6 +572,40 @@ A partir daqui cada entrada tem: **o que**, **por quê / causa raiz**, **commit(
   `Access-Control-Allow-Origin: *`, incompatível com beacon com credenciais)
   — suja o console, não afeta login nem envio de mensagem.
 
+### 2026-09-09 (mesmo dia, sessão seguinte) — Mensagem enviada "some" da tela + ícone do chat interno tampando o enviar de áudio (`5b9cd1c2`)
+- **Mensagem enviada aparece e desaparece sozinha** — reportado pela Amanda.
+  Confirmado primeiro que não era perda real: toda mensagem recente dela
+  estava salva no banco com `zapi_status: "success"` (entregue de verdade
+  no WhatsApp). O bug era só na tela. Causa: em `sendMessage`/
+  `uploadAndSendFile`/`sendAudioFromPreview`, a confirmação do envio (depois
+  do `await` pro Z-API/Instagram/insert no banco) atualizava a tela com
+  `setMessages(prev => ...)` sem checar se o atendente ainda estava na MESMA
+  conversa. Quem atende muitas conversas em sequência (troca de conversa
+  antes da confirmação voltar do servidor) tinha a mensagem injetada na
+  conversa que estava na tela NAQUELE momento, não na conversa dona da
+  mensagem; quando essa tela sincronizava sozinha depois (poll de 5s, volta
+  de aba), a injeção errada desaparecia — daí "aparece e some depois de um
+  tempo". Indício que confirmou o padrão de uso: `chat_atendimento_log`
+  mostrando "quem está atendendo" trocando entre pessoas da equipe em
+  poucos minutos, na mesma conversa, o dia inteiro. Fix: `applyMessageUpdate()`
+  novo — só toca a tela (`setMessages`) se `selectedSubscriberRef.current`
+  ainda for a conversa da mensagem; o cache (`messagesCacheRef`) sempre é
+  atualizado, então ao voltar pra conversa certa os dados corretos já estão
+  lá. Aplicado nos 3 pontos de envio (texto/arquivo/áudio) × 3 caminhos cada
+  (sucesso, conflito de duplicata, erro) = ~11 chamadas corrigidas.
+- **Ícone do Chat Interno tampando o botão de enviar áudio**: reportado com
+  print — depois de gravar um áudio, a barra de prévia (player + enviar)
+  aparece ACIMA da barra normal de digitar, mas o widget do Chat Interno
+  (`ChatInterno.tsx`) tinha uma posição fixa (`5.5rem` do rodapé) calibrada
+  só pra altura normal do compositor — ficava embaixo do botão verde de
+  enviar da prévia. Fix: `ChatInterno` agora mede a altura real do
+  compositor via `ResizeObserver` num elemento `#chat-compose-stack`
+  (novo, em `ChatInbox.tsx`, envolvendo prévia + resposta + barra de
+  digitar) e soma a diferença ao offset — funciona pra qualquer coisa que
+  faça o compositor crescer (prévia de arquivo, barra de resposta), não só
+  áudio. Verificado ao vivo em produção com gravação de áudio de teste
+  (cancelada, nada foi enviado a cliente real).
+
 ---
 
 ## 4. Pendências abertas (consolidado em 2026-09-07)
@@ -642,9 +676,11 @@ Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a dat
     planilha. Fuso da audiência (Acre) — sem cliente real de UF=AC pra validar
     ao vivo com segurança; só vai se provar na próxima audiência real de lá
     (09-08).
-27. Chat interno: usuário reportou botão de gravar áudio em cima do enviar em
-    `/chat` (mesma causa do botão de enviar texto, já corrigido) — aguardando
-    print novo pra confirmar se persiste pós-deploy (09-08).
+27. ~~Chat interno: botão de gravar áudio em cima do enviar em `/chat`~~ —
+    **RESOLVIDO em 09-09** (`5b9cd1c2`, ver linha do tempo). Usuário mandou
+    print novo confirmando que persistia; causa real era o widget usar uma
+    altura fixa pro compositor em vez de medir a altura real (que cresce com
+    a prévia de áudio). Verificado ao vivo em produção.
 28. Tarefas recorrentes (09-08) — testado manualmente ponta a ponta (function
     invocada à mão), mas nenhuma recorrência real foi criada pela UI ainda nem
     o cron das 04h Manaus rodou sozinho em produção. Pedir pro usuário criar
@@ -662,6 +698,18 @@ Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a dat
     `src/hooks/useServiceWorkerUpdate.ts`) — pode ser instância de PWA
     instalada que não estava rodando durante os deploys, ou outro caso de
     borda não coberto pelo mecanismo atual.
+
+**Novo em 2026-09-09**
+30. Separar os 27 leads misturados pelo bug do `api-hub` (ver linha do tempo
+    09-09) — 6 confirmados por conteúdo real de mensagem, script de split
+    pronto e ensaiado (`begin/rollback`), só falta decisão do usuário pra
+    aplicar. Resto (falso-positivo ou dado de teste) não precisa de ação.
+31. Risco arquitetural: `useAuth()` chamado independente em ~40 arquivos
+    (sem Context compartilhado) — causou o bug de redirect indevido pra
+    `/tarefas` (corrigido só no `PerfilContext`, ver 09-09). Os outros ~39
+    usos têm o mesmo tipo de corrida latente entre si; considerar migrar
+    `useAuth` pra Context compartilhado numa sessão dedicada, não como
+    efeito colateral de outro fix.
 
 **Em andamento (planos aprovados)**
 19. Contratos/Procuração via templates + ZapSign nativo — Fases 4–9
