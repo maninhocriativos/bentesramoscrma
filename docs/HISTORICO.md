@@ -729,6 +729,24 @@ A partir daqui cada entrada tem: **o que**, **por quê / causa raiz**, **commit(
   emerald padrão do Tailwind). Corrigido e verificado ao vivo em produção,
   cores lado a lado com o screenshot do node do Figma batendo.
 
+### 2026-09-09 (mesmo dia, sessão seguinte) — Histórico de tags do lead nas dropdowns do chat (`985bcf73`)
+- Usuário pediu pra ver quando cada tag foi adicionada/removida e por quem,
+  direto no dropdown "Tags do lead"/"Adicionar tag". Achado: isso já era
+  gravado desde sempre em `tag_change_log` (toda chamada de
+  `addTagToSubscriber`/`removeTagFromSubscriber` em `useChatTags.ts` já
+  insere lá — 579 linhas já existentes no banco), só nunca teve tela pra
+  mostrar.
+- Adicionado: seção "Histórico" no fim do popover do `TagSelector.tsx`
+  (compartilhado pelas duas dropdowns) — busca `tag_change_log` filtrado
+  pelo `subscriber_id` só quando o popover abre, com nome de quem mudou
+  (join com `perfis`, FK já existia) e nome/cor da tag (join com
+  `chat_tags`, FK já existia). Mostra "+ Nome da tag — adicionada por
+  Fulano · há Xh" (ou "removida"), com o motivo quando a tag exigir
+  (`requires_reason`).
+- Verificado ao vivo em produção (lead "Gilmar Pereira"): histórico real
+  mostrando "elaboração de contrato — adicionada por Anelize Matos · há
+  cerca de 3 horas" e outras entradas corretas.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
