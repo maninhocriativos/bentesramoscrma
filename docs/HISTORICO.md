@@ -623,6 +623,38 @@ A partir daqui cada entrada tem: **o que**, **por quê / causa raiz**, **commit(
   locais + 9 páginas em produção (incluindo `/chat`) sem erro de console
   nem redirecionamento indevido.
 
+### 2026-09-09 (mesmo dia, sessão seguinte) — Documento/mensagem chegando duas vezes pro cliente (`acdab52d`)
+- Reportado com print: cliente (Rafaela Farias) escreveu "você enviou duas
+  devo considerar as duas?" depois de receber a mesma declaração de
+  residência duas vezes no WhatsApp. Confirmado no banco: só existe UMA
+  linha em `manychat_mensagens` para esse envio (`zapi_status:"success"`)
+  — o problema não é duplicar o registro no CRM, é o envio real pro
+  WhatsApp acontecendo duas vezes a partir do que o sistema acha ser uma
+  única tentativa.
+- Causa: `invokeZapiSend()` (`src/lib/zapiSendClient.ts`) tem um fallback
+  que refaz a chamada pra `zapi-send` quando a primeira "parece" ter
+  falhado por rede (`failed to fetch`, `networkerror`, etc). Esse tipo de
+  erro do lado do navegador não garante que a função não rodou no
+  servidor — se a resposta da tentativa original só demorou a voltar
+  (Z-API lento, rede instável no escritório), o envio real já tinha ido
+  pro WhatsApp; o fallback manda a mesma mensagem/documento de novo. A
+  função `zapi-send` não tinha nenhuma proteção contra chamada repetida.
+- Fix: `dedupe_key` (UUID gerado uma vez por envio, reaproveitado na
+  tentativa original e no fallback). Nova tabela `zapi_send_dedupe`
+  (migration ensaiada com `begin/rollback` antes de aplicar) — `zapi-send`
+  grava um registro 'pending' antes de chamar o WhatsApp e 'done' com o
+  resultado real depois; uma segunda chamada com a mesma chave espera e
+  devolve o resultado já acontecido em vez de enviar de novo. Falha ao
+  gravar na tabela (ex.: ordem de deploy, tabela ainda não existe) é
+  best-effort — loga e segue o envio normal, nunca bloqueia por causa
+  disso (evita que esse fix quebre o envio de mensagens se algo der errado
+  com a tabela).
+- Verificado ao vivo em produção com teste seguro (telefone fictício
+  `5500000000000`, `message_id` inexistente, tipo `delete` — nada foi
+  enviado a cliente real): 1ª chamada ~3s (round-trip real ao Z-API), 2ª
+  chamada com a MESMA `dedupe_key` voltou em ~1,5s com a resposta idêntica
+  já salva, sem contatar o Z-API de novo.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
