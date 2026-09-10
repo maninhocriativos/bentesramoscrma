@@ -839,10 +839,31 @@ A partir daqui cada entrada tem: **o que**, **por quê / causa raiz**, **commit(
   - No mesmo commit dos repos Cloudflare (sem remoto Git, local apenas):
     WIP de sessão anterior (27/08-30/08, blocos dinâmicos + scaffolding de
     Contratos) finalmente commitado junto — estava sem commit há >10 dias.
-  - **Ainda não feito** (fases seguintes do plano, aguardando o usuário
-    retomar): versionamento de modelo, camada semântica de IA (JSON de
-    seções em vez de marcador plano), Layout Mestre configurável (hoje é
-    um rodapé hardcoded em `petitionEngine.ts`), validador dados×gerado.
+- **Fase 3 (mesmo dia, mesma sessão) — versionamento de modelo**: hoje um
+  `PATCH` sobrescrevia a mesma linha e o `.docx` do template era imutável
+  (editar = apagar e recriar, perdendo o vínculo com petições já geradas).
+  Cada versão nova passa a ser sua PRÓPRIA linha em `petition_models`
+  (mesmo `version_group_id`, `version_number` incrementado) — `petitions.
+  model_id` continua apontando pro id exato da versão usada, então
+  petições antigas continuam intactas sem precisar de coluna nova nelas.
+  Migration `0004_model_versioning.sql` (aditiva). `listModels()` só
+  devolve a versão corrente por padrão — **o CRM não precisou mudar nada**.
+  Novos endpoints: `POST /api/models/:id/versions` (cria versão, herda o
+  resto se não informado) e `GET /api/models/versions/:group_id`
+  (histórico). `deleteModel` promove a versão anterior automaticamente se
+  apagar a corrente. UI no site admin: badge "vN" clicável abre histórico,
+  botão de upload por linha cria versão nova sem sobrescrever. Testado ao
+  vivo (curl, fluxo completo v1→v2→listagens→apagar v2 promove v1) com um
+  tipo de ação descartável, sem tocar no modelo real em produção.
+  **Achado na Fase 3**: migrations `0002`/`0003` (contratos e
+  field_schema) só existiam como arquivo local — nunca tinham sido
+  aplicadas no D1 remoto de verdade (bookkeeping da `0001` também estava
+  fora do sistema de migrations, corrigido). Aplicadas as 3 juntas.
+- **Ainda não feito** (fases seguintes do plano, aguardando o usuário
+  retomar): Layout Mestre configurável (hoje é um rodapé hardcoded em
+  `petitionEngine.ts`), camada semântica de IA (JSON de seções em vez de
+  marcador plano) + schema dinâmico rico, formulário dinâmico estendido +
+  geração textual por IA + validador dados×gerado.
 
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
@@ -946,13 +967,12 @@ Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a dat
 
 **Novo em 2026-09-10**
 32. **RESUMIR AQUI — Reestruturação do Gerador de Petições**: auditoria
-    completa feita e Fase 2 (segurança + limpeza) concluída (ver linha do
-    tempo 09-10). Faltam as fases seguintes do plano aprovado com o
-    usuário: versionamento de modelo (Fase 3), Layout Mestre configurável
-    (Fase 4), IA de análise estrutural + schema dinâmico rico (Fases 5-6),
-    formulário dinâmico estendido + geração textual por IA + validador
-    dados×gerado (Fases 7-9). Piloto: modelo único hoje em produção
-    ("Peticao_documento"/"Venda Casada").
+    completa + Fase 2 (segurança + limpeza) + Fase 3 (versionamento de
+    modelo) concluídas (ver linha do tempo 09-10). Faltam: Layout Mestre
+    configurável (Fase 4), IA de análise estrutural + schema dinâmico rico
+    (Fases 5-6), formulário dinâmico estendido + geração textual por IA +
+    validador dados×gerado (Fases 7-9). Piloto: modelo único hoje em
+    produção ("Peticao_documento"/"Venda Casada").
 33. Versão mobile da página de Documentos (`documentos-mobile` no Figma) —
     specs/cores já puxadas do Figma real, só falta implementar (a versão
     desktop já foi redesenhada em 09-10).
