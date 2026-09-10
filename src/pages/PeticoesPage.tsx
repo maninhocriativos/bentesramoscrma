@@ -1,20 +1,18 @@
 // Tela de Petições — backend Cloudflare (Worker + D1 + R2), única versão em
 // uso. O sistema antigo (Supabase) foi desativado e os dados zerados.
+// Layout redesenhado a partir do Figma real (SISTEMA-BENTES-E-RAMOS, nodes
+// peticoes-dashboard-desktop / nova-peticao-modal-desktop, 2026-09-10).
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus, Search, MoreHorizontal, Eye, Copy, Archive, Trash2,
-  FileCheck2, Clock, CheckCircle2, FileText, Scale,
+  FileText, Scale,
   Plane, CreditCard, TrendingUp, AlertTriangle, Ban,
-  ShoppingCart, Package, ArrowRight, X, ChevronRight,
+  ShoppingCart, Package, X, ChevronRight,
   ChevronDown, Sparkles, Gavel, FolderOpen,
 } from 'lucide-react';
-import { AppHeader } from '@/components/AppHeader';
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -27,6 +25,10 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
+import { NotificacoesBell } from '@/components/NotificacoesBell';
+import { useAuth } from '@/hooks/useAuth';
+import { usePerfil } from '@/hooks/usePerfil';
+import { LogOut } from 'lucide-react';
 
 const ICON_MAP: Record<string, React.ElementType> = {
   Plane, CreditCard, TrendingUp, AlertTriangle, Ban,
@@ -38,25 +40,15 @@ function ActionIcon({ icone, className }: { icone: string; className?: string })
   return <Icon className={className ?? 'h-4 w-4'} />;
 }
 
-const COLORS: Record<string, { grad: string; soft: string }> = {
-  sky:     { grad: 'from-sky-500 to-blue-600',      soft: 'bg-sky-50 dark:bg-sky-950/40' },
-  blue:    { grad: 'from-blue-500 to-indigo-600',   soft: 'bg-blue-50 dark:bg-blue-950/40' },
-  lime:    { grad: 'from-lime-500 to-emerald-600',  soft: 'bg-lime-50 dark:bg-lime-950/40' },
-  red:     { grad: 'from-red-500 to-rose-600',      soft: 'bg-red-50 dark:bg-red-950/40' },
-  emerald: { grad: 'from-emerald-500 to-teal-600',  soft: 'bg-emerald-50 dark:bg-emerald-950/40' },
-  rose:    { grad: 'from-rose-500 to-pink-600',     soft: 'bg-rose-50 dark:bg-rose-950/40' },
-  violet:  { grad: 'from-violet-500 to-purple-600', soft: 'bg-violet-50 dark:bg-violet-950/40' },
-  orange:  { grad: 'from-orange-500 to-red-500',    soft: 'bg-orange-50 dark:bg-orange-950/40' },
-  slate:   { grad: 'from-slate-500 to-gray-600',    soft: 'bg-slate-50 dark:bg-slate-950/40' },
-};
-function getC(cor: string) { return COLORS[cor] ?? COLORS.slate; }
-
-const STATUS: Record<string, { label: string; cls: string; dot: string; icon: React.ReactNode }> = {
-  draft:     { label: 'Rascunho',    dot: 'bg-amber-400',   cls: 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800',     icon: <FileText className="h-3 w-3" /> },
-  review:    { label: 'Em Revisão',  dot: 'bg-yellow-400',  cls: 'bg-yellow-50 text-yellow-700 border border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800', icon: <Clock className="h-3 w-3" /> },
-  generated: { label: 'Gerado',      dot: 'bg-emerald-400', cls: 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800', icon: <FileCheck2 className="h-3 w-3" /> },
-  filed:     { label: 'Protocolado', dot: 'bg-violet-400',  cls: 'bg-violet-50 text-violet-700 border border-violet-200 dark:bg-violet-900/20 dark:text-violet-400 dark:border-violet-800', icon: <CheckCircle2 className="h-3 w-3" /> },
-  archived:  { label: 'Arquivado',   dot: 'bg-gray-400',    cls: 'bg-gray-50 text-gray-600 border border-gray-200 dark:bg-gray-800/20 dark:text-gray-400 dark:border-gray-700',             icon: <Archive className="h-3 w-3" /> },
+// Cores do status — mesma paleta usada no dashboard de Documentos/Sheets
+// (amber/blue/green/purple do design), com "arquivado" em tom neutro (o
+// Figma não tinha exemplo pra esse status).
+const STATUS: Record<string, { label: string; text: string; bg: string; dot: string }> = {
+  draft:     { label: 'Rascunho',    text: '#92400e', bg: '#fef3c7', dot: '#f59e0b' },
+  review:    { label: 'Em Revisão',  text: '#1565c0', bg: '#e8f0fe', dot: '#1565c0' },
+  generated: { label: 'Gerado',      text: '#15803d', bg: '#dcfce7', dot: '#15803d' },
+  filed:     { label: 'Protocolado', text: '#6a1b9a', bg: '#f3e5f5', dot: '#6a1b9a' },
+  archived:  { label: 'Arquivado',   text: '#6e5e5a', bg: '#f5efe6', dot: '#6e5e5a' },
 };
 
 function NovaPeticaoModal({
@@ -95,125 +87,84 @@ function NovaPeticaoModal({
   }, [actionTypes, search]);
 
   const actionModels = selectedAction ? getModelsForAction(selectedAction.id) : [];
-  const selC = selectedAction ? getC(selectedAction.cor) : null;
 
   return (
     <Dialog open={open} onOpenChange={v => !v && handleClose()}>
-      <DialogContent
-        hideCloseButton
-        className="max-w-2xl p-0 gap-0 overflow-hidden rounded-2xl border border-border/60 shadow-2xl"
-        style={{ height: '82vh', display: 'flex', flexDirection: 'column' }}
-      >
-        <div className="shrink-0 px-6 pt-6 pb-5 border-b border-border/50">
-          <div className="flex items-start justify-between mb-5">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground mb-1">Nova Petição</p>
-              <h2 className="text-xl font-bold text-foreground leading-tight">{step === 1 ? 'Tipo de Ação' : selectedAction?.nome}</h2>
-              <p className="text-sm text-muted-foreground mt-0.5">{step === 1 ? 'Selecione a categoria jurídica' : 'Escolha o modelo de documento'}</p>
-            </div>
-            <button onClick={handleClose} className="p-2 rounded-xl hover:bg-muted transition-colors text-muted-foreground">
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-          <div className="flex items-center gap-3 mb-5">
-            {[{ n: 1, l: 'Tipo de Ação' }, { n: 2, l: 'Modelo' }].map((s, i) => (
-              <div key={s.n} className="flex items-center gap-2">
-                <div className={cn(
-                  'h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold transition-all',
-                  step === s.n ? 'bg-primary text-primary-foreground shadow-md shadow-primary/25'
-                    : step > s.n ? 'bg-emerald-500 text-white' : 'bg-muted text-muted-foreground'
-                )}>
-                  {step > s.n ? <CheckCircle2 className="h-3.5 w-3.5" /> : s.n}
-                </div>
-                <span className={cn('text-xs font-semibold', step === s.n ? 'text-foreground' : 'text-muted-foreground')}>{s.l}</span>
-                {i < 1 && <div className={cn('h-px w-10 transition-colors', step > 1 ? 'bg-emerald-400' : 'bg-border')} />}
+      <DialogContent hideCloseButton className="max-w-[600px] p-8 gap-6 rounded-[20px] border-0 shadow-2xl">
+        <div className="flex items-center justify-between">
+          <h2 className="text-[22px] text-[#29201e]">{step === 1 ? 'Selecione a categoria jurídica' : selectedAction?.nome}</h2>
+          <button onClick={handleClose} className="text-[#6e5e5a] hover:text-[#29201e] transition-colors"><X className="h-[18px] w-[18px]" /></button>
+        </div>
+
+        <div className="flex items-center gap-4">
+          {[{ n: 1, l: 'Tipo de Ação' }, { n: 2, l: 'Modelo' }].map((s, i) => (
+            <div key={s.n} className="flex items-center gap-2">
+              <div className={cn('h-6 w-6 rounded-xl flex items-center justify-center text-xs font-semibold',
+                step >= s.n ? 'bg-[#3e2f2b] text-white' : 'bg-[#f5efe6] text-[#6e5e5a]')}>
+                {step > s.n ? <FileText className="h-3 w-3" /> : s.n}
               </div>
+              <span className={cn('text-sm', step === s.n ? 'font-semibold text-[#29201e]' : 'text-[#6e5e5a]')}>{s.l}</span>
+              {i < 1 && <div className="h-px w-8 bg-[#efebe4]" />}
+            </div>
+          ))}
+        </div>
+
+        {step === 1 ? (
+          <>
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-[#6e5e5a]" />
+              <Input autoFocus placeholder="Buscar tipo de ação..." value={search} onChange={e => setSearch(e.target.value)} className="pl-11 h-11 rounded-xl border-[#efebe4]" />
+            </div>
+            <div className="w-full max-h-[340px] overflow-y-auto space-y-2">
+              {filteredActions.length === 0 ? (
+                <div className="text-center py-12 text-[#6e5e5a]">
+                  <Scale className="h-10 w-10 mx-auto mb-3 opacity-15" />
+                  <p className="text-sm font-medium">Nenhum tipo encontrado</p>
+                </div>
+              ) : filteredActions.map(action => {
+                const count = getModelsForAction(action.id).length;
+                return (
+                  <button key={action.id} disabled={count === 0} onClick={() => pickAction(action)}
+                    className="group w-full flex items-center gap-4 p-5 rounded-2xl border border-[#efebe4] hover:border-[#c5a47e] hover:bg-[#f5efe6] transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
+                    <div className="h-11 w-11 rounded-[10px] bg-[#3e2f2b] flex items-center justify-center shrink-0"><ActionIcon icone={action.icone} className="h-5 w-5 text-white" /></div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-base text-[#29201e]">{action.nome}</p>
+                      {action.descricao && <p className="text-[13px] text-[#6e5e5a] mt-0.5 line-clamp-2">{action.descricao}</p>}
+                    </div>
+                    <span className="px-2.5 py-1 rounded-full bg-[#c5a47e] text-white text-[11px] font-semibold shrink-0">{count} {count === 1 ? 'Modelo' : 'Modelos'}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <div className="w-full max-h-[340px] overflow-y-auto space-y-2">
+            {actionModels.length === 0 ? (
+              <div className="text-center py-12 text-[#6e5e5a]">
+                <FolderOpen className="h-10 w-10 mx-auto mb-3 opacity-15" />
+                <p className="text-sm font-medium">Nenhum modelo disponível</p>
+              </div>
+            ) : actionModels.map(model => (
+              <button key={model.id} onClick={() => pickModel(model)}
+                className="group w-full flex items-center gap-4 p-4 rounded-2xl border border-[#efebe4] hover:border-[#c5a47e] hover:bg-[#f5efe6] transition-colors text-left">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-bold text-sm text-[#29201e]">{model.nome}</span>
+                    {model.is_default && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#c5a47e]/15 text-[#8a6d47] text-[10px] font-bold"><Sparkles className="h-2.5 w-2.5" /> Padrão</span>}
+                  </div>
+                  {model.descricao && <p className="text-xs text-[#6e5e5a] mt-0.5 line-clamp-2">{model.descricao}</p>}
+                </div>
+                <ChevronRight className="h-4 w-4 text-[#6e5e5a] group-hover:text-[#3e2f2b] transition-colors shrink-0" />
+              </button>
             ))}
           </div>
-          {step === 1 && (
-            <div className="relative">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input autoFocus placeholder="Buscar tipo de ação..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10 h-10 rounded-xl bg-muted/40 border-border/50" />
-            </div>
+        )}
+
+        <div className="flex justify-end gap-3 w-full">
+          {step === 2 && (
+            <button onClick={() => { setStep(1); setSearch(''); }} className="px-6 py-3 rounded-xl border border-[#efebe4] text-sm font-semibold text-[#6e5e5a] hover:bg-[#f5efe6] transition-colors">Voltar</button>
           )}
-          {step === 2 && selectedAction && selC && (
-            <button onClick={() => { setStep(1); setSearch(''); }} className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors group">
-              <ArrowRight className="h-3 w-3 rotate-180 group-hover:-translate-x-0.5 transition-transform" />
-              <span>Tipos de ação</span>
-              <ChevronRight className="h-3 w-3 opacity-40" />
-              <span className={cn('p-1 rounded-md bg-gradient-to-br text-white inline-flex', selC.grad)}><ActionIcon icone={selectedAction.icone} className="h-3 w-3" /></span>
-              <span className="font-semibold text-foreground">{selectedAction.nome}</span>
-            </button>
-          )}
-        </div>
-        <ScrollArea className="flex-1 min-h-0">
-          <div className="p-5">
-            {step === 1 && (
-              filteredActions.length === 0 ? (
-                <div className="text-center py-16 text-muted-foreground">
-                  <Scale className="h-12 w-12 mx-auto mb-3 opacity-10" />
-                  <p className="text-sm font-medium">Nenhum tipo encontrado</p>
-                  <button onClick={() => setSearch('')} className="text-xs text-primary mt-1 hover:underline">Limpar busca</button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {filteredActions.map(action => {
-                    const c = getC(action.cor);
-                    const count = getModelsForAction(action.id).length;
-                    return (
-                      <button key={action.id} disabled={count === 0} onClick={() => pickAction(action)}
-                        className="group w-full text-left rounded-2xl border border-border/60 bg-card hover:border-primary/30 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 overflow-hidden disabled:opacity-40 disabled:cursor-not-allowed">
-                        <div className={cn('h-1.5 bg-gradient-to-r', c.grad)} />
-                        <div className="p-4">
-                          <div className="flex items-start justify-between mb-3">
-                            <div className={cn('p-2.5 rounded-xl bg-gradient-to-br text-white shadow-md', c.grad)}><ActionIcon icone={action.icone} className="h-5 w-5" /></div>
-                            <Badge variant="secondary" className="text-[10px] font-semibold tabular-nums">{count} {count === 1 ? 'modelo' : 'modelos'}</Badge>
-                          </div>
-                          <p className="font-bold text-sm text-foreground group-hover:text-primary transition-colors">{action.nome}</p>
-                          {action.descricao && <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2 leading-relaxed">{action.descricao}</p>}
-                          <div className="mt-3 flex items-center gap-1 text-[11px] font-semibold text-primary opacity-0 group-hover:opacity-100 transition-opacity">Selecionar <ArrowRight className="h-3 w-3" /></div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )
-            )}
-            {step === 2 && (
-              <div className="space-y-2.5">
-                {actionModels.length === 0 ? (
-                  <div className="text-center py-16 text-muted-foreground">
-                    <FolderOpen className="h-12 w-12 mx-auto mb-3 opacity-10" />
-                    <p className="text-sm font-medium">Nenhum modelo disponível</p>
-                  </div>
-                ) : actionModels.map((model, i) => (
-                  <button key={model.id} onClick={() => pickModel(model)}
-                    className="group w-full text-left flex items-start gap-4 p-4 rounded-2xl border border-border/60 bg-card hover:border-primary/30 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150">
-                    <div className="h-9 w-9 rounded-xl bg-muted flex items-center justify-center text-sm font-black text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors shrink-0">
-                      {String(i + 1).padStart(2, '0')}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                        <span className="font-bold text-sm text-foreground group-hover:text-primary transition-colors">{model.nome}</span>
-                        {model.is_default && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold"><Sparkles className="h-2.5 w-2.5" /> Padrão</span>}
-                      </div>
-                      {model.descricao && <p className="text-xs text-muted-foreground line-clamp-2">{model.descricao}</p>}
-                      {model.tags?.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-2">{model.tags.map(tag => <span key={tag} className="px-2 py-0.5 rounded-full bg-muted text-[10px] font-medium text-muted-foreground">{tag}</span>)}</div>
-                      )}
-                    </div>
-                    <div className="h-8 w-8 rounded-xl border border-border/60 flex items-center justify-center group-hover:border-primary/40 group-hover:bg-primary/5 transition-all shrink-0 mt-0.5"><ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" /></div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </ScrollArea>
-        <div className="shrink-0 px-6 py-3.5 border-t border-border/50 bg-muted/20 flex items-center justify-between">
-          <p className="text-xs text-muted-foreground">
-            {step === 1 ? `${filteredActions.length} tipo${filteredActions.length !== 1 ? 's' : ''} disponível${filteredActions.length !== 1 ? 'is' : ''}` : `${actionModels.length} modelo${actionModels.length !== 1 ? 's' : ''}`}
-          </p>
-          <Button variant="ghost" size="sm" onClick={handleClose} className="text-xs h-8 rounded-lg">Cancelar</Button>
+          <button onClick={handleClose} className="px-6 py-3 rounded-xl border border-[#efebe4] text-sm font-semibold text-[#6e5e5a] hover:bg-[#f5efe6] transition-colors">Cancelar</button>
         </div>
       </DialogContent>
     </Dialog>
@@ -242,73 +193,67 @@ function ModelsSidePanel({
   }, [visible]);
 
   return (
-    <div className="flex flex-col h-full rounded-xl border border-border/60 bg-card overflow-hidden shadow-sm">
-      <div className="px-4 pt-4 pb-3 border-b border-border/40 shrink-0">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <p className="text-sm font-bold text-foreground leading-tight">Biblioteca de modelos</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">{totalModels} modelos · {actionTypes.length} categorias</p>
-          </div>
-          <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0"><Gavel className="h-4 w-4 text-primary" /></div>
-        </div>
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input placeholder="Buscar modelo ou ação..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9 text-xs rounded-lg bg-muted/40 border-border/40 focus:bg-background" />
-        </div>
+    <div className="flex flex-col gap-4 rounded-2xl border border-[#efebe4] bg-white p-5 w-[300px] shrink-0">
+      <div>
+        <h2 className="text-base text-[#29201e]">Biblioteca de Modelos</h2>
+        <p className="text-[13px] text-[#6e5e5a] mt-0.5">{totalModels} {totalModels === 1 ? 'modelo disponível' : 'modelos disponíveis'} em {actionTypes.length} {actionTypes.length === 1 ? 'categoria' : 'categorias'}</p>
       </div>
-      <ScrollArea className="flex-1">
-        <div className="p-2.5 space-y-2">
-          {visible.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground"><FileText className="h-8 w-8 mx-auto mb-2 opacity-10" /><p className="text-xs">Nenhum resultado</p></div>
-          ) : visible.map(action => {
-            const mods = getModelsForAction(action.id);
-            const c = getC(action.cor);
-            const isOpen = expanded === action.id;
-            return (
-              <div key={action.id} className="rounded-lg overflow-hidden border border-border/40 bg-background">
-                <button onClick={() => setExpanded(isOpen ? null : action.id)} className={cn('w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left', isOpen ? 'bg-muted/50' : 'hover:bg-muted/30')}>
-                  <div className={cn('p-2 rounded-lg bg-gradient-to-br text-white shrink-0 shadow-sm', c.grad)}><ActionIcon icone={action.icone} className="h-3.5 w-3.5" /></div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold text-foreground truncate">{action.nome}</p>
-                    <p className="text-[10px] text-muted-foreground">{mods.length} {mods.length === 1 ? 'modelo' : 'modelos'}</p>
-                  </div>
-                  <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform duration-200', isOpen && 'rotate-180')} />
-                </button>
-                {isOpen && (
-                  <div className="border-t border-border/30">
-                    {mods.length === 0 ? <p className="text-[11px] text-muted-foreground text-center py-4 px-3">Sem modelos cadastrados</p> : mods.map((model, i) => (
-                      <button key={model.id} onClick={() => onSelectModel(action.id, model.id)} className={cn('group w-full text-left flex items-start gap-3 px-3 py-2.5 hover:bg-primary/5 transition-colors', i < mods.length - 1 && 'border-b border-border/25')}>
-                        <div className={cn('w-0.5 self-stretch rounded-full bg-gradient-to-b shrink-0', c.grad)} />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <p className="text-[11px] font-bold text-foreground group-hover:text-primary transition-colors truncate">{model.nome}</p>
-                            {model.is_default && <span className="px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[9px] font-black shrink-0">P</span>}
-                          </div>
-                          {model.descricao && <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2 leading-relaxed">{model.descricao}</p>}
-                        </div>
-                        <ArrowRight className="h-3.5 w-3.5 text-primary opacity-0 group-hover:opacity-100 shrink-0 mt-0.5 transition-all group-hover:translate-x-0.5" />
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </ScrollArea>
+      <div className="relative">
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#6e5e5a]" />
+        <Input placeholder="Buscar modelo..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10 h-10 text-[13px] rounded-xl border-[#efebe4]" />
+      </div>
+      <div className="space-y-2 max-h-[420px] overflow-y-auto">
+        {visible.length === 0 ? (
+          <div className="text-center py-10 text-[#6e5e5a]"><FileText className="h-7 w-7 mx-auto mb-2 opacity-15" /><p className="text-xs">Nenhum resultado</p></div>
+        ) : visible.map(action => {
+          const mods = getModelsForAction(action.id);
+          const isOpen = expanded === action.id;
+          return (
+            <div key={action.id}>
+              <button onClick={() => setExpanded(isOpen ? null : action.id)}
+                className={cn('w-full flex items-center gap-3 p-3 rounded-xl border transition-colors text-left',
+                  isOpen ? 'border-[#e3d9cd] bg-[#f5efe6]' : 'border-[#efebe4] hover:bg-[#f5efe6]/60')}>
+                <div className="h-9 w-9 rounded-lg bg-[#3e2f2b] flex items-center justify-center shrink-0"><ActionIcon icone={action.icone} className="h-4 w-4 text-white" /></div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-[#29201e] truncate">{action.nome}</p>
+                  <p className="text-[11px] text-[#6e5e5a]">{mods.length} {mods.length === 1 ? 'modelo cadastrado' : 'modelos cadastrados'}</p>
+                </div>
+                <ChevronDown className={cn('h-3.5 w-3.5 text-[#6e5e5a] shrink-0 transition-transform', isOpen && 'rotate-180')} />
+              </button>
+              {isOpen && mods.length > 0 && (
+                <div className="mt-1 ml-1 space-y-1">
+                  {mods.map(model => (
+                    <button key={model.id} onClick={() => onSelectModel(action.id, model.id)}
+                      className="group w-full text-left flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-[#f5efe6] transition-colors">
+                      <div className="w-1 self-stretch rounded-full bg-[#c5a47e] shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-[#29201e] group-hover:text-[#3e2f2b] truncate">{model.nome}</p>
+                      </div>
+                      <ChevronRight className="h-3.5 w-3.5 text-[#c5a47e] opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
 export default function PeticoesPage() {
   const navigate = useNavigate();
-  const { actionTypes, models, petitions, loading, duplicatePetition, archivePetition, deletePetition, getModelsForAction } = usePeticoesV2Client();
+  const { signOut, user } = useAuth();
+  const { cargo, fullName } = usePerfil();
+  const { actionTypes, petitions, loading, duplicatePetition, archivePetition, deletePetition, getModelsForAction } = usePeticoesV2Client();
+
+  const handleSignOut = async () => { await signOut(); navigate('/auth'); };
   const [searchTerm, setSearchTerm]     = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [modalOpen, setModalOpen]       = useState(false);
 
   const stats = useMemo(() => ({
-    total: petitions.length,
     draft: petitions.filter(p => p.status === 'draft').length,
     review: petitions.filter(p => p.status === 'review').length,
     generated: petitions.filter(p => p.status === 'generated').length,
@@ -334,128 +279,131 @@ export default function PeticoesPage() {
   }
 
   const STAT_ITEMS = [
-    { label: 'Total', value: stats.total, dot: 'bg-foreground/20', filter: 'all' },
-    { label: 'Rascunhos', value: stats.draft, dot: 'bg-amber-400', filter: 'draft' },
-    { label: 'Em Revisão', value: stats.review, dot: 'bg-yellow-400', filter: 'review' },
-    { label: 'Gerados', value: stats.generated, dot: 'bg-emerald-400', filter: 'generated' },
-    { label: 'Protocolados', value: stats.filed, dot: 'bg-violet-400', filter: 'filed' },
+    { label: 'Rascunhos', value: stats.draft, bg: '#fef3c7', text: '#92400e', filter: 'draft' },
+    { label: 'Em Revisão', value: stats.review, bg: '#e8f0fe', text: '#1565c0', filter: 'review' },
+    { label: 'Gerados', value: stats.generated, bg: '#dcfce7', text: '#15803d', filter: 'generated' },
+    { label: 'Protocolados', value: stats.filed, bg: '#f3e5f5', text: '#6a1b9a', filter: 'filed' },
   ];
   const FILTER_TABS = [
     { v: 'all', l: 'Todos' }, { v: 'draft', l: 'Rascunho' }, { v: 'review', l: 'Revisão' },
-    { v: 'generated', l: 'Gerado' }, { v: 'filed', l: 'Protocolado' },
+    { v: 'generated', l: 'Gerado' }, { v: 'filed', l: 'Protocolado' }, { v: 'archived', l: 'Arquivado' },
   ];
 
   return (
     <>
-      <AppHeader title="Gerador de Petições" />
-      <ScrollArea className="flex-1">
-        <div className="p-4 md:p-6 space-y-5 max-w-[1680px] mx-auto">
-          <div className="flex items-center justify-between gap-4 flex-wrap rounded-xl border border-border/60 bg-card px-4 py-4 shadow-sm">
-            <div className="flex items-center gap-4">
-              <div className="h-11 w-11 rounded-xl bg-primary flex items-center justify-center shadow-sm shrink-0"><Scale className="h-6 w-6 text-primary-foreground" /></div>
-              <div>
-                <h1 className="text-xl font-black tracking-tight text-foreground leading-tight">Gerador de Petições</h1>
-                <p className="text-sm text-muted-foreground mt-0.5">{models.length} modelos disponíveis · {petitions.length} {petitions.length === 1 ? 'petição gerada' : 'petições geradas'}</p>
-              </div>
-            </div>
-            <Button onClick={() => setModalOpen(true)} size="lg" className="gap-2 rounded-lg shadow-sm font-bold shrink-0 h-10 px-5"><Plus className="h-5 w-5" /> Nova Petição</Button>
+      <div className="flex flex-col h-full bg-[#f9f6f0] relative">
+        <div className="bg-white border-b border-[#efebe4] px-6 sm:px-10 py-5 flex items-center justify-between shrink-0">
+          <div>
+            <h1 className="text-2xl text-[#29201e]">Gerador de Petições</h1>
+            <p className="text-sm text-[#6e5e5a] mt-1">Crie e gerencie suas petições iniciais de forma automatizada</p>
           </div>
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border bg-[#dcfce7] border-[#15803d] text-[#15803d]">
+              <span className="h-2 w-2 rounded-full bg-[#22c55e]" />
+              Google Drive Conectado
+            </div>
+            <NotificacoesBell />
+            {user && (
+              <>
+                <span className="hidden lg:inline text-sm text-[#6e5e5a]">{fullName || user.email}</span>
+                <span className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-[#f5efe6] text-[#6e5e5a]">{cargo}</span>
+                <button onClick={handleSignOut} title="Sair" className="h-9 w-9 rounded-full border border-[#efebe4] flex items-center justify-center text-[#6e5e5a] hover:bg-[#f5efe6] transition-colors">
+                  <LogOut className="h-4 w-4" />
+                </button>
+              </>
+            )}
+          </div>
+        </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5">
+        <div className="flex-1 overflow-auto px-6 sm:px-10 py-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
             {STAT_ITEMS.map(s => {
               const isActive = statusFilter === s.filter;
               return (
-                <button key={s.label} onClick={() => setStatusFilter(s.filter)}
-                  className={cn('group text-left rounded-xl border px-4 py-3.5 transition-all duration-200 hover:shadow-sm hover:-translate-y-0.5 active:translate-y-0',
-                    isActive ? 'border-primary/40 bg-primary/5 shadow-sm shadow-primary/10' : 'border-border/50 bg-card hover:border-border')}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className={cn('h-2.5 w-2.5 rounded-full shrink-0', s.dot)} />
-                    <span className={cn('text-[10px] uppercase tracking-widest font-black truncate transition-colors', isActive ? 'text-primary' : 'text-muted-foreground')}>{s.label}</span>
+                <button key={s.label} onClick={() => setStatusFilter(isActive ? 'all' : s.filter)}
+                  className={cn('flex items-center gap-3 p-4 rounded-2xl border bg-white text-left transition-colors',
+                    isActive ? 'border-[#c5a47e]' : 'border-[#efebe4] hover:border-[#e3d9cd]')}>
+                  <div className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0 font-bold text-lg" style={{ background: s.bg, color: s.text }}>{s.value}</div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-[#6e5e5a] uppercase tracking-wide">{s.label}</p>
+                    <p className="text-sm text-[#29201e]">Petições Ativas</p>
                   </div>
-                  <p className={cn('text-3xl font-black tabular-nums leading-none transition-colors', isActive ? 'text-primary' : 'text-foreground')}>{s.value}</p>
                 </button>
               );
             })}
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-5 items-start">
-            <div className="space-y-3">
-              <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 rounded-xl border border-border/60 bg-card p-3 shadow-sm">
-                <div className="relative w-full sm:max-w-sm">
-                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input placeholder="Buscar por cliente ou tipo de ação..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-10 h-10 rounded-lg border-border/50 bg-background focus:bg-background" />
+          <div className="flex gap-6 items-start">
+            <div className="flex-1 min-w-0 space-y-4">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="relative w-full sm:w-[280px]">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-[#6e5e5a]" />
+                  <Input placeholder="Buscar petições..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-11 h-10 rounded-xl border-[#efebe4] bg-white" />
                 </div>
-                <div className="flex gap-1.5 flex-wrap">
+                <div className="flex gap-2 flex-wrap">
                   {FILTER_TABS.map(f => (
                     <button key={f.v} onClick={() => setStatusFilter(f.v)}
-                      className={cn('px-3 py-2 rounded-lg text-xs font-bold transition-all duration-150', statusFilter === f.v ? 'bg-primary text-primary-foreground shadow-sm' : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground')}>
+                      className={cn('px-4 py-2 rounded-full text-[13px] font-semibold transition-colors',
+                        statusFilter === f.v ? 'bg-[#3e2f2b] text-white' : 'bg-white border border-[#efebe4] text-[#6e5e5a] hover:bg-[#f5efe6]')}>
                       {f.l}
                     </button>
                   ))}
                 </div>
               </div>
 
-              <div className="rounded-xl border border-border/60 overflow-hidden bg-card shadow-sm min-h-[520px]">
+              <div className="rounded-2xl border border-[#efebe4] bg-white overflow-hidden">
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-muted/30 hover:bg-muted/30 border-b border-border/50">
-                      {[{ l: 'Data', w: 'w-20' }, { l: 'Tipo de Ação', w: '' }, { l: 'Cliente', w: '' }, { l: 'Status', w: 'w-36' }, { l: 'Atualizado', w: 'w-28' }, { l: '', w: 'w-10' }].map((h, i) => (
-                        <TableHead key={i} className={cn('text-[10px] uppercase tracking-widest text-muted-foreground font-black py-3.5', h.w, i === 5 && 'text-right')}>{h.l}</TableHead>
-                      ))}
+                    <TableRow className="bg-[#f5efe6] border-b border-[#efebe4] hover:bg-[#f5efe6]">
+                      <TableHead className="text-[13px] uppercase tracking-wide text-[#6e5e5a] font-semibold py-3.5">Ação / Modelo</TableHead>
+                      <TableHead className="text-[13px] uppercase tracking-wide text-[#6e5e5a] font-semibold py-3.5 w-[220px]">Cliente</TableHead>
+                      <TableHead className="text-[13px] uppercase tracking-wide text-[#6e5e5a] font-semibold py-3.5 w-[120px]">Status</TableHead>
+                      <TableHead className="text-[13px] uppercase tracking-wide text-[#6e5e5a] font-semibold py-3.5 w-[140px]">Atualizado em</TableHead>
+                      <TableHead className="w-10" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {loading ? (
                       Array.from({ length: 4 }).map((_, i) => (
-                        <TableRow key={i} className="border-b border-border/30">
-                          {Array.from({ length: 6 }).map((_, j) => <TableCell key={j} className="py-4"><Skeleton className="h-4 w-24 rounded-lg" /></TableCell>)}
+                        <TableRow key={i} className="border-b border-[#efebe4]">
+                          {Array.from({ length: 5 }).map((_, j) => <TableCell key={j} className="py-4"><Skeleton className="h-4 w-24 rounded-lg" /></TableCell>)}
                         </TableRow>
                       ))
                     ) : filtered.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-20">
+                        <TableCell colSpan={5} className="text-center py-20">
                           <div className="flex flex-col items-center gap-4">
-                            <div className="h-16 w-16 rounded-2xl bg-muted/50 flex items-center justify-center"><Scale className="h-8 w-8 text-muted-foreground/20" /></div>
+                            <div className="h-16 w-16 rounded-2xl bg-[#f5efe6] flex items-center justify-center"><Scale className="h-8 w-8 text-[#6e5e5a]/30" /></div>
                             <div>
-                              <p className="text-sm font-bold text-foreground">{petitions.length === 0 ? 'Nenhuma petição ainda' : 'Nenhum resultado'}</p>
-                              <p className="text-xs text-muted-foreground mt-1">{petitions.length === 0 ? 'Clique em Nova Petição para começar' : 'Tente ajustar os filtros'}</p>
+                              <p className="text-sm font-semibold text-[#29201e]">{petitions.length === 0 ? 'Nenhuma petição ainda' : 'Nenhum resultado'}</p>
+                              <p className="text-xs text-[#6e5e5a] mt-1">{petitions.length === 0 ? 'Clique em "Nova Petição" para começar' : 'Tente ajustar os filtros'}</p>
                             </div>
-                            {petitions.length === 0 && <Button size="sm" onClick={() => setModalOpen(true)} className="gap-2 rounded-xl font-bold"><Plus className="h-4 w-4" /> Nova Petição</Button>}
                           </div>
                         </TableCell>
                       </TableRow>
                     ) : filtered.map(p => {
                       const sc = STATUS[p.status] ?? STATUS.draft;
-                      const ac = p.action_types ? getC(p.action_types.cor ?? 'slate') : null;
                       return (
-                        <TableRow key={p.id} className="cursor-pointer hover:bg-muted/25 transition-colors border-b border-border/30 last:border-0 group" onClick={() => handleOpen(p.id, p.status)}>
-                          <TableCell className="py-3.5 text-xs text-muted-foreground font-semibold whitespace-nowrap">{format(new Date(p.created_at), 'dd/MM/yy', { locale: ptBR })}</TableCell>
+                        <TableRow key={p.id} className="cursor-pointer hover:bg-[#f5efe6]/50 transition-colors border-b border-[#efebe4] last:border-0 group" onClick={() => handleOpen(p.id, p.status)}>
                           <TableCell className="py-4">
-                            <div className="flex items-center gap-2.5">
-                              {ac && p.action_types && <div className={cn('h-7 w-7 rounded-lg bg-gradient-to-br text-white flex items-center justify-center shrink-0 shadow-sm', ac.grad)}><ActionIcon icone={p.action_types.icone ?? 'FileText'} className="h-3.5 w-3.5" /></div>}
-                              <div className="min-w-0">
-                                <span className="block text-sm font-bold text-foreground leading-tight truncate">{p.action_types?.nome ?? '—'}</span>
-                                {p.petition_models?.nome && <span className="block text-[11px] text-muted-foreground truncate mt-0.5">{p.petition_models.nome}</span>}
-                              </div>
-                            </div>
+                            <p className="text-sm font-semibold text-[#29201e]">{p.action_types?.nome ?? '—'}</p>
+                            {p.petition_models?.nome && <p className="text-xs text-[#6e5e5a] mt-0.5">{p.petition_models.nome}</p>}
                           </TableCell>
-                          <TableCell className="py-4 text-sm text-foreground font-semibold">{getClientName(p)}</TableCell>
+                          <TableCell className="py-4 text-sm text-[#6e5e5a]">{getClientName(p)}</TableCell>
                           <TableCell className="py-4">
-                            <span className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap', sc.cls)}>
-                              <div className={cn('h-1.5 w-1.5 rounded-full shrink-0', sc.dot)} /> {sc.label}
-                            </span>
+                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold" style={{ background: sc.bg, color: sc.text }}>{sc.label}</span>
                           </TableCell>
-                          <TableCell className="py-3.5 text-xs text-muted-foreground font-medium whitespace-nowrap">{format(new Date(p.updated_at), "dd/MM HH:mm", { locale: ptBR })}</TableCell>
-                          <TableCell className="py-3.5 text-right">
+                          <TableCell className="py-4 text-sm text-[#6e5e5a]">{format(new Date(p.updated_at), "dd/MM HH:mm", { locale: ptBR })}</TableCell>
+                          <TableCell className="py-4 text-right">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg md:opacity-0 md:group-hover:opacity-100 transition-opacity"><MoreHorizontal className="h-4 w-4" /></Button>
+                                <button className="h-8 w-8 rounded-lg inline-flex items-center justify-center text-[#6e5e5a] hover:bg-[#f5efe6] md:opacity-0 md:group-hover:opacity-100 transition-opacity"><MoreHorizontal className="h-4 w-4" /></button>
                               </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="rounded-xl shadow-xl border-border/60 w-44">
-                                <DropdownMenuItem className="rounded-lg gap-2 font-medium" onClick={e => { e.stopPropagation(); handleOpen(p.id, p.status); }}><Eye className="h-4 w-4" /> Abrir</DropdownMenuItem>
-                                <DropdownMenuItem className="rounded-lg gap-2 font-medium" onClick={e => { e.stopPropagation(); duplicatePetition(p.id); }}><Copy className="h-4 w-4" /> Duplicar</DropdownMenuItem>
-                                <DropdownMenuItem className="rounded-lg gap-2 font-medium" onClick={e => { e.stopPropagation(); archivePetition(p.id); }}><Archive className="h-4 w-4" /> Arquivar</DropdownMenuItem>
-                                <DropdownMenuItem className="rounded-lg gap-2 font-medium text-destructive focus:text-destructive" onClick={e => {
+                              <DropdownMenuContent align="end" className="rounded-xl w-44">
+                                <DropdownMenuItem className="gap-2" onClick={e => { e.stopPropagation(); handleOpen(p.id, p.status); }}><Eye className="h-4 w-4" /> Abrir</DropdownMenuItem>
+                                <DropdownMenuItem className="gap-2" onClick={e => { e.stopPropagation(); duplicatePetition(p.id); }}><Copy className="h-4 w-4" /> Duplicar</DropdownMenuItem>
+                                <DropdownMenuItem className="gap-2" onClick={e => { e.stopPropagation(); archivePetition(p.id); }}><Archive className="h-4 w-4" /> Arquivar</DropdownMenuItem>
+                                <DropdownMenuItem className="gap-2 text-destructive focus:text-destructive" onClick={e => {
                                   e.stopPropagation();
                                   if (window.confirm(`Excluir a petição "${p.action_types?.nome || 'sem título'}"? Essa ação não pode ser desfeita.`)) deletePetition(p.id);
                                 }}><Trash2 className="h-4 w-4" /> Excluir</DropdownMenuItem>
@@ -470,12 +418,17 @@ export default function PeticoesPage() {
               </div>
             </div>
 
-            <div className="hidden xl:block xl:sticky xl:top-4" style={{ height: 'calc(100vh - 170px)' }}>
+            <div className="hidden xl:block">
               <ModelsSidePanel actionTypes={actionTypes} getModelsForAction={getModelsForAction} onSelectModel={(actionId, modelId) => navigate(`/peticoes/nova?action=${actionId}&model=${modelId}`)} />
             </div>
           </div>
         </div>
-      </ScrollArea>
+
+        <button onClick={() => setModalOpen(true)}
+          className="absolute bottom-10 right-10 h-12 px-6 rounded-full bg-[#3e2f2b] hover:bg-[#2d211d] text-white flex items-center gap-2 font-semibold text-sm shadow-lg transition-colors">
+          <Plus className="h-4 w-4" /> Nova Petição
+        </button>
+      </div>
 
       <NovaPeticaoModal open={modalOpen} onClose={() => setModalOpen(false)} actionTypes={actionTypes} getModelsForAction={getModelsForAction}
         onConfirm={(actionId, modelId) => navigate(`/peticoes/nova?action=${actionId}&model=${modelId}`)} />
