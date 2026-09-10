@@ -147,14 +147,14 @@ export function KanbanBoard({ leads, onLeadClick, activeStage }: KanbanBoardProp
   return (
     <>
       <div
-        className="flex flex-row gap-4 w-full min-h-0 h-full overflow-x-auto pb-3"
+        className="flex flex-row gap-4 w-full min-h-0 h-full overflow-x-auto pb-3 snap-x snap-mandatory scroll-pl-4"
         onDragLeave={handleDragLeave}
       >
         {visibleStatuses.map((status) => (
           <div
             key={status}
             onDragEnter={() => handleDragEnter(status)}
-            className="flex flex-col h-full"
+            className="flex flex-col h-full snap-start"
           >
             <KanbanColumn
               status={status}
