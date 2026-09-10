@@ -787,6 +787,63 @@ A partir daqui cada entrada tem: **o que**, **por quê / causa raiz**, **commit(
   renderizando o padrão novo, nenhum erro de console, `tsc`/build limpos
   antes de subir.
 
+### 2026-09-10 — Relatório de Leads (formatação), redesenho de Documentos, auditoria + Fase 2 do gerador de petições
+- **Relatório de Leads → Sheets**: pendência #26 fechada — usuário reconectou
+  o Google Drive e habilitou a API do Sheets no Google Cloud (erro real era
+  a API nunca ter sido ligada no projeto, não bug de código). Formatação
+  ficou "péssima" na 1ª versão (linhas gigantes, sem cor da marca) —
+  corrigido: cabeçalho marrom/dourado, largura de coluna fixa, zebra,
+  altura de linha travada em 90px, 3 itens por coluna longa (era 5) com
+  texto mais curto. Nova coluna "Ações Realizadas (Equipe)" (mesmo dado da
+  aba Registros do lead). Commits `f7b23ab4`, `3a0792fb`.
+- **Exclusão de documentos** (Drive + Local) adicionada em `DocumentosPage.tsx`
+  — Drive vai pra lixeira (recuperável 30d), local é permanente, com
+  confirmação. Achado testando: documento novo não aparecia na lista sem
+  F5 (modal de upload usa sua própria instância de `useDocumentos()`,
+  desconectada da tela) — corrigido com callback `onUploaded`. Commits
+  `6933df0b`, `ac63f35d`.
+- **Redesenho da página de Documentos** seguindo o Figma real
+  (`SISTEMA-BENTES-E-RAMOS`, node `documentos-desktop`) via
+  `get_design_context` — cores/espaçamento exatos, fontes do projeto
+  mantidas (Inter/Poppins, não as do Figma). Nenhuma função removida, só
+  reorganizada: ações de arquivo viraram "Baixar" + menu "⋯", pasta de
+  cliente abre com 1 clique, ícone/cor por tipo de arquivo. Verificado
+  visualmente (Playwright, dev local + produção) antes e depois do deploy.
+  Commit `12846641`. Versão mobile (`documentos-mobile`) ainda não feita.
+- **Auditoria técnica do Gerador de Petições** (pedida explicitamente antes
+  de qualquer código, ver `docs/` desta sessão): motor real roda 100% no
+  Worker Cloudflare (`peticoes-cloudflare`, D1+R2) desde 27/08, com site
+  separado (`peticoes-modelos-admin`) pra cadastro de modelo. **Achado
+  central**: só 1 modelo real em produção ("Peticao_documento"/"Venda
+  Casada") — os outros ~11 modelos antigos nunca migraram pra cá.
+  Confirmado: nenhuma célula desse motor toca petições — os fluxos de
+  Contratos/Procuração ZapSign são 100% separados (client-side +
+  função `zapsign` do Supabase), decisão do usuário de manter assim.
+- **Fase 2 da reestruturação** (fechar buraco de segurança + limpar código
+  morto, antes de qualquer mudança de arquitetura):
+  - CRUD de `action-types`/`models`/`detect-fields` no Worker não tinha
+    **nenhuma autenticação** (qualquer um com a URL criava/apagava modelo,
+    e o endpoint de IA custa dinheiro real por chamada). Fechado com header
+    `X-Admin-Secret` nas rotas de escrita (leitura continua pública, é o
+    que o CRM usa). Verificado ao vivo: GET sem header ok, POST/DELETE sem
+    header 401, com header ok — testado também pela UI real do site admin.
+    Ver `MODELS_ADMIN_SECRET` em `SECRETS.local.md` §2.2.
+  - 6 tabelas Postgres órfãs apagadas (`petitions_v2`, `petition_models_v2`,
+    `action_types`, `petition_versions` — já zeradas desde 27/08 — e
+    `modelos_peticao`/`peticoes_geradas`, com 34+1 linhas reais nunca
+    citadas na limpeza anterior; exportadas como backup local antes do
+    `DROP`). Sem FK externa nem view dependente, confirmado antes.
+  - 5 Edge Functions órfãs do sistema V1/V3 apagadas do Supabase
+    (`petition-generate`, `petition-generate-v3`, `petition-pdf`,
+    `petition-rewrite`, `petition-validate`) — zero caller no código atual.
+  - No mesmo commit dos repos Cloudflare (sem remoto Git, local apenas):
+    WIP de sessão anterior (27/08-30/08, blocos dinâmicos + scaffolding de
+    Contratos) finalmente commitado junto — estava sem commit há >10 dias.
+  - **Ainda não feito** (fases seguintes do plano, aguardando o usuário
+    retomar): versionamento de modelo, camada semântica de IA (JSON de
+    seções em vez de marcador plano), Layout Mestre configurável (hoje é
+    um rodapé hardcoded em `petitionEngine.ts`), validador dados×gerado.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
@@ -849,12 +906,12 @@ Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a dat
     `intimacoes-manha/meio-dia/tarde` (10h/16h/21h UTC) voltaram a criar jobs sozinhos
     (a fila foi destravada e testada manualmente em 09-07, mas o primeiro ciclo 100%
     automático pós-fix ainda não rodou).
-26. Relatório de Leads (Sheets) — usuário precisa reconectar o Google Drive
-    (Documentos → "Conectar Google Drive") pra conceder o escopo novo antes de
-    testar; depois, gerar um relatório de teste com 2-3 leads e conferir a
-    planilha. Fuso da audiência (Acre) — sem cliente real de UF=AC pra validar
-    ao vivo com segurança; só vai se provar na próxima audiência real de lá
-    (09-08).
+26. ~~Relatório de Leads (Sheets) — reconectar Drive + testar~~ — **RESOLVIDO
+    em 09-10**: usuário reconectou e habilitou a API do Sheets; gerado e
+    verificado ao vivo, formatação corrigida na sequência (ver linha do
+    tempo 09-10). Fuso da audiência (Acre) continua em aberto — sem cliente
+    real de UF=AC pra validar ao vivo com segurança; só vai se provar na
+    próxima audiência real de lá (09-08).
 27. ~~Chat interno: botão de gravar áudio em cima do enviar em `/chat`~~ —
     **RESOLVIDO em 09-09** (`5b9cd1c2`, ver linha do tempo). Usuário mandou
     print novo confirmando que persistia; causa real era o widget usar uma
@@ -887,11 +944,28 @@ Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a dat
     — **RESOLVIDO em 09-09** (`996b827c`, ver linha do tempo). Virou Context
     único; nenhum dos ~40 arquivos precisou mudar.
 
+**Novo em 2026-09-10**
+32. **RESUMIR AQUI — Reestruturação do Gerador de Petições**: auditoria
+    completa feita e Fase 2 (segurança + limpeza) concluída (ver linha do
+    tempo 09-10). Faltam as fases seguintes do plano aprovado com o
+    usuário: versionamento de modelo (Fase 3), Layout Mestre configurável
+    (Fase 4), IA de análise estrutural + schema dinâmico rico (Fases 5-6),
+    formulário dinâmico estendido + geração textual por IA + validador
+    dados×gerado (Fases 7-9). Piloto: modelo único hoje em produção
+    ("Peticao_documento"/"Venda Casada").
+33. Versão mobile da página de Documentos (`documentos-mobile` no Figma) —
+    specs/cores já puxadas do Figma real, só falta implementar (a versão
+    desktop já foi redesenhada em 09-10).
+
 **Em andamento (planos aprovados)**
 19. Contratos/Procuração via templates + ZapSign nativo — Fases 4–9
-    (`flickering-wibbling-spring.md`). Bloqueado no `ZAPSIGN_API_TOKEN` do Worker.
-20. Petições com blocos dinâmicos — teste visual + Fase 3 no CRM
-    (`imperative-conjuring-frog.md`).
+    (`flickering-wibbling-spring.md`). Bloqueado no `ZAPSIGN_API_TOKEN` do
+    Worker. Confirmado em 09-10: decisão do usuário é manter esse fluxo
+    **separado** da reestruturação do gerador de petições (item 32).
+20. ~~Petições com blocos dinâmicos — teste visual + Fase 3 no CRM~~ — WIP
+    finalmente commitado em 09-10 (estava sem commit desde 08-27/08-30),
+    mas Fase 3 (integrar no CRM) ainda não feita; ver item 32, que
+    supersede este item dentro do plano maior de reestruturação.
 21. Templatização: 6 dos 12 modelos antigos nunca convertidos (fluxo superado pelo
     motor novo; decidir se ainda vale converter).
 
