@@ -52,36 +52,61 @@ export function useLeadProcessos(leadId: string | undefined) {
         const nomeLimpo = (leadData.nome || '').replace(/^\s*(cliente|contato|lead|cli)\s*[-:–—]\s*/i, '').trim();
         const nomeBusca = nomeLimpo.length > 5 ? nomeLimpo : '';
 
-        const partesEncontradas: { processo_id: string }[] = [];
+        const processoIdsEncontrados = new Set<string>();
+
+        // 2a. processo_partes — lista todas as partes citadas no processo
+        // (autor, réu etc.), útil quando o processo veio de sincronização
+        // automática (DJEN/DataJud) sem cadastro manual do cliente.
         if (cpfDigits) {
           const { data } = await supabase.from('processo_partes').select('processo_id').ilike('documento', `%${cpfDigits}%`);
-          if (data) partesEncontradas.push(...data);
+          data?.forEach(p => processoIdsEncontrados.add(p.processo_id));
         }
         if (nomeBusca) {
           const { data } = await supabase.from('processo_partes').select('processo_id').ilike('nome', `%${nomeBusca}%`);
-          if (data) partesEncontradas.push(...data);
+          data?.forEach(p => processoIdsEncontrados.add(p.processo_id));
         }
-        if (partesEncontradas.length > 0) {
-          const processoIds = [...new Set(partesEncontradas.map(p => p.processo_id))].filter(id => !directIds.has(id));
 
-          if (processoIds.length > 0) {
-            const { data: found } = await supabase
-              .from('processos')
-              .select('*')
-              .in('id', processoIds);
+        // 2b. processos.cpf_cliente / nome_cliente — campo do CLIENTE
+        // preenchido direto no cadastro do processo (não passa por
+        // processo_partes). Achado ao vivo: 70 leads com "Contrato
+        // Assinado"/"Ganho" tinham processo com CPF batendo exatamente
+        // aqui e a aba "Processos" mostrava "Nenhum processo vinculado"
+        // porque essa busca nunca checava essa tabela/coluna.
+        if (cpfDigits) {
+          const { data } = await supabase
+            .from('processos')
+            .select('id')
+            .not('cpf_cliente', 'is', null)
+            .ilike('cpf_cliente', `%${cpfDigits}%`);
+          data?.forEach(p => processoIdsEncontrados.add(p.id));
+        }
+        if (nomeBusca) {
+          const { data } = await supabase.from('processos').select('id').ilike('nome_cliente', `%${nomeBusca}%`);
+          data?.forEach(p => processoIdsEncontrados.add(p.id));
+        }
 
-            if (found) {
-              // Auto-link these processes to the lead
-              for (const proc of found) {
-                if (!proc.cliente_id) {
-                  await supabase
-                    .from('processos')
-                    .update({ cliente_id: leadId })
-                    .eq('id', proc.id);
-                  autoLinked++;
-                }
-                autoProcessos.push(proc as Processo);
+        const processoIds = [...processoIdsEncontrados].filter(id => !directIds.has(id));
+
+        if (processoIds.length > 0) {
+          const { data: found } = await supabase
+            .from('processos')
+            .select('*')
+            .in('id', processoIds);
+
+          if (found) {
+            for (const proc of found) {
+              // Só assume a posse (cliente_id) se o processo ainda não tem
+              // dono — evita reatribuir processo de outro lead duplicado
+              // (mesma pessoa cadastrada 2x) sem decisão explícita do
+              // usuário sobre qual lead é o "principal".
+              if (!proc.cliente_id) {
+                await supabase
+                  .from('processos')
+                  .update({ cliente_id: leadId })
+                  .eq('id', proc.id);
+                autoLinked++;
               }
+              autoProcessos.push(proc as Processo);
             }
           }
         }
