@@ -88,7 +88,7 @@ serve(async (req) => {
 
     // Histórico de conversa (WhatsApp) — até ~5 mensagens recentes por lead,
     // mesmo padrão do ExportTrafegoModal, paginado em lotes de 1000 (teto do PostgREST).
-    const targetMsgCount = leads.length * 5;
+    const targetMsgCount = leads.length * 3;
     const messages: any[] = [];
     for (let offset = 0; offset < targetMsgCount; offset += PAGE) {
       const { data } = await supabase
@@ -106,9 +106,9 @@ serve(async (req) => {
     for (const msg of messages) {
       if (!msg.lead_id) continue;
       const arr = msgMap.get(msg.lead_id) || [];
-      if (arr.length < 5) {
+      if (arr.length < 3) {
         const prefix = msg.direcao === 'entrada' ? '👤' : '🤖';
-        arr.push(`${prefix} ${formatDate(msg.created_at)}: ${(msg.conteudo || '').substring(0, 100)}`);
+        arr.push(`${prefix} ${formatDate(msg.created_at)}: ${(msg.conteudo || '').substring(0, 65)}`);
         msgMap.set(msg.lead_id, arr);
       }
     }
@@ -117,7 +117,7 @@ serve(async (req) => {
     // atendimento presencial, anotação manual) — é o que a "aba Registros" do
     // lead já mostra na tela, aqui trazido pra planilha. Distinto do histórico
     // de WhatsApp acima, que é o espelho automático da conversa.
-    const targetAcaoCount = leads.length * 5;
+    const targetAcaoCount = leads.length * 3;
     const acoes: any[] = [];
     for (let offset = 0; offset < targetAcaoCount; offset += PAGE) {
       const { data } = await supabase
@@ -141,10 +141,10 @@ serve(async (req) => {
     for (const a of acoes) {
       if (!a.cliente_id) continue;
       const arr = acaoMap.get(a.cliente_id) || [];
-      if (arr.length < 5) {
+      if (arr.length < 3) {
         const icone = INTERACAO_ICONS[a.tipo] || '•';
         const quem = a.responsavel_id ? nomePorResponsavel.get(a.responsavel_id) || 'Equipe' : 'Equipe';
-        const resumo = (a.resumo || '').substring(0, 140);
+        const resumo = (a.resumo || '').substring(0, 65);
         arr.push(`${icone} ${formatDate(a.data_interacao)} (${quem}): ${resumo}`);
         acaoMap.set(a.cliente_id, arr);
       }
@@ -231,6 +231,19 @@ serve(async (req) => {
               fields: 'pixelSize',
             },
           },
+          // Altura fixa nas linhas de dado — sem isso, os balões de texto das
+          // 2 colunas longas faziam a linha esticar até caber tudo (era o que
+          // deixava a planilha "feia": linhas gigantes e desalinhadas ao lado
+          // de linhas curtas). Com altura travada, tudo fica uniforme; se o
+          // texto passar da altura, clicar na célula mostra o conteúdo
+          // completo na barra de fórmulas.
+          ...(rows.length > 0 ? [{
+            updateDimensionProperties: {
+              range: { sheetId, dimension: 'ROWS', startIndex: 1, endIndex: lastDataRow },
+              properties: { pixelSize: 90 },
+              fields: 'pixelSize',
+            },
+          }] : []),
           // Largura fixa por coluna (autoResize deixava tudo espremido e as
           // linhas gigantes de altura por causa do texto quebrando em poucos
           // caracteres por linha)
