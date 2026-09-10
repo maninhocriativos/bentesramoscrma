@@ -425,7 +425,7 @@ export default function PeticoesPage() {
         </div>
 
         <button onClick={() => setModalOpen(true)}
-          className="absolute bottom-10 right-10 h-12 px-6 rounded-full bg-[#3e2f2b] hover:bg-[#2d211d] text-white flex items-center gap-2 font-semibold text-sm shadow-lg transition-colors">
+          className="absolute bottom-24 right-10 h-12 px-6 rounded-full bg-[#3e2f2b] hover:bg-[#2d211d] text-white flex items-center gap-2 font-semibold text-sm shadow-lg transition-colors">
           <Plus className="h-4 w-4" /> Nova Petição
         </button>
       </div>
