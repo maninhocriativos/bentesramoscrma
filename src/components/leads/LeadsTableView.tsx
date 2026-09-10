@@ -42,7 +42,7 @@ export function LeadsTableView() {
   const [activeStage, setActiveStage] = useState('all');
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>('cards');
+  const [viewMode, setViewMode] = useState<ViewMode>('board');
   const [currentPage, setCurrentPage] = useState(1);
 
   const { countBentesRamos, countTrafego } = useMemo(() => {
@@ -152,14 +152,14 @@ export function LeadsTableView() {
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center min-h-[400px]">
+      <div className="flex-1 flex items-center justify-center min-h-[400px] bg-[#f9f6f0]">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-primary/5 flex items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          <div className="w-14 h-14 rounded-2xl bg-[#f5efe6] flex items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-[#3e2f2b]" />
           </div>
           <div className="text-center">
-            <p className="text-sm font-medium text-foreground">Carregando pipeline</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Sincronizando dados em tempo real...</p>
+            <p className="text-sm font-medium text-[#29201e]">Carregando pipeline</p>
+            <p className="text-xs text-[#6e5e5a] mt-0.5">Sincronizando dados em tempo real...</p>
           </div>
         </div>
       </div>
@@ -167,7 +167,7 @@ export function LeadsTableView() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-[#f9f6f0]">
       <LeadsTableHeader
         totalLeads={filteredLeads.length}
         totalValue={totalValue}
@@ -192,13 +192,13 @@ export function LeadsTableView() {
         filteredLeads={filteredLeads}
       />
 
-      <div className="px-4 lg:px-6 py-2.5 border-b bg-card">
+      <div className="px-4 sm:px-8 py-3 border-b border-[#efebe4] bg-white shrink-0">
         <PipelineStagePills stages={stagesWithCounts} activeStage={activeStage} onStageChange={setActiveStage} />
       </div>
 
       {/* Content */}
       {viewMode === 'cards' ? (
-        <div className="flex-1 overflow-auto px-4 lg:px-6 py-4">
+        <div className="flex-1 overflow-auto px-4 sm:px-8 py-5">
           <LeadCardGrid
             leads={paginatedLeads}
             onLeadClick={handleLeadClick}
@@ -208,18 +208,18 @@ export function LeadsTableView() {
           />
         </div>
       ) : viewMode === 'list' ? (
-        <div className="flex-1 overflow-hidden px-4 lg:px-6 py-4">
+        <div className="flex-1 overflow-hidden px-4 sm:px-8 py-5">
           <LeadsDataTable leads={paginatedLeads} onLeadClick={handleLeadClick} onMoveStage={handleMoveStage} allStages={PIPELINE_STAGES} />
         </div>
       ) : (
-        <div className="flex-1 overflow-auto px-4 lg:px-6 py-4">
+        <div className="flex-1 min-h-0 overflow-auto px-4 sm:px-8 py-5">
           <KanbanBoard leads={filteredLeads} onLeadClick={handleLeadClick} />
         </div>
       )}
 
       {/* Pagination */}
       {viewMode !== 'board' && totalPages > 1 && (
-        <div className="flex items-center justify-between px-4 lg:px-6 py-3 border-t border-border bg-card">
+        <div className="flex items-center justify-between px-4 sm:px-8 py-3 border-t border-[#efebe4] bg-white shrink-0">
           <span className="text-xs text-muted-foreground">
             Mostrando {((safePage - 1) * LEADS_PER_PAGE) + 1}–{Math.min(safePage * LEADS_PER_PAGE, filteredLeads.length)} de {filteredLeads.length}
           </span>
