@@ -951,12 +951,18 @@ A partir daqui cada entrada tem: **o que**, **por quê / causa raiz**, **commit(
   - Tudo verificado ao vivo com Playwright logado (390×844), inclusive
     rolando até o fim de cada tela pra garantir que nada fica atrás da
     barra de tabs/bolha do chat.
-- Ainda falta: mobile das 7 etapas restantes do wizard (só "Cliente"
-  foi verificada tela a tela; o "chrome" é compartilhado, então o
-  risco é baixo, mas não foi olhado campo a campo) e o modal "Nova
-  Petição" no mobile ficou "quase full-width" (Dialog do shadcn com
-  scroll interno), não é o sheet full-screen exato do Figma — decisão
-  de custo/benefício, não uma limitação técnica.
+- **Fechamento (mesma sessão, continuação)**: as 7 etapas do wizard
+  foram verificadas campo a campo no mobile (não só "Cliente") —
+  nenhum problema novo, confirma que o fix do `col-span-2` generaliza.
+  O modal "Nova Petição" foi refeito pra ser um sheet full-screen de
+  verdade no mobile (igual ao node `37:1455`), não mais um Dialog
+  "quase full-width": o `DialogContent` do shadcn fixa
+  `left-1/2`/`top-1/2`/`translate`/`max-height`/`rounded` via
+  className direto (não responsivo); em vez de mexer nesse componente
+  compartilhado por todo o app, um `style` inline (maior
+  especificidade) sobrepõe isso só nesta instância via
+  `useIsMobile()`. Conteúdo reestruturado em flex-col (header/stepper
+  fixos, lista com scroll próprio, rodapé fixo).
 
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
@@ -1071,11 +1077,9 @@ Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a dat
     specs/cores já puxadas do Figma real, só falta implementar (a versão
     desktop já foi redesenhada em 09-10).
 34. ~~Redesenho das telas de Petições (dashboard, wizard, revisão) a partir
-    do Figma real~~ — **concluído em 09-10** (desktop + mobile), ver linha
-    do tempo. Resta só: mobile campo-a-campo das 6 etapas do wizard além
-    de "Cliente" (chrome compartilhado, risco baixo) e o modal "Nova
-    Petição" ficar mais próximo do sheet full-screen do Figma no mobile
-    (hoje é um Dialog quase full-width com scroll interno).
+    do Figma real~~ — **concluído em 09-10** (desktop + mobile, incluindo
+    modal full-screen e as 7 etapas do wizard verificadas campo a campo),
+    ver linha do tempo.
 
 **Em andamento (planos aprovados)**
 19. Contratos/Procuração via templates + ZapSign nativo — Fases 4–9
