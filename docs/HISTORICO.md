@@ -859,11 +859,34 @@ A partir daqui cada entrada tem: **o que**, **por quê / causa raiz**, **commit(
   field_schema) só existiam como arquivo local — nunca tinham sido
   aplicadas no D1 remoto de verdade (bookkeeping da `0001` também estava
   fora do sistema de migrations, corrigido). Aplicadas as 3 juntas.
+- **Fase 4 (mesmo dia) — Layout Mestre do escritório**: o rodapé (timbre)
+  era um XML fixo no código — trocar telefone/endereço exigia deploy.
+  Migration `0005_office_layout.sql` (tabela singleton no D1); o XML do
+  rodapé passou a ser gerado a partir desses dados
+  (`gerarRodapeXml()`), mesma estrutura visual, só o conteúdo é dinâmico
+  agora. Novos endpoints `GET`/`PATCH /api/office-layout` (leitura
+  pública, escrita com o segredo). Escopo desta fase: só o rodapé
+  (cabeçalho/logo/margens/fonte ficam pra depois se pedido). Seção nova
+  no site admin pra editar sem precisar de deploy. **Verificado ao vivo
+  de um jeito que prova de verdade**: mudou o telefone via API pra um
+  valor de teste, gerou uma petição real com o modelo em produção,
+  baixou o `.docx` e conferiu o texto de teste dentro do
+  `word/footer1.xml` — depois revertido e a petição de teste apagada.
 - **Ainda não feito** (fases seguintes do plano, aguardando o usuário
-  retomar): Layout Mestre configurável (hoje é um rodapé hardcoded em
-  `petitionEngine.ts`), camada semântica de IA (JSON de seções em vez de
-  marcador plano) + schema dinâmico rico, formulário dinâmico estendido +
-  geração textual por IA + validador dados×gerado.
+  retomar): camada semântica de IA (JSON de seções em vez de marcador
+  plano) + schema dinâmico rico — a parte mais pesada — depois formulário
+  dinâmico estendido + geração textual por IA + validador dados×gerado.
+- **Anelize não conseguia enviar áudio no chat** (`dc1fb560`): investigado
+  com dado real antes de qualquer suposição — no banco, ela nunca teve
+  nenhuma mensagem de áudio registrada (nem sucesso nem erro), enquanto
+  outros usuários enviavam normalmente. Usuário mandou o print do erro
+  ("Microfone não disponível"), batendo exatamente com a string hardcoded
+  em `ChatInbox.tsx`. Não era bug — é `getUserMedia` sendo recusado
+  (permissão de microfone bloqueada no navegador dela), mas a mensagem
+  genérica não dizia o motivo nem o que fazer. Melhorada pra usar o tipo
+  do `DOMException` (`NotAllowedError`/`NotFoundError`/`NotReadableError`)
+  e dar instrução específica. Ainda depende dela liberar o microfone nas
+  configurações do navegador — a mensagem só explica, não desbloqueia.
 
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
@@ -966,13 +989,14 @@ Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a dat
     único; nenhum dos ~40 arquivos precisou mudar.
 
 **Novo em 2026-09-10**
-32. **RESUMIR AQUI — Reestruturação do Gerador de Petições**: auditoria
-    completa + Fase 2 (segurança + limpeza) + Fase 3 (versionamento de
-    modelo) concluídas (ver linha do tempo 09-10). Faltam: Layout Mestre
-    configurável (Fase 4), IA de análise estrutural + schema dinâmico rico
-    (Fases 5-6), formulário dinâmico estendido + geração textual por IA +
-    validador dados×gerado (Fases 7-9). Piloto: modelo único hoje em
-    produção ("Peticao_documento"/"Venda Casada").
+32. **RESUMIR AQUI — Reestruturação do Gerador de Petições**: auditoria +
+    Fase 2 (segurança/limpeza) + Fase 3 (versionamento) + Fase 4 (Layout
+    Mestre) concluídas (ver linha do tempo 09-10). Falta a parte mais
+    pesada: IA de análise estrutural + schema dinâmico rico (Fases 5-6),
+    formulário dinâmico estendido + geração textual por IA + validador
+    dados×gerado (Fases 7-9). Piloto: modelo único hoje em produção
+    ("Peticao_documento"/"Venda Casada"). Contratos/Procuração confirmado
+    fora de escopo (fica separado, decisão do usuário).
 33. Versão mobile da página de Documentos (`documentos-mobile` no Figma) —
     specs/cores já puxadas do Figma real, só falta implementar (a versão
     desktop já foi redesenhada em 09-10).
