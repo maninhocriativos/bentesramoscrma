@@ -66,9 +66,6 @@ verify_jwt = false
 [functions.consulta-processos]
 verify_jwt = false
 
-[functions.petition-pdf]
-verify_jwt = false
-
 [functions.manychat-full-sync]
 verify_jwt = false
 
@@ -148,12 +145,6 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.backup-chat-drive]
-verify_jwt = false
-
-[functions.petition-rewrite]
-verify_jwt = false
-
-[functions.petition-generate-v3]
 verify_jwt = false
 
 [functions.isa-escritorio-reply]
