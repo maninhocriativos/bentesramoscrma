@@ -452,7 +452,7 @@ async function buscarAudienciasProximas(supabase: any): Promise<AudienciaProxima
 
   for (const t of tarefasBrutas || []) {
     const chave = t.processo_id || `tar:${t.id}`;
-    candidatos.set(chave, { processoId: t.processo_id || null, clienteId: t.cliente_id || null, dataStr: t.data_limite, horario: t.horario || null });
+    candidatos.set(chave, { processoId: t.processo_id || null, clienteId: t.cliente_id || null, dataStr: t.data_limite, horario: t.horario ? String(t.horario).slice(0, 5) : null });
   }
   for (const c of compromissosBrutos || []) {
     if (c.tarefa_id && tarefaIdsUsadas.has(c.tarefa_id) && !c.processo_id) continue;
@@ -482,7 +482,11 @@ async function buscarAudienciasProximas(supabase: any): Promise<AudienciaProxima
   const resultado: AudienciaProxima[] = [];
   for (const a of candidatos.values()) {
     const clienteId = a.clienteId || (a.processoId ? processosPorId.get(a.processoId)?.cliente_id : null);
-    const nome = (clienteId && leadsPorId.get(clienteId)) || (a.processoId ? processosPorId.get(a.processoId)?.nome_cliente : null);
+    // processos.nome_cliente é cadastro manual livre — às vezes vem com
+    // telefone colado ("Fulano - (71) 98809-9101"), tira o sufixo pro
+    // resumo da equipe ficar limpo.
+    const nomeBruto = (clienteId && leadsPorId.get(clienteId)) || (a.processoId ? processosPorId.get(a.processoId)?.nome_cliente : null);
+    const nome = nomeBruto ? String(nomeBruto).replace(/\s*[-–]\s*\(?\+?\d[\d\s()-]{6,}\)?\s*$/, '').trim() : nomeBruto;
     if (!nome) continue;
     resultado.push({ clienteNome: nome, dataStr: a.dataStr, horario: a.horario });
   }
