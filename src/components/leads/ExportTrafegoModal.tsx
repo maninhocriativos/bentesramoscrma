@@ -266,7 +266,7 @@ export function ExportTrafegoModal({ open, onOpenChange }: ExportTrafegoModalPro
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="h-9 w-9 rounded-lg bg-[#f5efe6] flex items-center justify-center shrink-0"><Upload className="h-[18px] w-[18px] text-[#3e2f2b]" /></div>
-            <h2 className="text-lg text-[#29201e]" style={{ fontFamily: 'Lora, serif', fontWeight: 700 }}>Exportar Leads de Tráfego</h2>
+            <h2 className="text-lg font-bold text-[#29201e]">Exportar Leads de Tráfego</h2>
           </div>
           <button onClick={() => onOpenChange(false)} className="text-[#6e5e5a] hover:text-[#29201e] transition-colors shrink-0"><X className="h-[18px] w-[18px]" /></button>
         </div>

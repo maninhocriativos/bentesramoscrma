@@ -152,7 +152,7 @@ export function LeadsTableHeader({
       <TooltipProvider delayDuration={200}>
         <div className="bg-white border-b border-[#efebe4] px-4 sm:px-8 py-4 sm:py-5 flex items-center justify-between gap-3 shrink-0">
           <div className="min-w-0">
-            <h1 className="text-lg sm:text-2xl text-[#29201e] truncate" style={{ fontFamily: 'Lora, serif', fontWeight: 700 }}>Pipeline de Leads</h1>
+            <h1 className="text-lg sm:text-2xl font-bold text-[#29201e] truncate">Pipeline de Leads</h1>
             <p className="hidden sm:block text-sm text-[#6e5e5a] mt-1">Gerenciamento e conversão de novos clientes para o escritório</p>
           </div>
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
