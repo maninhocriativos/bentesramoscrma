@@ -1055,6 +1055,27 @@ A partir daqui cada entrada tem: **o que**, **por quê / causa raiz**, **commit(
   aviso/limite de 200 leads. Testado ao vivo com os 3567 leads reais
   em produção, todas as 8 colunas do Board, sem erro de fetch.
 
+### 2026-09-10 (mesmo dia, sessão seguinte) — 2 regressões reais no Board, reportadas pelo usuário
+- Usuário usando em produção reportou: clicar num lead não abria mais
+  a ficha completa (só ia pro chat), e clicar numa pílula de etapa
+  (ex: "Perdido") parecia não trazer nenhum lead.
+- **Clique do card**: o `LeadCard` sempre navegava direto pro chat
+  (`navigate('/chat?lead_id=...')`), ignorando o `onClick` que já vinha
+  por prop pra abrir o `LeadDetailModal` — mesmo comportamento das
+  visões Cards/Lista. Esse prop já estava morto ANTES do redesign
+  desta sessão (não é regressão introduzida agora), só que ninguém
+  notava porque o Board não era o padrão. Corrigido usando o `onClick`
+  recebido; o botão "Chat" já existe dentro do próprio modal, nenhuma
+  função foi perdida.
+- **Pílula de etapa "vazia"**: o filtro em si funcionava certo (a
+  coluna da etapa ativa tinha os leads certos, confirmado ao vivo) —
+  o problema é que o Board sempre renderizava as 8 colunas da
+  esquerda pra direita, e como só a coluna da etapa filtrada tinha
+  cards, as outras 7 apareciam vazias na frente e a única coluna com
+  dado real ficava fora da tela sem rolar manualmente. Corrigido:
+  quando uma pílula específica está ativa, o Board renderiza só
+  aquela coluna.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
