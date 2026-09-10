@@ -12,6 +12,36 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 // ============================================
+// MEMÓRIA DO GRUPO INTERNO — pedido do usuário 2026-09-10
+// ============================================
+// Prefixo estável do ID do grupo "Bentes Ramos  Comercial" (confirmado via
+// Z-API /chats: phone "120363406286025879-group"). Grupos de WhatsApp usam
+// esse número como parte fixa do JID em qualquer formato de payload
+// (REST ou webhook em tempo real), então casar pelo prefixo é mais robusto
+// que casar pelo nome (que tem espaço duplo real — ver isa-scheduler).
+const GRUPO_MEMORIA_ID_PREFIXO = '120363406286025879';
+const GRUPO_MEMORIA_NOME = 'Bentes Ramos Comercial';
+const ISA_MEMORIA_URL = Deno.env.get('ISA_MEMORIA_URL');
+const ISA_MEMORIA_SECRET = Deno.env.get('ISA_MEMORIA_SECRET');
+
+// Nunca deve derrubar o webhook: só registra a mensagem pra Isa "lembrar"
+// depois (resumo diário cruza isso com audiências próximas). Falha aqui é
+// só logada, igual ao padrão do push notification acima.
+async function registrarMensagemGrupoMemoria(remetenteNome: string | null, remetenteTelefone: string | null, mensagem: string, timestampMsg: number): Promise<void> {
+  if (!ISA_MEMORIA_URL || !ISA_MEMORIA_SECRET) return;
+  try {
+    await fetch(`${ISA_MEMORIA_URL}/mensagens`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Isa-Secret': ISA_MEMORIA_SECRET },
+      body: JSON.stringify({ grupoNome: GRUPO_MEMORIA_NOME, remetenteNome, remetenteTelefone, mensagem, timestampMsg }),
+      signal: AbortSignal.timeout(5_000),
+    });
+  } catch (e) {
+    console.error('[Z-API Webhook] Falha ao registrar mensagem na memória do grupo:', e);
+  }
+}
+
+// ============================================
 // PUSH NOTIFICATION — mensagem nova de cliente
 // ============================================
 // Só notifica o atendente já designado pra conversa (manychat_subscribers.
@@ -359,7 +389,24 @@ serve(async (req: Request) => {
     const trafficSource = detectTrafficSource(body, normalized.message || undefined, connectedPhoneForDetection);
     
     // IMPORTANTE: Ignorar mensagens de grupos - apenas conversas individuais
+    // (nunca vira lead/interação). Exceção: o grupo interno da equipe
+    // (GRUPO_MEMORIA_ID_PREFIXO) tem o texto registrado como "memória" pra
+    // Isa cruzar depois com audiências próximas — não muda em nada o fluxo
+    // normal de lead, só um registro à parte, best-effort.
     if (normalized.isGroup) {
+      if (
+        normalized.messageType === 'text' &&
+        normalized.message &&
+        !normalized.fromMe &&
+        normalized.groupId?.startsWith(GRUPO_MEMORIA_ID_PREFIXO)
+      ) {
+        await registrarMensagemGrupoMemoria(
+          normalized.name,
+          normalized.phone,
+          normalized.message,
+          new Date(normalized.timestamp).getTime()
+        );
+      }
       console.log('[Z-API Webhook] Ignorando mensagem de grupo');
       return new Response(JSON.stringify({ success: true, skipped: true, reason: 'group_message' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -1267,6 +1314,7 @@ function normalizeZapiEvent(body: any): {
   timestamp: string;
   media: any | null;
   isGroup: boolean;
+  groupId: string | null;
   mediaUrl: string | null;
   caption: string | null;
   fileName: string | null;
@@ -1400,6 +1448,7 @@ function normalizeZapiEvent(body: any): {
     timestamp: body.timestamp ? new Date(body.timestamp * 1000).toISOString() : new Date().toISOString(),
     media,
     isGroup,
+    groupId: isGroup ? String(rawPhone || '') : null,
     mediaUrl,
     caption,
     fileName,

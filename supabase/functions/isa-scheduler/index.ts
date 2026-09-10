@@ -312,6 +312,19 @@ function emailTemplate(title: string, content: string): string {
 const GRUPO_EQUIPE_NOME = 'Bentes Ramos Comercial';
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 
+// Worker Cloudflare separado (isa-memoria) que guarda o texto bruto das
+// mensagens do grupo — pedido do usuário 2026-09-10 pra Isa "ter memória"
+// do que a equipe escreve lá (ex: "liguei pro Fulano confirmando a
+// audiência"), sem misturar com o Supabase. zapi-webhook grava, aqui só lê.
+const ISA_MEMORIA_URL = Deno.env.get('ISA_MEMORIA_URL');
+const ISA_MEMORIA_SECRET = Deno.env.get('ISA_MEMORIA_SECRET');
+
+interface AudienciaProxima {
+  clienteNome: string;
+  dataStr: string;
+  horario: string | null;
+}
+
 interface MetricasPessoa {
   nome: string;
   leadsAtendidos: number;
@@ -391,6 +404,134 @@ async function gerarComentarioIA(metricas: MetricasPessoa[]): Promise<Record<str
     console.error('[Resumo Equipe] Erro ao gerar comentário IA:', e);
     return {};
   }
+}
+
+async function buscarMensagensGrupoRecentes(desdeMs: number): Promise<{ remetente_nome: string | null; mensagem: string }[]> {
+  if (!ISA_MEMORIA_URL || !ISA_MEMORIA_SECRET) return [];
+  try {
+    const resp = await fetch(`${ISA_MEMORIA_URL}/mensagens?desde=${desdeMs}&grupo=${encodeURIComponent(GRUPO_EQUIPE_NOME)}`, {
+      headers: { 'X-Isa-Secret': ISA_MEMORIA_SECRET },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    return (data.mensagens || []).map((m: any) => ({ remetente_nome: m.remetente_nome, mensagem: m.mensagem }));
+  } catch (e) {
+    console.error('[Resumo Equipe] Falha ao buscar memória do grupo:', e);
+    return [];
+  }
+}
+
+// Audiências dos próximos 3 dias (hoje/amanhã/depois) — janela prática pra
+// perguntar "já ligaram confirmando?". Independente do lembrete de 15/7/3
+// dias já existente mais abaixo (aquele é pro CLIENTE, dedupado por marco;
+// este é informativo pra EQUIPE, recalculado do zero em todo resumo).
+async function buscarAudienciasProximas(supabase: any): Promise<AudienciaProxima[]> {
+  const inicioHoje = getInicioHojeUtc();
+  const fimHorizonte = new Date(inicioHoje.getTime() + 3 * 24 * 60 * 60 * 1000);
+  const fimHorizonteManaus = new Intl.DateTimeFormat('en-CA', { timeZone: MANAUS_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(fimHorizonte);
+
+  const { data: tarefasBrutas } = await supabase
+    .from('tarefas')
+    .select('id, titulo, data_limite, horario, processo_id, cliente_id')
+    .ilike('titulo', '%udiênc%')
+    .neq('status', 'Concluída')
+    .gte('data_limite', getHojeManaus())
+    .lte('data_limite', fimHorizonteManaus);
+
+  const { data: compromissosBrutos } = await supabase
+    .from('compromissos')
+    .select('id, titulo, data_inicio, processo_id, lead_id, tarefa_id')
+    .ilike('titulo', '%udiênc%')
+    .neq('confirmacao_status', 'cancelado')
+    .gte('data_inicio', inicioHoje.toISOString())
+    .lte('data_inicio', fimHorizonte.toISOString());
+
+  const tarefaIdsUsadas = new Set((tarefasBrutas || []).map((t: any) => t.id));
+  const candidatos = new Map<string, { processoId: string | null; clienteId: string | null; dataStr: string; horario: string | null }>();
+
+  for (const t of tarefasBrutas || []) {
+    const chave = t.processo_id || `tar:${t.id}`;
+    candidatos.set(chave, { processoId: t.processo_id || null, clienteId: t.cliente_id || null, dataStr: t.data_limite, horario: t.horario || null });
+  }
+  for (const c of compromissosBrutos || []) {
+    if (c.tarefa_id && tarefaIdsUsadas.has(c.tarefa_id) && !c.processo_id) continue;
+    const chave = c.processo_id || `cmp:${c.id}`;
+    if (candidatos.has(chave)) continue;
+    const dataStr = new Intl.DateTimeFormat('en-CA', { timeZone: MANAUS_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(c.data_inicio));
+    const horario = new Intl.DateTimeFormat('pt-BR', { timeZone: MANAUS_TIMEZONE, hour: '2-digit', minute: '2-digit' }).format(new Date(c.data_inicio));
+    candidatos.set(chave, { processoId: c.processo_id || null, clienteId: c.lead_id || null, dataStr, horario });
+  }
+
+  if (candidatos.size === 0) return [];
+
+  const processoIds = [...new Set([...candidatos.values()].map(a => a.processoId).filter(Boolean))] as string[];
+  const { data: processosData } = processoIds.length
+    ? await supabase.from('processos').select('id, cliente_id, nome_cliente').in('id', processoIds)
+    : { data: [] };
+  const processosPorId = new Map((processosData || []).map((p: any) => [p.id, p]));
+
+  const clienteIds = [...new Set(
+    [...candidatos.values()].map(a => a.clienteId || (a.processoId ? processosPorId.get(a.processoId)?.cliente_id : null)).filter(Boolean)
+  )] as string[];
+  const { data: leadsData } = clienteIds.length
+    ? await supabase.from('leads_juridicos').select('id, nome').in('id', clienteIds)
+    : { data: [] };
+  const leadsPorId = new Map((leadsData || []).map((l: any) => [l.id, l.nome]));
+
+  const resultado: AudienciaProxima[] = [];
+  for (const a of candidatos.values()) {
+    const clienteId = a.clienteId || (a.processoId ? processosPorId.get(a.processoId)?.cliente_id : null);
+    const nome = (clienteId && leadsPorId.get(clienteId)) || (a.processoId ? processosPorId.get(a.processoId)?.nome_cliente : null);
+    if (!nome) continue;
+    resultado.push({ clienteNome: nome, dataStr: a.dataStr, horario: a.horario });
+  }
+  return resultado;
+}
+
+async function verificarConfirmacoesLigacao(audiencias: AudienciaProxima[], mensagens: { remetente_nome: string | null; mensagem: string }[]): Promise<Record<string, string>> {
+  if (!OPENAI_API_KEY || audiencias.length === 0 || mensagens.length === 0) return {};
+  try {
+    const listaAudiencias = audiencias.map(a => `${a.clienteNome} — audiência em ${a.dataStr}${a.horario ? ' às ' + a.horario : ''}`).join('\n');
+    const listaMensagens = mensagens.map(m => `${m.remetente_nome || 'equipe'}: ${m.mensagem}`).join('\n');
+
+    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_API_KEY}` },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: 'Você lê mensagens de um grupo interno de WhatsApp de uma equipe jurídica e verifica, pra cada audiência da lista, se alguma mensagem recente menciona ter ligado/confirmado com aquele cliente específico. Só marque "confirmado" se a menção for razoavelmente clara (nome do cliente batendo E falando de ligação/confirmação/contato). Responda em JSON: {"Nome do Cliente": "confirmado"} — inclua no JSON só os clientes confirmados, omita os demais.' },
+          { role: 'user', content: `AUDIÊNCIAS:\n${listaAudiencias}\n\nMENSAGENS DO GRUPO (dias recentes):\n${listaMensagens}` },
+        ],
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!resp.ok) return {};
+    const data = await resp.json();
+    const raw = data.choices?.[0]?.message?.content;
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    console.error('[Resumo Equipe] Falha ao verificar confirmações via IA:', e);
+    return {};
+  }
+}
+
+async function montarSecaoAudiencias(supabase: any): Promise<string> {
+  const audiencias = await buscarAudienciasProximas(supabase);
+  if (audiencias.length === 0) return '';
+
+  const desdeMs = Date.now() - 3 * 24 * 60 * 60 * 1000;
+  const mensagens = await buscarMensagensGrupoRecentes(desdeMs);
+  const confirmacoes = await verificarConfirmacoesLigacao(audiencias, mensagens);
+
+  let secao = `📅 *Audiências próximas — já confirmaram com o cliente?*\n\n`;
+  for (const a of audiencias) {
+    const status = confirmacoes[a.clienteNome] === 'confirmado' ? '✅ Confirmado no grupo' : '⚠️ Sem confirmação no grupo';
+    secao += `• *${a.clienteNome}* — ${a.dataStr}${a.horario ? ' às ' + a.horario : ''} — ${status}\n`;
+  }
+  return secao + '\n';
 }
 
 async function gerarEnviarResumoEquipe(supabase: any): Promise<any> {
@@ -503,9 +644,11 @@ async function gerarEnviarResumoEquipe(supabase: any): Promise<any> {
   }
 
   const comentarios = await gerarComentarioIA(metricas);
+  const secaoAudiencias = await montarSecaoAudiencias(supabase);
 
   const dataHojeFmt = formatarDataExtenso(new Date());
   let texto = `📊 *Resumo do Atendimento — ${dataHojeFmt}*\n\n`;
+  if (secaoAudiencias) texto += secaoAudiencias + '\n';
   for (const m of metricas) {
     texto += `*${m.nome}*\n`;
     texto += `• Leads atendidos: ${m.leadsAtendidos}\n`;
