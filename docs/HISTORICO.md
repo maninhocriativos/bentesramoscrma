@@ -964,6 +964,44 @@ A partir daqui cada entrada tem: **o que**, **por quê / causa raiz**, **commit(
   `useIsMobile()`. Conteúdo reestruturado em flex-col (header/stepper
   fixos, lista com scroll próprio, rodapé fixo).
 
+### 2026-09-10 (mesmo dia, sessão seguinte) — Redesenho da Pipeline de Leads (Figma real)
+- Usuário pediu pra remodelar a página de Leads a partir do Figma real.
+  Frames achados: `pipeline-leads-desktop` (57:9), `exportar-leads-
+  modal-desktop` (57:277, modal em 57:546), `relatorio-leads-modal-
+  desktop` (57:600, modal em 57:869) + 3 versões mobile equivalentes
+  (mobile ainda não implementado).
+- **Cabeçalho** (`LeadsTableHeader.tsx`) reescrito em duas linhas
+  (título/contadores/usuário + toggle de visualização/busca/filtros/
+  ações), igual ao padrão já usado em Petições/Documentos.
+- **Pílulas de etapa** (`PipelineStagePills.tsx`) recoloridas com a
+  paleta exata do Figma (`STAGE_CFG`, agora exportado e reusado por
+  `KanbanColumn`/`LeadCard` — cor da etapa consistente em toda a
+  página); mesmos tokens de cor de status já usados em Petições
+  (`#fef3c7`/`#92400e` âmbar, `#dcfce7`/`#15803d` verde etc.).
+- **Kanban board** (`KanbanColumn.tsx`, `LeadCard.tsx`) redesenhado:
+  colunas com cabeçalho minimalista (rótulo + badge de contagem +
+  valor total), cards com dot+status/tempo, nome+telefone, tipo de
+  ação + origem — mantendo TODA a lógica original (drag-and-drop,
+  insights da Isa/sentimento/urgência, próximo agendamento, badges
+  B&R/Ads/contrato, Meta CAPI no "Ganho"). "Visual Board" virou o modo
+  padrão da página (era "Cards").
+  - Removidas as regras CSS `.kanban-grid-container`/
+    `.kanban-column-wrapper` (colunas fixas em 240px, sem uso fora do
+    `KanbanBoard`) — trocadas por Tailwind com a largura do Figma
+    (340px).
+- **Modais de Exportar Tráfego e Gerar Relatório** redesenhados a
+  partir dos frames do Figma, preservando toda a lógica (fetch
+  paginado, export CSV/PDF, Edge Function `leads-relatorio-sheets`).
+  Duas adições reais: seleção rápida de mês (preenche datas
+  automaticamente) no Exportar Tráfego, e busca por nome/telefone
+  (client-side) no modal de Relatório. Omitido de propósito: dropdown
+  "Origem de Tráfego" (Google/Meta Ads) do Figma não tem filtro real
+  equivalente hoje — não fabricado.
+- **Ainda não feito**: vistas "Cards" (grid antigo) e "Lista" continuam
+  com o visual antigo (sem frame correspondente no Figma); modal de
+  detalhe do lead (`LeadDetailModal.tsx`, 907 linhas) não tocado;
+  versão mobile da pipeline pendente.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
@@ -1080,6 +1118,11 @@ Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a dat
     do Figma real~~ — **concluído em 09-10** (desktop + mobile, incluindo
     modal full-screen e as 7 etapas do wizard verificadas campo a campo),
     ver linha do tempo.
+35. Redesenho da Pipeline de Leads (Figma real) — cabeçalho, pílulas de
+    etapa, Kanban board/cards e modais de Exportar/Relatório
+    concluídos em 09-10 (ver linha do tempo). Falta: vistas "Cards" e
+    "Lista" (visual antigo, sem frame no Figma), `LeadDetailModal.tsx`
+    e versão mobile.
 
 **Em andamento (planos aprovados)**
 19. Contratos/Procuração via templates + ZapSign nativo — Fases 4–9
