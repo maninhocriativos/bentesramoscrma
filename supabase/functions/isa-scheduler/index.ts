@@ -352,8 +352,10 @@ async function buscarGroupId(instanceId: string, token: string, clientToken: str
     const resp = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/chats`, { headers });
     if (!resp.ok) { console.error('[Resumo Equipe] Falha ao listar chats/grupos:', resp.status); return null; }
     const chats = await resp.json();
+    const normalizar = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
+    const alvoNome = normalizar(nomeGrupo);
     const alvo = (Array.isArray(chats) ? chats : []).find((c: any) =>
-      (c.isGroup || c.type === 'group') && (c.name || c.chatName || '').trim().toLowerCase() === nomeGrupo.trim().toLowerCase()
+      (c.isGroup || c.type === 'group') && normalizar(c.name || c.chatName || '') === alvoNome
     );
     return alvo?.phone || alvo?.chatId || alvo?.id || null;
   } catch (e) {
