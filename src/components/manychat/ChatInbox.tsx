@@ -1802,7 +1802,21 @@ const ManyChatInboxContent = () => {
       };
       mediaRecorder.start();
       setIsRecording(true);
-    } catch { toast({ title: "Erro", description: "Microfone não disponível", variant: "destructive" }); }
+    } catch (err: any) {
+      // Mensagem genérica ("Microfone não disponível") não dizia o motivo nem
+      // o que fazer — achado real (2026-09-10): Anelize via só isso e não
+      // conseguia se resolver sozinha. getUserMedia rejeita com um
+      // DOMException tipado; usa o nome pra dar instrução específica.
+      let description = "Não foi possível acessar o microfone.";
+      if (err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError" || err?.name === "SecurityError") {
+        description = "Permissão de microfone bloqueada no navegador. Clique no ícone de cadeado (ou câmera) ao lado do endereço do site, permita o microfone e recarregue a página.";
+      } else if (err?.name === "NotFoundError" || err?.name === "DevicesNotFoundError") {
+        description = "Nenhum microfone encontrado. Verifique se há um microfone conectado ao computador.";
+      } else if (err?.name === "NotReadableError" || err?.name === "TrackStartError") {
+        description = "O microfone está sendo usado por outro programa (Zoom, Teams, etc.). Feche o outro programa e tente de novo.";
+      }
+      toast({ title: "Erro ao gravar áudio", description, variant: "destructive" });
+    }
   };
 
   const stopRecording = () => {
