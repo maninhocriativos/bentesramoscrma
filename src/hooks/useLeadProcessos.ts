@@ -100,26 +100,33 @@ export function useLeadProcessos(leadId: string | undefined) {
 /**
  * Batch fetch process counts for multiple leads (for card grid).
  */
+// Tamanho seguro de lote pro filtro .in(...) — acima disso a URL da consulta
+// fica grande demais e o navegador recusa a requisição (TypeError: Failed to
+// fetch). O Board da Pipeline de Leads pode passar milhares de IDs de uma vez.
+const PROCESSO_COUNTS_CHUNK = 150;
+
 export function useLeadsProcessoCounts(leadIds: string[]) {
   return useQuery({
     queryKey: ['leads-processo-counts', leadIds.sort().join(',')],
     queryFn: async () => {
       if (leadIds.length === 0) return {};
 
-      const { data, error } = await supabase
-        .from('processos')
-        .select('cliente_id')
-        .in('cliente_id', leadIds);
-
-      if (error) {
-        console.error('Error fetching processo counts:', error);
-        return {};
+      const batches: string[][] = [];
+      for (let i = 0; i < leadIds.length; i += PROCESSO_COUNTS_CHUNK) {
+        batches.push(leadIds.slice(i, i + PROCESSO_COUNTS_CHUNK));
       }
 
+      const results = await Promise.all(batches.map(batch =>
+        supabase.from('processos').select('cliente_id').in('cliente_id', batch)
+      ));
+
       const counts: Record<string, number> = {};
-      for (const item of data || []) {
-        if (item.cliente_id) {
-          counts[item.cliente_id] = (counts[item.cliente_id] || 0) + 1;
+      for (const r of results) {
+        if (r.error) { console.error('Error fetching processo counts:', r.error); continue; }
+        for (const item of r.data || []) {
+          if (item.cliente_id) {
+            counts[item.cliente_id] = (counts[item.cliente_id] || 0) + 1;
+          }
         }
       }
       return counts;

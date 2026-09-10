@@ -14,11 +14,6 @@ import { LeadPerdidoDialog } from './LeadPerdidoDialog';
 import { useToast } from '@/hooks/use-toast';
 
 const LEADS_PER_PAGE = 30;
-// useIsaInsights/useLeadExtras fazem .in(...) com TODOS os IDs visíveis no
-// Board de uma vez (sem paginação interna) — acima disso a URL da consulta
-// fica grande demais e falha com "Failed to fetch". Ver comentário no
-// useState de viewMode acima.
-const BOARD_SAFE_LIMIT = 200;
 
 const PIPELINE_STAGES: { status: LeadStatus; label: string }[] = [
   { status: 'Lead Frio', label: 'Lead Frio' },
@@ -48,14 +43,11 @@ export function LeadsTableView() {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   // "board" (Kanban) ignora a paginação de propósito — precisa ver todos os
-  // leads filtrados pra classificar em colunas — mas isso também dispara
-  // useIsaInsights/useLeadExtras com TODOS os IDs de uma vez (.in() com
-  // milhares de UUIDs vira uma URL grande demais e falha com "Failed to
-  // fetch"; useLeadExtras ainda arrisca inserir um alerta por lead num loop).
-  // "board" virando o padrão do Figma expôs isso na primeira visita de
-  // qualquer usuário — mantido "cards" como padrão até esses hooks
-  // suportarem uma lista grande sem paginar internamente.
-  const [viewMode, setViewMode] = useState<ViewMode>('cards');
+  // leads filtrados pra classificar em colunas. Padrão do Figma. Os hooks
+  // que buscam dado extra por lead (useIsaInsights, useLeadExtras,
+  // useLeadsProcessoCounts) paginam o .in(...) internamente em lotes, então
+  // aguentam a pipeline inteira sem estourar o limite de tamanho da URL.
+  const [viewMode, setViewMode] = useState<ViewMode>('board');
   const [currentPage, setCurrentPage] = useState(1);
 
   const { countBentesRamos, countTrafego } = useMemo(() => {
@@ -223,17 +215,6 @@ export function LeadsTableView() {
       ) : viewMode === 'list' ? (
         <div className="flex-1 overflow-hidden px-4 sm:px-8 py-5">
           <LeadsDataTable leads={paginatedLeads} onLeadClick={handleLeadClick} onMoveStage={handleMoveStage} allStages={PIPELINE_STAGES} />
-        </div>
-      ) : filteredLeads.length > BOARD_SAFE_LIMIT ? (
-        <div className="flex-1 flex items-center justify-center px-4 sm:px-8 py-5">
-          <div className="text-center max-w-md">
-            <p className="text-sm font-medium text-[#29201e]">Muitos leads pra mostrar no Board de uma vez</p>
-            <p className="text-xs text-[#6e5e5a] mt-1.5">
-              O Board carrega detalhes extras (insights da Isa, agendamentos) para cada lead visível.
-              Com {filteredLeads.length} leads isso pode falhar. Filtre por uma etapa acima ou busque
-              por nome/telefone pra reduzir a lista, ou use a visão "Cards"/"Lista".
-            </p>
-          </div>
         </div>
       ) : (
         <div className="flex-1 min-h-0 overflow-auto px-4 sm:px-8 py-5">
