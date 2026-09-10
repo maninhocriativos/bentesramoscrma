@@ -3,6 +3,7 @@
 // Layout redesenhado a partir do Figma real (SISTEMA-BENTES-E-RAMOS, nodes
 // peticoes-dashboard-desktop / nova-peticao-modal-desktop, 2026-09-10).
 import { useState, useMemo, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus, Search, MoreHorizontal, Eye, Copy, Archive, Trash2,
@@ -90,10 +91,10 @@ function NovaPeticaoModal({
 
   return (
     <Dialog open={open} onOpenChange={v => !v && handleClose()}>
-      <DialogContent hideCloseButton className="max-w-[600px] p-8 gap-6 rounded-[20px] border-0 shadow-2xl">
-        <div className="flex items-center justify-between">
-          <h2 className="text-[22px] text-[#29201e]">{step === 1 ? 'Selecione a categoria jurídica' : selectedAction?.nome}</h2>
-          <button onClick={handleClose} className="text-[#6e5e5a] hover:text-[#29201e] transition-colors"><X className="h-[18px] w-[18px]" /></button>
+      <DialogContent hideCloseButton className="max-w-[600px] w-[calc(100vw-2rem)] sm:w-full max-h-[85vh] overflow-y-auto p-5 sm:p-8 gap-5 sm:gap-6 rounded-2xl sm:rounded-[20px] border-0 shadow-2xl">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg sm:text-[22px] text-[#29201e] truncate">{step === 1 ? 'Selecione a categoria jurídica' : selectedAction?.nome}</h2>
+          <button onClick={handleClose} className="shrink-0 text-[#6e5e5a] hover:text-[#29201e] transition-colors"><X className="h-[18px] w-[18px]" /></button>
         </div>
 
         <div className="flex items-center gap-4">
@@ -193,7 +194,7 @@ function ModelsSidePanel({
   }, [visible]);
 
   return (
-    <div className="flex flex-col gap-4 rounded-2xl border border-[#efebe4] bg-white p-5 w-[300px] shrink-0">
+    <div className="flex flex-col gap-4 rounded-2xl border border-[#efebe4] bg-white p-5 w-full xl:w-[300px] xl:shrink-0">
       <div>
         <h2 className="text-base text-[#29201e]">Biblioteca de Modelos</h2>
         <p className="text-[13px] text-[#6e5e5a] mt-0.5">{totalModels} {totalModels === 1 ? 'modelo disponível' : 'modelos disponíveis'} em {actionTypes.length} {actionTypes.length === 1 ? 'categoria' : 'categorias'}</p>
@@ -292,12 +293,12 @@ export default function PeticoesPage() {
   return (
     <>
       <div className="flex flex-col h-full bg-[#f9f6f0] relative">
-        <div className="bg-white border-b border-[#efebe4] px-6 sm:px-10 py-5 flex items-center justify-between shrink-0">
-          <div>
-            <h1 className="text-2xl text-[#29201e]">Gerador de Petições</h1>
-            <p className="text-sm text-[#6e5e5a] mt-1">Crie e gerencie suas petições iniciais de forma automatizada</p>
+        <div className="bg-white border-b border-[#efebe4] px-4 sm:px-10 py-4 sm:py-5 flex items-center justify-between gap-3 shrink-0">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl text-[#29201e] truncate">Gerador de Petições</h1>
+            <p className="hidden sm:block text-sm text-[#6e5e5a] mt-1">Crie e gerencie suas petições iniciais de forma automatizada</p>
           </div>
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border bg-[#dcfce7] border-[#15803d] text-[#15803d]">
               <span className="h-2 w-2 rounded-full bg-[#22c55e]" />
               Google Drive Conectado
@@ -315,7 +316,7 @@ export default function PeticoesPage() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto px-6 sm:px-10 py-6">
+        <div className="flex-1 overflow-auto px-4 sm:px-10 pt-4 sm:pt-6 pb-36 sm:pb-6">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
             {STAT_ITEMS.map(s => {
               const isActive = statusFilter === s.filter;
@@ -333,8 +334,8 @@ export default function PeticoesPage() {
             })}
           </div>
 
-          <div className="flex gap-6 items-start">
-            <div className="flex-1 min-w-0 space-y-4">
+          <div className="flex flex-col xl:flex-row gap-6 items-start">
+            <div className="flex-1 min-w-0 w-full space-y-4">
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="relative w-full sm:w-[280px]">
                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-[#6e5e5a]" />
@@ -351,7 +352,38 @@ export default function PeticoesPage() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-[#efebe4] bg-white overflow-hidden">
+              {/* Lista em cards no mobile (sem scroll horizontal de tabela) */}
+              <div className="sm:hidden space-y-2">
+                {loading ? (
+                  Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-2xl" />)
+                ) : filtered.length === 0 ? (
+                  <div className="rounded-2xl border border-[#efebe4] bg-white text-center py-16">
+                    <div className="h-14 w-14 rounded-2xl bg-[#f5efe6] flex items-center justify-center mx-auto mb-3"><Scale className="h-7 w-7 text-[#6e5e5a]/30" /></div>
+                    <p className="text-sm font-semibold text-[#29201e]">{petitions.length === 0 ? 'Nenhuma petição ainda' : 'Nenhum resultado'}</p>
+                    <p className="text-xs text-[#6e5e5a] mt-1">{petitions.length === 0 ? 'Toque em "Nova Petição" para começar' : 'Tente ajustar os filtros'}</p>
+                  </div>
+                ) : filtered.map(p => {
+                  const sc = STATUS[p.status] ?? STATUS.draft;
+                  return (
+                    <button key={p.id} onClick={() => handleOpen(p.id, p.status)}
+                      className="w-full text-left flex flex-col gap-2 p-3.5 rounded-2xl border border-[#efebe4] bg-white active:bg-[#f5efe6] transition-colors">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-[#29201e] truncate">{p.action_types?.nome ?? '—'}</p>
+                          {p.petition_models?.nome && <p className="text-xs text-[#6e5e5a] truncate">{p.petition_models.nome}</p>}
+                        </div>
+                        <span className="shrink-0 inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold" style={{ background: sc.bg, color: sc.text }}>{sc.label}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 text-xs text-[#6e5e5a]">
+                        <span className="truncate">{getClientName(p)}</span>
+                        <span className="shrink-0">{format(new Date(p.updated_at), "dd/MM HH:mm", { locale: ptBR })}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="hidden sm:block rounded-2xl border border-[#efebe4] bg-white overflow-hidden">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-[#f5efe6] border-b border-[#efebe4] hover:bg-[#f5efe6]">
@@ -418,17 +450,25 @@ export default function PeticoesPage() {
               </div>
             </div>
 
-            <div className="hidden xl:block">
+            <div className="w-full xl:w-auto">
               <ModelsSidePanel actionTypes={actionTypes} getModelsForAction={getModelsForAction} onSelectModel={(actionId, modelId) => navigate(`/peticoes/nova?action=${actionId}&model=${modelId}`)} />
             </div>
           </div>
         </div>
 
-        <button onClick={() => setModalOpen(true)}
-          className="absolute bottom-24 right-10 h-12 px-6 rounded-full bg-[#3e2f2b] hover:bg-[#2d211d] text-white flex items-center gap-2 font-semibold text-sm shadow-lg transition-colors">
-          <Plus className="h-4 w-4" /> Nova Petição
-        </button>
       </div>
+
+      {/* Portal: PageTransition (ancestor) aplica CSS transform, o que vira o
+          containing block de qualquer position:fixed dentro dela — o botão
+          "flutuante" ficaria preso à altura do conteúdo, não da viewport.
+          Renderiza direto no body pra escapar desse contexto. */}
+      {createPortal(
+        <button onClick={() => setModalOpen(true)}
+          className="fixed z-40 bottom-[calc(4.5rem+env(safe-area-inset-bottom)+0.75rem)] right-4 sm:bottom-24 sm:right-10 h-12 px-6 rounded-full bg-[#3e2f2b] hover:bg-[#2d211d] text-white flex items-center gap-2 font-semibold text-sm shadow-lg transition-colors">
+          <Plus className="h-4 w-4" /> Nova Petição
+        </button>,
+        document.body
+      )}
 
       <NovaPeticaoModal open={modalOpen} onClose={() => setModalOpen(false)} actionTypes={actionTypes} getModelsForAction={getModelsForAction}
         onConfirm={(actionId, modelId) => navigate(`/peticoes/nova?action=${actionId}&model=${modelId}`)} />
