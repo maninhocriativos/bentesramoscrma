@@ -109,9 +109,11 @@ export function LeadsTableView() {
 
   const totalPages = Math.max(1, Math.ceil(filteredLeads.length / LEADS_PER_PAGE));
   const safePage = Math.min(currentPage, totalPages);
-  const paginatedLeads = viewMode === 'board'
-    ? filteredLeads // Board shows all (kanban needs all leads)
-    : filteredLeads.slice((safePage - 1) * LEADS_PER_PAGE, safePage * LEADS_PER_PAGE);
+  // Board (Kanban) pagina igual Cards/Lista — 30 leads por vez, mesmos
+  // botões Anterior/Próxima. As pílulas de etapa continuam mostrando a
+  // contagem REAL de cada etapa (calculada sobre todos os leads, não só
+  // a página atual); só os cards renderizados é que ficam limitados.
+  const paginatedLeads = filteredLeads.slice((safePage - 1) * LEADS_PER_PAGE, safePage * LEADS_PER_PAGE);
 
   const origens = useMemo(() => {
     const set = new Set<string>();
@@ -198,7 +200,7 @@ export function LeadsTableView() {
       />
 
       <div className="px-4 sm:px-8 py-3 border-b border-[#efebe4] bg-white shrink-0">
-        <PipelineStagePills stages={stagesWithCounts} activeStage={activeStage} onStageChange={setActiveStage} />
+        <PipelineStagePills stages={stagesWithCounts} activeStage={activeStage} onStageChange={(s) => { setActiveStage(s); resetPage(); }} />
       </div>
 
       {/* Content */}
@@ -218,12 +220,12 @@ export function LeadsTableView() {
         </div>
       ) : (
         <div className="flex-1 min-h-0 overflow-auto px-4 sm:px-8 py-5">
-          <KanbanBoard leads={filteredLeads} onLeadClick={handleLeadClick} activeStage={activeStage} />
+          <KanbanBoard leads={paginatedLeads} onLeadClick={handleLeadClick} activeStage={activeStage} />
         </div>
       )}
 
       {/* Pagination */}
-      {viewMode !== 'board' && totalPages > 1 && (
+      {totalPages > 1 && (
         <div className="flex items-center justify-between px-4 sm:px-8 py-3 border-t border-[#efebe4] bg-white shrink-0">
           <span className="text-xs text-muted-foreground">
             Mostrando {((safePage - 1) * LEADS_PER_PAGE) + 1}–{Math.min(safePage * LEADS_PER_PAGE, filteredLeads.length)} de {filteredLeads.length}
