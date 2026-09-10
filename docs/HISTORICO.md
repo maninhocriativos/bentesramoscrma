@@ -1075,6 +1075,22 @@ A partir daqui cada entrada tem: **o que**, **por quê / causa raiz**, **commit(
   dado real ficava fora da tela sem rolar manualmente. Corrigido:
   quando uma pílula específica está ativa, o Board renderiza só
   aquela coluna.
+- Usuário mandou print reportando "tá cortando tudo" (texto cortado
+  na borda direita da tela). Investigado ao vivo via DOM: não era bug
+  de truncamento — `scrollWidth === clientWidth` em todos os nomes
+  checados, o `text-overflow: ellipsis` já funcionava certo. A coluna
+  só estava posicionada exatamente na borda da viewport ao rolar
+  livremente; sem alinhamento, o scroll podia parar com uma coluna
+  pela metade. Corrigido com `scroll-snap-type: x mandatory` — o board
+  sempre para alinhado no início de uma coluna.
+- **"Não colocou a paginação nos leads"** — esclarecido com o usuário
+  (pergunta direta, pra não errar de novo): ele quer o layout do Board
+  (Kanban, igual Figma) só que **paginado como Cards/Lista** (30 por
+  vez, com Anterior/Próxima), não carregando os 3566+ leads de uma
+  vez. Unificado: as 3 visões agora usam a mesma `paginatedLeads`. As
+  pílulas de etapa continuam com a contagem REAL (sobre todos os
+  leads); só os cards renderizados no Board ficam limitados a 30 por
+  página. Trocar de pílula reseta pra página 1.
 
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
