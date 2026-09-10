@@ -1121,6 +1121,59 @@ A partir daqui cada entrada tem: **o que**, **por quê / causa raiz**, **commit(
   filtrando por `created_at` do lead. Opcional — sem período
   selecionado, mantém o comportamento de antes.
 
+### 2026-09-10 (mesmo dia, sessão seguinte) — Isa passa a postar no grupo da equipe: e-mail de prazos, resumo diário, memória do grupo
+
+Pedido do usuário: e-mails da Isa precisam ter conteúdo real e acionável, e
+ela precisa "mandar um resumo do atendimento de cada pessoa no grupo e como
+eles podem melhorar", além de cobrir audiências e saber se a equipe já ligou
+pro cliente.
+
+- **`email_prazos_proximos`**: task já existia no `isa-scheduler` mas nunca
+  tinha cron — só rodava via chamada manual/`task:"all"`. Agendado
+  `0 11 * * 1-5` (7h Manaus, dias úteis), mesmo horário do e-mail de agenda
+  do dia (migration `20260910210000`).
+- **`resumo_atendimento_equipe`** (nova task): resumo diário por pessoa
+  (leads atendidos, sem retorno +7d, conversões do dia, tempo médio de
+  resposta) + comentário gerado por IA (gpt-4o-mini) com dica de melhoria,
+  postado no grupo "Bentes Ramos  Comercial" (nome real tem espaço duplo!)
+  via Z-API, instância "Bentes Ramos Trafego" adicionada como membro do
+  grupo pelo usuário. Agendado `0 22 * * 1-5` (18h Manaus, migration
+  `20260910213000`). Envio direto à API do Z-API (`enviarTextoGrupo`),
+  sem passar pelo `sendText()`/`normalizePhone()` compartilhado — esses
+  quebram um ID de grupo (não é telefone).
+  - Bug achado e corrigido ao vivo: `buscarGroupId()` comparava o nome do
+    grupo por igualdade exata; o nome real tem espaço duplo, então nunca
+    batia. Corrigido pra normalizar espaços antes de comparar.
+  - Testado ao vivo com dados reais de produção: 5 pessoas (Amanda,
+    Anelize, Gabriel, Andrey, THIAGO), mensagem de apresentação da Isa
+    enviada no grupo, depois o resumo do dia enviado com sucesso
+    (`enviado:true`).
+- **Memória do grupo (`isa-memoria`)**: usuário pediu pra Isa "ler" o que a
+  equipe escreve no grupo (ex: "já liguei pro Fulano confirmando a
+  audiência") e guardar isso numa "memória específica" — decidiu usar
+  Cloudflare em vez de uma tabela no Supabase. Novo Worker Cloudflare + D1
+  (`d:/crm-bentes_ramos/isa-memoria`, projeto git próprio sem remoto no
+  GitHub, mesmo padrão de `peticoes-cloudflare`/`portal-cliente`), rotas
+  `GET`/`POST /mensagens` autenticadas por `X-Isa-Secret`.
+  - `zapi-webhook` já ignorava toda mensagem de grupo de propósito (nunca
+    vira lead) — mantido assim pra qualquer outro grupo; só o grupo da
+    equipe (casado pelo prefixo estável do ID do grupo, não pelo nome —
+    mais robusto que o bug de espaço duplo acima) tem o texto encaminhado
+    pro Worker, best-effort, sem afetar o fluxo normal de lead.
+  - `isa-scheduler` cruza audiências dos próximos 3 dias (tarefas +
+    compromissos com "audiênc" no título) com as mensagens recentes do
+    grupo via IA (gpt-4o-mini), e adiciona uma seção "já confirmaram com o
+    cliente?" no resumo diário das 18h.
+  - Testado ao vivo ponta a ponta: mensagem sintética via webhook → gravada
+    no D1 → lida pelo `isa-scheduler` → uma audiência real (2026-09-11,
+    cliente "Anderson de Jesus Andrade") apareceu corretamente na seção,
+    marcada "sem confirmação" (nenhuma mensagem real no grupo ainda). Dois
+    bugs de formatação achados e corrigidos nesse teste: horário vinha com
+    segundos (`06:40:00` → `06:40`) e nome de cliente cadastrado
+    manualmente às vezes vem com telefone colado
+    (`processos.nome_cliente`) — sufixo removido pro resumo ficar limpo.
+  - Credenciais em `docs/SECRETS.local.md` seção 2.5.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
