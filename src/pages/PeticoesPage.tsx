@@ -29,6 +29,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { NotificacoesBell } from '@/components/NotificacoesBell';
 import { useAuth } from '@/hooks/useAuth';
 import { usePerfil } from '@/hooks/usePerfil';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { LogOut } from 'lucide-react';
 
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -89,15 +90,23 @@ function NovaPeticaoModal({
 
   const actionModels = selectedAction ? getModelsForAction(selectedAction.id) : [];
 
+  const isMobile = useIsMobile();
+
   return (
     <Dialog open={open} onOpenChange={v => !v && handleClose()}>
-      <DialogContent hideCloseButton className="max-w-[600px] w-[calc(100vw-2rem)] sm:w-full max-h-[85vh] overflow-y-auto p-5 sm:p-8 gap-5 sm:gap-6 rounded-2xl sm:rounded-[20px] border-0 shadow-2xl">
-        <div className="flex items-center justify-between gap-3">
+      {/* Mobile: sheet full-screen (estilo do Figma nova-peticao-mobile). O
+          componente base do Dialog fixa left-1/2/top-1/2/translate via
+          className; só um `style` inline (maior especificidade) sobrepõe
+          isso sem precisar mexer no dialog.tsx compartilhado por todo o app. */}
+      <DialogContent hideCloseButton
+        style={isMobile ? { top: 0, left: 0, transform: 'none', width: '100vw', height: '100dvh', maxHeight: '100dvh', borderRadius: 0 } : undefined}
+        className="max-w-[600px] w-[calc(100vw-2rem)] sm:w-full max-h-[85vh] sm:max-h-[85vh] flex flex-col p-0 gap-0 rounded-2xl sm:rounded-[20px] border-0 shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between gap-3 px-5 sm:px-8 pt-5 sm:pt-8 pb-4 sm:pb-0 shrink-0">
           <h2 className="text-lg sm:text-[22px] text-[#29201e] truncate">{step === 1 ? 'Selecione a categoria jurídica' : selectedAction?.nome}</h2>
           <button onClick={handleClose} className="shrink-0 text-[#6e5e5a] hover:text-[#29201e] transition-colors"><X className="h-[18px] w-[18px]" /></button>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 px-5 sm:px-8 pb-4 sm:py-6 shrink-0">
           {[{ n: 1, l: 'Tipo de Ação' }, { n: 2, l: 'Modelo' }].map((s, i) => (
             <div key={s.n} className="flex items-center gap-2">
               <div className={cn('h-6 w-6 rounded-xl flex items-center justify-center text-xs font-semibold',
@@ -110,62 +119,64 @@ function NovaPeticaoModal({
           ))}
         </div>
 
-        {step === 1 ? (
-          <>
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-[#6e5e5a]" />
-              <Input autoFocus placeholder="Buscar tipo de ação..." value={search} onChange={e => setSearch(e.target.value)} className="pl-11 h-11 rounded-xl border-[#efebe4]" />
-            </div>
-            <div className="w-full max-h-[340px] overflow-y-auto space-y-2">
-              {filteredActions.length === 0 ? (
-                <div className="text-center py-12 text-[#6e5e5a]">
-                  <Scale className="h-10 w-10 mx-auto mb-3 opacity-15" />
-                  <p className="text-sm font-medium">Nenhum tipo encontrado</p>
-                </div>
-              ) : filteredActions.map(action => {
-                const count = getModelsForAction(action.id).length;
-                return (
-                  <button key={action.id} disabled={count === 0} onClick={() => pickAction(action)}
-                    className="group w-full flex items-center gap-4 p-5 rounded-2xl border border-[#efebe4] hover:border-[#c5a47e] hover:bg-[#f5efe6] transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
-                    <div className="h-11 w-11 rounded-[10px] bg-[#3e2f2b] flex items-center justify-center shrink-0"><ActionIcon icone={action.icone} className="h-5 w-5 text-white" /></div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold text-base text-[#29201e]">{action.nome}</p>
-                      {action.descricao && <p className="text-[13px] text-[#6e5e5a] mt-0.5 line-clamp-2">{action.descricao}</p>}
-                    </div>
-                    <span className="px-2.5 py-1 rounded-full bg-[#c5a47e] text-white text-[11px] font-semibold shrink-0">{count} {count === 1 ? 'Modelo' : 'Modelos'}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </>
-        ) : (
-          <div className="w-full max-h-[340px] overflow-y-auto space-y-2">
-            {actionModels.length === 0 ? (
-              <div className="text-center py-12 text-[#6e5e5a]">
-                <FolderOpen className="h-10 w-10 mx-auto mb-3 opacity-15" />
-                <p className="text-sm font-medium">Nenhum modelo disponível</p>
+        <div className="flex-1 min-h-0 overflow-y-auto px-5 sm:px-8">
+          {step === 1 ? (
+            <>
+              <div className="relative mb-4">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-[#6e5e5a]" />
+                <Input autoFocus placeholder="Buscar tipo de ação..." value={search} onChange={e => setSearch(e.target.value)} className="pl-11 h-11 rounded-xl border-[#efebe4]" />
               </div>
-            ) : actionModels.map(model => (
-              <button key={model.id} onClick={() => pickModel(model)}
-                className="group w-full flex items-center gap-4 p-4 rounded-2xl border border-[#efebe4] hover:border-[#c5a47e] hover:bg-[#f5efe6] transition-colors text-left">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-bold text-sm text-[#29201e]">{model.nome}</span>
-                    {model.is_default && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#c5a47e]/15 text-[#8a6d47] text-[10px] font-bold"><Sparkles className="h-2.5 w-2.5" /> Padrão</span>}
+              <div className="w-full space-y-2 pb-4">
+                {filteredActions.length === 0 ? (
+                  <div className="text-center py-12 text-[#6e5e5a]">
+                    <Scale className="h-10 w-10 mx-auto mb-3 opacity-15" />
+                    <p className="text-sm font-medium">Nenhum tipo encontrado</p>
                   </div>
-                  {model.descricao && <p className="text-xs text-[#6e5e5a] mt-0.5 line-clamp-2">{model.descricao}</p>}
+                ) : filteredActions.map(action => {
+                  const count = getModelsForAction(action.id).length;
+                  return (
+                    <button key={action.id} disabled={count === 0} onClick={() => pickAction(action)}
+                      className="group w-full flex items-center gap-4 p-4 sm:p-5 rounded-2xl border border-[#efebe4] hover:border-[#c5a47e] hover:bg-[#f5efe6] transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
+                      <div className="h-11 w-11 rounded-[10px] bg-[#3e2f2b] flex items-center justify-center shrink-0"><ActionIcon icone={action.icone} className="h-5 w-5 text-white" /></div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-base text-[#29201e]">{action.nome}</p>
+                        {action.descricao && <p className="text-[13px] text-[#6e5e5a] mt-0.5 line-clamp-2">{action.descricao}</p>}
+                      </div>
+                      <span className="px-2.5 py-1 rounded-full bg-[#c5a47e] text-white text-[11px] font-semibold shrink-0">{count} {count === 1 ? 'Modelo' : 'Modelos'}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <div className="w-full space-y-2 pb-4">
+              {actionModels.length === 0 ? (
+                <div className="text-center py-12 text-[#6e5e5a]">
+                  <FolderOpen className="h-10 w-10 mx-auto mb-3 opacity-15" />
+                  <p className="text-sm font-medium">Nenhum modelo disponível</p>
                 </div>
-                <ChevronRight className="h-4 w-4 text-[#6e5e5a] group-hover:text-[#3e2f2b] transition-colors shrink-0" />
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div className="flex justify-end gap-3 w-full">
-          {step === 2 && (
-            <button onClick={() => { setStep(1); setSearch(''); }} className="px-6 py-3 rounded-xl border border-[#efebe4] text-sm font-semibold text-[#6e5e5a] hover:bg-[#f5efe6] transition-colors">Voltar</button>
+              ) : actionModels.map(model => (
+                <button key={model.id} onClick={() => pickModel(model)}
+                  className="group w-full flex items-center gap-4 p-4 rounded-2xl border border-[#efebe4] hover:border-[#c5a47e] hover:bg-[#f5efe6] transition-colors text-left">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-sm text-[#29201e]">{model.nome}</span>
+                      {model.is_default && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#c5a47e]/15 text-[#8a6d47] text-[10px] font-bold"><Sparkles className="h-2.5 w-2.5" /> Padrão</span>}
+                    </div>
+                    {model.descricao && <p className="text-xs text-[#6e5e5a] mt-0.5 line-clamp-2">{model.descricao}</p>}
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-[#6e5e5a] group-hover:text-[#3e2f2b] transition-colors shrink-0" />
+                </button>
+              ))}
+            </div>
           )}
-          <button onClick={handleClose} className="px-6 py-3 rounded-xl border border-[#efebe4] text-sm font-semibold text-[#6e5e5a] hover:bg-[#f5efe6] transition-colors">Cancelar</button>
+        </div>
+
+        <div className="flex items-center justify-between sm:justify-end gap-3 w-full border-t border-[#efebe4] sm:border-t-0 px-5 sm:px-8 py-4 sm:py-6 shrink-0">
+          {step === 2 && (
+            <button onClick={() => { setStep(1); setSearch(''); }} className="px-5 sm:px-6 py-2.5 sm:py-3 rounded-xl border border-[#efebe4] text-sm font-semibold text-[#6e5e5a] hover:bg-[#f5efe6] transition-colors">Voltar</button>
+          )}
+          <button onClick={handleClose} className={cn('px-5 sm:px-6 py-2.5 sm:py-3 rounded-xl border border-[#efebe4] text-sm font-semibold text-[#6e5e5a] hover:bg-[#f5efe6] transition-colors', step === 1 && 'ml-auto')}>Cancelar</button>
         </div>
       </DialogContent>
     </Dialog>
