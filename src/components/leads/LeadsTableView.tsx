@@ -218,7 +218,7 @@ export function LeadsTableView() {
         </div>
       ) : (
         <div className="flex-1 min-h-0 overflow-auto px-4 sm:px-8 py-5">
-          <KanbanBoard leads={filteredLeads} onLeadClick={handleLeadClick} />
+          <KanbanBoard leads={filteredLeads} onLeadClick={handleLeadClick} activeStage={activeStage} />
         </div>
       )}
 

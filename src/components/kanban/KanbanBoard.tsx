@@ -13,6 +13,11 @@ import { LeadPerdidoDialog } from '@/components/leads/LeadPerdidoDialog';
 interface KanbanBoardProps {
   leads: Lead[];
   onLeadClick: (lead: Lead) => void;
+  // Quando uma pílula de etapa específica está ativa, `leads` já vem só com
+  // aquela etapa — sem isso, o board continuava renderizando as 8 colunas
+  // (7 delas sempre vazias) e a única coluna com dado real ficava fora da
+  // tela, parecendo que "sumiu" o filtro.
+  activeStage?: string;
 }
 
 export const STATUSES: LeadStatus[] = [
@@ -26,7 +31,7 @@ export const STATUSES: LeadStatus[] = [
   'Perdido',
 ];
 
-export function KanbanBoard({ leads, onLeadClick }: KanbanBoardProps) {
+export function KanbanBoard({ leads, onLeadClick, activeStage }: KanbanBoardProps) {
   const { updateLeadStatus, markLeadAsLost } = useLeads();
   const { toast } = useToast();
   const { sendConversionEvent } = useMetaCapi();
@@ -135,13 +140,17 @@ export function KanbanBoard({ leads, onLeadClick }: KanbanBoardProps) {
     );
   }
 
+  const visibleStatuses = activeStage && activeStage !== 'all'
+    ? STATUSES.filter(s => s === activeStage)
+    : STATUSES;
+
   return (
     <>
       <div
         className="flex flex-row gap-4 w-full min-h-0 h-full overflow-x-auto pb-3"
         onDragLeave={handleDragLeave}
       >
-        {STATUSES.map((status) => (
+        {visibleStatuses.map((status) => (
           <div
             key={status}
             onDragEnter={() => handleDragEnter(status)}

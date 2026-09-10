@@ -2,7 +2,6 @@ import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Lead } from '@/types/leads';
 import { Phone, Clock, Star, Flame, Sparkles, Target, FileSignature, HardDrive, CalendarClock } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { STAGE_CFG } from '@/components/leads/PipelineStagePills';
 
 const fmtCurrency = (v: number | null) => {
@@ -36,8 +35,6 @@ function SentimentIcon({ sentimento }: { sentimento?: string | null }) {
 }
 
 export function LeadCard({ lead, onClick, isDragging, isaInsight, leadExtra }: LeadCardProps) {
-  const navigate = useNavigate();
-
   const lastInteraction = lead.updated_at
     ? formatDistanceToNow(new Date(lead.updated_at), { addSuffix: false, locale: ptBR })
     : formatDistanceToNow(new Date(lead.created_at), { addSuffix: false, locale: ptBR });
@@ -48,13 +45,9 @@ export function LeadCard({ lead, onClick, isDragging, isaInsight, leadExtra }: L
   const urgente      = isaInsight?.urgencia === 'urgente' || isaInsight?.urgencia === 'alta';
   const cfg          = STAGE_CFG[lead.status || 'Lead Frio'] || STAGE_CFG['Lead Frio'];
 
-  const handleClick = () => {
-    navigate(`/chat?lead_id=${lead.id}`);
-  };
-
   return (
     <div
-      onClick={handleClick}
+      onClick={onClick}
       className="bg-white border border-[#efebe4] rounded-2xl p-4 flex flex-col gap-2.5 cursor-grab transition-shadow hover:shadow-[0_2px_8px_rgba(62,47,43,0.08)]"
       style={{ boxShadow: isDragging ? '0 8px 24px rgba(0,0,0,0.15)' : '0 2px 3px rgba(62,47,43,0.04)', opacity: isDragging ? 0.85 : 1 }}
     >
