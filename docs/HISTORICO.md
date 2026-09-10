@@ -1002,6 +1002,38 @@ A partir daqui cada entrada tem: **o que**, **por quê / causa raiz**, **commit(
   detalhe do lead (`LeadDetailModal.tsx`, 907 linhas) não tocado;
   versão mobile da pipeline pendente.
 
+### 2026-09-10 (mesmo dia, sessão seguinte) — 2 bugs achados testando a Pipeline de Leads ao vivo
+- Usuário reportou fonte errada no título ("mudou a fonte") e o mesmo
+  erro que eu já tinha visto em teste automatizado, agora confirmado ao
+  vivo: `Erro ao carregar leads: TypeError: Failed to fetch`.
+- **Fonte**: os títulos do cabeçalho e dos 2 modais tinham
+  `style={{ fontFamily: 'Lora, serif' }}` inline (copiado do Figma) —
+  o projeto não carrega a fonte Lora, então caía num serif genérico do
+  navegador, destoando do resto do app (Inter/Poppins). Removido,
+  volta a usar a fonte padrão do projeto.
+- **Erro de fetch — raiz real, diferente do que eu tinha suposto
+  inicialmente**: não é específico do Board. `fetchAllPaginated`
+  (usado por `useLeads`/`useProcessos`/`useDocumentos`/`useTarefas`)
+  dispara até 4 requisições em paralelo pra paginar tabelas grandes —
+  com leads já passando de 3500 linhas, uma falha de rede transitória
+  numa dessas páginas (`TypeError: Failed to fetch`, sem resposta do
+  servidor — não é erro do Postgres) derrubava a busca inteira sem
+  tentar de novo. Adicionado retry com backoff (até 3 tentativas) só
+  pra esse tipo de erro de rede.
+- **Achado no caminho, mais sério**: "Visual Board" como padrão
+  (decisão da sessão anterior, pra bater com o Figma) carrega TODOS os
+  leads filtrados de uma vez, sem paginar — `useIsaInsights`/
+  `useLeadExtras` fazem `.in(lead_id, [...])` com milhares de IDs (URL
+  grande demais) e `useLeadExtras` ainda roda um loop que pode inserir
+  um alerta pra Isa por lead sem agendamento. Isso já existia (o Board
+  sempre ignorou a paginação), mas só era alcançado manualmente; virar
+  padrão expôs isso pra todo mundo na primeira visita. **Revertido**
+  o padrão pra "Cards" (sempre paginado, seguro) e adicionado aviso
+  quando o usuário abre o Board com mais de 200 leads filtrados, em
+  vez de travar. Corrigir `useIsaInsights`/`useLeadExtras` pra escalar
+  direito (paginar o `.in()`, revisar a lógica de criação de alerta em
+  massa) fica pendente — item novo na lista de pendências.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
@@ -1123,6 +1155,16 @@ Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a dat
     concluídos em 09-10 (ver linha do tempo). Falta: vistas "Cards" e
     "Lista" (visual antigo, sem frame no Figma), `LeadDetailModal.tsx`
     e versão mobile.
+36. **`useIsaInsights`/`useLeadExtras` não escalam pra pipeline inteira**
+    (achado em 09-10 testando o Board da Pipeline de Leads ao vivo):
+    fazem `.in(lead_id, [...])` com TODOS os IDs recebidos de uma vez,
+    sem paginar — com milhares de leads a URL fica grande demais e
+    falha. `useLeadExtras` também roda um loop que pode inserir um
+    alerta pra Isa por lead sem agendamento — em escala, risco de
+    inserir centenas de `system_events` de uma vez. Contido por ora
+    limitando o Board a 200 leads filtrados (ver `LeadsTableView.tsx`,
+    `BOARD_SAFE_LIMIT`); a correção de verdade (paginar o `.in()`,
+    revisar a lógica de alerta em massa) ainda não foi feita.
 
 **Em andamento (planos aprovados)**
 19. Contratos/Procuração via templates + ZapSign nativo — Fases 4–9
