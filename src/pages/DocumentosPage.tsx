@@ -5,9 +5,11 @@ import { usePerfil } from '@/hooks/usePerfil';
 import { DocumentoUploadModal } from '@/components/documentos/DocumentoUploadModal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -16,6 +18,7 @@ import {
   Loader2, Plus, RefreshCw, ExternalLink, Download,
   Cloud, HardDrive, ChevronRight, Home, FolderOpen,
   FileImage, FileSpreadsheet, FolderPlus, Eye, X, FolderInput, Trash2,
+  MoreVertical,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -33,6 +36,28 @@ interface DriveFile {
   thumbnailLink?: string;
 }
 interface Crumb { id: string; name: string; }
+
+// Classificação por tipo de arquivo (mime ou extensão) — usada pro ícone
+// colorido nas tabelas e pela pílula "Tipo" na aba local. Cores do design
+// (Figma SISTEMA-BENTES-E-RAMOS, tela "Gestão de Documentos", 2026-09-10).
+type FileCat = 'pdf' | 'doc' | 'image' | 'sheet' | 'other';
+
+function categorize(nameOrMime: string): FileCat {
+  const s = (nameOrMime || '').toLowerCase();
+  if (s.includes('pdf')) return 'pdf';
+  if (s.includes('sheet') || s.includes('excel') || /\.(xlsx?|csv)$/.test(s)) return 'sheet';
+  if (s.includes('image') || /\.(jpe?g|png|gif|webp|bmp)$/.test(s)) return 'image';
+  if (s.includes('word') || s.includes('document') || /\.(docx?|odt)$/.test(s)) return 'doc';
+  return 'other';
+}
+
+const FILE_CAT_STYLE: Record<FileCat, { icon: typeof FileText; iconBg: string; iconColor: string; pillBg: string; pillText: string; label: string }> = {
+  doc:   { icon: FileText,       iconBg: 'rgba(21,101,192,0.08)', iconColor: '#1565c0', pillBg: '#e8f0fe', pillText: '#1565c0', label: 'docx' },
+  pdf:   { icon: FileText,       iconBg: 'rgba(198,40,40,0.08)',  iconColor: '#c62828', pillBg: '#fdecea', pillText: '#c62828', label: 'pdf' },
+  image: { icon: FileImage,      iconBg: 'rgba(173,20,87,0.08)',  iconColor: '#ad1457', pillBg: '#fce4ec', pillText: '#ad1457', label: 'imagem' },
+  sheet: { icon: FileSpreadsheet, iconBg: 'rgba(46,125,50,0.08)', iconColor: '#2e7d32', pillBg: '#e8f5e9', pillText: '#2e7d32', label: 'planilha' },
+  other: { icon: File,           iconBg: '#f0eae1',               iconColor: '#6e5e5a', pillBg: '#f0eae1', pillText: '#6e5e5a', label: 'arquivo' },
+};
 
 export default function DocumentosPage() {
   const { canAccessSettings: isAdmin } = usePerfil();
@@ -113,9 +138,14 @@ export default function DocumentosPage() {
   };
   const goBack = () => { const b = [...breadcrumbs]; b.pop(); setBreadcrumbs(b); setCurrentFolderId(b.length > 0 ? b[b.length - 1].id : undefined); };
 
-  const openClientFolder = async () => {
-    if (!selectedClient) { toast.error('Selecione um cliente'); return; }
-    const c = leads.find(l => l.id === selectedClient);
+  // Aceita um id explícito (vindo do próprio onValueChange do Select) em vez
+  // de só ler `selectedClient` do state — evita abrir a pasta errada por
+  // causa do delay do setState (o Select já dispara a busca ao escolher,
+  // sem precisar de um botão "Abrir" separado).
+  const openClientFolder = async (clienteIdParam?: string) => {
+    const clienteId = clienteIdParam ?? selectedClient;
+    if (!clienteId) { toast.error('Selecione um cliente'); return; }
+    const c = leads.find(l => l.id === clienteId);
     if (!c?.nome) return;
     setIsOperating(true);
     try {
@@ -271,139 +301,118 @@ export default function DocumentosPage() {
   const files   = driveFiles.filter(f => f.mimeType !== 'application/vnd.google-apps.folder' && f.name.toLowerCase().includes(search.toLowerCase()));
   const localList = documentos.filter(d => d.nome.toLowerCase().includes(search.toLowerCase()) || d.tipo.toLowerCase().includes(search.toLowerCase()));
 
-  const FileIcon = ({ mime }: { mime: string }) => {
-    if (mime.includes('pdf')) return <FileText className="h-4 w-4 text-rose-400 shrink-0" />;
-    if (mime.includes('image')) return <FileImage className="h-4 w-4 text-sky-400 shrink-0" />;
-    if (mime.includes('sheet') || mime.includes('excel')) return <FileSpreadsheet className="h-4 w-4 text-emerald-400 shrink-0" />;
-    return <File className="h-4 w-4 text-muted-foreground/50 shrink-0" />;
-  };
-
   return (
     <>
-      <div className="flex flex-col h-full bg-background">
+      <div className="flex flex-col h-full bg-[#f9f6f0]">
 
-        {/* ══ HERO HEADER ══ */}
-        <div className="relative overflow-hidden border-b border-border/40">
-          {/* Subtle gradient background */}
-          <div className="absolute inset-0 bg-gradient-to-br from-[#3d2b1f]/8 via-transparent to-[#c9a96e]/5 pointer-events-none" />
-          <div className="absolute top-0 right-0 w-64 h-64 bg-[#c9a96e]/5 rounded-full blur-3xl pointer-events-none -translate-y-1/2 translate-x-1/4" />
+        {/* ══ HEADER ══ */}
+        <div className="bg-white border-b border-[#efebe4] px-6 sm:px-10 py-6 flex flex-wrap items-center justify-between gap-4 shrink-0">
+          <div>
+            <h1 className="text-2xl text-[#29201e]">Gestão de Documentos</h1>
+            <p className="text-sm text-[#6e5e5a] mt-1.5">
+              {checkingConn ? 'Verificando conexão...' : isConnected
+                ? 'Acesso compartilhado com o escritório'
+                : 'Gestão de documentos e arquivos do escritório'}
+            </p>
+          </div>
 
-          <div className="relative px-8 pt-7 pb-5">
-            {/* Title row */}
-            <div className="flex items-start justify-between gap-6 mb-6">
-              <div>
-                <div className="flex items-center gap-2.5 mb-1">
-                  <div className="h-7 w-1 rounded-full bg-[#c9a96e]" />
-                  <h1 className="text-2xl font-bold tracking-tight text-foreground">Documentos</h1>
-                </div>
-                <p className="text-sm text-muted-foreground ml-3.5 pl-0.5">
-                  {checkingConn ? 'Verificando conexão...' : isConnected
-                    ? '✦ Google Drive conectado · Acesso compartilhado com o escritório'
-                    : 'Gestão de documentos e arquivos do escritório'}
-                </p>
+          <div className="flex items-center gap-3">
+            {isAdmin && (
+              <button
+                onClick={async () => {
+                  const { data: { session } } = await supabase.auth.getSession();
+                  const h: Record<string, string> = { 'Content-Type': 'application/json' };
+                  if (session?.access_token) h['Authorization'] = `Bearer ${session.access_token}`;
+                  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-drive?action=get_auth_url`, { headers: h });
+                  const r = await res.json();
+                  if (r.authUrl) window.open(r.authUrl, 'Google Drive Auth', 'width=600,height=700');
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                  isConnected ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d] hover:bg-[#cdf5db]' : 'bg-[#f0eae1] border-[#efebe4] text-[#6e5e5a] hover:bg-[#e7e0d5]'
+                }`}
+              >
+                <span className={`h-2 w-2 rounded-full ${isConnected ? 'bg-[#22c55e]' : 'bg-[#6e5e5a]/50'}`} />
+                {isConnected ? 'Google Drive Conectado' : 'Conectar Drive'}
+              </button>
+            )}
+            {!isAdmin && isConnected && (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]">
+                <span className="h-2 w-2 rounded-full bg-[#22c55e]" />
+                Google Drive Conectado
               </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                {isAdmin && (
-                  <button
-                    onClick={async () => {
-                      const { data: { session } } = await supabase.auth.getSession();
-                      const h: Record<string, string> = { 'Content-Type': 'application/json' };
-                      if (session?.access_token) h['Authorization'] = `Bearer ${session.access_token}`;
-                      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-drive?action=get_auth_url`, { headers: h });
-                      const r = await res.json();
-                      if (r.authUrl) window.open(r.authUrl, 'Google Drive Auth', 'width=600,height=700');
-                    }}
-                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all ${isConnected ? 'border-emerald-500/30 bg-emerald-500/8 text-emerald-600 hover:bg-emerald-500/15' : 'border-border/50 bg-muted/40 text-muted-foreground hover:bg-muted/70'}`}
-                  >
-                    <span className={`h-1.5 w-1.5 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-muted-foreground/40'}`} />
-                    {isConnected ? 'Drive Conectado' : 'Conectar Drive'}
-                  </button>
-                )}
-                {!isAdmin && isConnected && (
-                  <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold border border-emerald-500/30 bg-emerald-500/8 text-emerald-600">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                    Drive Conectado
-                  </div>
-                )}
-                <Button
-                  onClick={() => setUploadModalOpen(true)}
-                  size="sm"
-                  className="h-9 px-4 rounded-xl gap-2 font-semibold bg-[#3d2b1f] hover:bg-[#2d1f16] text-white border-0 shadow-sm"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Novo Documento
-                </Button>
-              </div>
-            </div>
-
-            {/* Stats row */}
-            <div className="flex items-center gap-6 mb-5">
-              {[
-                { label: 'Pastas', value: folders.length || '—', show: activeTab === 'drive' && isConnected },
-                { label: 'Arquivos no Drive', value: files.length || '—', show: activeTab === 'drive' && isConnected },
-                { label: 'Documentos locais', value: documentos.length, show: true },
-              ].filter(s => s.show).map(s => (
-                <div key={s.label} className="flex items-baseline gap-1.5">
-                  <span className="text-lg font-bold text-foreground">{s.value}</span>
-                  <span className="text-xs text-muted-foreground">{s.label}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Tabs */}
-            <div className="flex gap-0 border-b border-transparent">
-              {[
-                { id: 'drive', label: 'Google Drive', icon: Cloud },
-                { id: 'local', label: 'Armazenamento Local', icon: HardDrive },
-              ].map(t => (
-                <button
-                  key={t.id}
-                  onClick={() => setActiveTab(t.id as any)}
-                  className={`flex items-center gap-2 px-4 pb-3 pt-1 text-sm font-medium border-b-2 transition-all ${
-                    activeTab === t.id
-                      ? 'border-[#c9a96e] text-[#c9a96e]'
-                      : 'border-transparent text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  <t.icon className="h-3.5 w-3.5" />
-                  {t.label}
-                  {t.id === 'local' && documentos.length > 0 && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground font-bold">{documentos.length}</span>
-                  )}
-                  {t.id === 'drive' && isConnected && (
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  )}
-                </button>
-              ))}
-            </div>
+            )}
+            <Button
+              onClick={() => setUploadModalOpen(true)}
+              className="h-[38px] px-4 rounded-xl gap-2 font-semibold bg-[#3e2f2b] hover:bg-[#2d211d] text-white border-0"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Novo Documento
+            </Button>
           </div>
         </div>
 
-        {/* ══ CONTENT ══ */}
-        <div className="flex-1 overflow-auto px-8 py-6">
+        {/* ══ STATS ══ */}
+        <div className="bg-white px-6 sm:px-10 pt-4 flex items-center gap-6 shrink-0">
+          <div className="flex items-baseline gap-2">
+            <span className="text-lg text-[#29201e]">{files.length || '—'}</span>
+            <span className="text-[13px] text-[#6e5e5a]">Arquivos no Drive</span>
+          </div>
+          <div className="h-4 w-px bg-[#efebe4]" />
+          <div className="flex items-baseline gap-2">
+            <span className="text-lg text-[#29201e]">{documentos.length}</span>
+            <span className="text-[13px] text-[#6e5e5a]">Documentos Locais</span>
+          </div>
+        </div>
+
+        {/* ══ TABS ══ */}
+        <div className="bg-white border-b border-[#efebe4] px-6 sm:px-10 flex items-end shrink-0 overflow-x-auto">
+          <button
+            onClick={() => setActiveTab('drive')}
+            className={`flex items-center gap-2 pb-3.5 pt-4 px-4 sm:px-5 border-b-2 shrink-0 transition-colors ${activeTab === 'drive' ? 'border-[#3e2f2b]' : 'border-transparent'}`}
+          >
+            <span className={`p-1 rounded-md ${activeTab === 'drive' ? 'bg-[#dcfce7]' : 'bg-[#f0eae1]'}`}>
+              <HardDrive className={`h-3 w-3 ${activeTab === 'drive' ? 'text-[#15803d]' : 'text-[#6e5e5a]'}`} />
+            </span>
+            <span className={`text-sm whitespace-nowrap ${activeTab === 'drive' ? 'font-semibold text-[#29201e]' : 'text-[#6e5e5a]'}`}>Google Drive</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('local')}
+            className={`flex items-center gap-2 pb-3.5 pt-4 px-4 sm:px-5 border-b-2 shrink-0 transition-colors ${activeTab === 'local' ? 'border-[#3e2f2b]' : 'border-transparent'}`}
+          >
+            <span className={`p-1 rounded-md ${activeTab === 'local' ? 'bg-[#dcfce7]' : 'bg-[#f0eae1]'}`}>
+              <HardDrive className={`h-3 w-3 ${activeTab === 'local' ? 'text-[#15803d]' : 'text-[#6e5e5a]'}`} />
+            </span>
+            <span className={`text-sm whitespace-nowrap ${activeTab === 'local' ? 'font-semibold text-[#29201e]' : 'text-[#6e5e5a]'}`}>Armazenamento Local</span>
+            {documentos.length > 0 && (
+              <span className="px-2 py-0.5 rounded-full bg-[#f0eae1] text-[11px] font-semibold text-[#6e5e5a]">{documentos.length}</span>
+            )}
+          </button>
+        </div>
+
+        {/* ══ CONTEÚDO ══ */}
+        <div className="flex-1 overflow-auto px-6 sm:px-10 py-8">
 
           {/* ── DRIVE ── */}
           {activeTab === 'drive' && (
-            <div className="space-y-6">
+            <div className="space-y-8">
               {checkingConn ? (
                 <div className="flex items-center justify-center py-24">
                   <div className="flex flex-col items-center gap-3">
-                    <Loader2 className="h-7 w-7 animate-spin text-[#c9a96e]/60" />
-                    <p className="text-sm text-muted-foreground">Conectando ao Drive...</p>
+                    <Loader2 className="h-7 w-7 animate-spin text-[#3e2f2b]/50" />
+                    <p className="text-sm text-[#6e5e5a]">Conectando ao Drive...</p>
                   </div>
                 </div>
               ) : !isConnected ? (
                 <div className="flex flex-col items-center justify-center py-24 text-center">
-                  <div className="h-20 w-20 rounded-3xl border border-border/30 bg-muted/20 flex items-center justify-center mb-6">
-                    <Cloud className="h-9 w-9 text-muted-foreground/30" />
+                  <div className="h-20 w-20 rounded-3xl border border-[#efebe4] bg-[#f0eae1] flex items-center justify-center mb-6">
+                    <Cloud className="h-9 w-9 text-[#6e5e5a]/40" />
                   </div>
-                  <h3 className="text-base font-semibold mb-2">Drive não configurado</h3>
-                  <p className="text-sm text-muted-foreground max-w-xs leading-relaxed">
+                  <h3 className="text-base font-semibold text-[#29201e] mb-2">Drive não configurado</h3>
+                  <p className="text-sm text-[#6e5e5a] max-w-xs leading-relaxed">
                     {isAdmin ? 'Conecte sua conta Google para sincronizar documentos com o escritório.' : 'O administrador precisa conectar o Google Drive.'}
                   </p>
                   {isAdmin && (
-                    <Button className="mt-6 rounded-xl gap-2 bg-[#3d2b1f] hover:bg-[#2d1f16] text-white" onClick={async () => {
+                    <Button className="mt-6 rounded-xl gap-2 bg-[#3e2f2b] hover:bg-[#2d211d] text-white" onClick={async () => {
                       const { data: { session } } = await supabase.auth.getSession();
                       const h: Record<string, string> = { 'Content-Type': 'application/json' };
                       if (session?.access_token) h['Authorization'] = `Bearer ${session.access_token}`;
@@ -416,101 +425,97 @@ export default function DocumentosPage() {
                 </div>
               ) : (
                 <>
-                  {/* Toolbar */}
-                  <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
-                    <div className="flex gap-2 flex-1 min-w-0">
-                      <Select value={selectedClient} onValueChange={setSelectedClient}>
-                        <SelectTrigger className="flex-1 h-9 rounded-xl text-sm bg-card border-border/40">
-                          <SelectValue placeholder="Ir para pasta de cliente..." />
-                        </SelectTrigger>
-                        <SelectContent className="rounded-xl max-h-64">
-                          {leads.filter(l => l.nome).sort((a, b) => (a.nome||'').localeCompare(b.nome||'')).map(l => (
-                            <SelectItem key={l.id} value={l.id} className="text-sm">{l.nome}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Button onClick={openClientFolder} disabled={!selectedClient || isOperating} size="sm" className="h-9 rounded-xl gap-1.5 shrink-0 bg-[#3d2b1f] hover:bg-[#2d1f16] text-white">
-                        {isOperating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderOpen className="h-3.5 w-3.5" />}
-                        Abrir
-                      </Button>
-                    </div>
-                    <div className="flex gap-2 items-center">
+                  {/* Barra de ações */}
+                  <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+                    <Select value={selectedClient} onValueChange={(v) => { setSelectedClient(v); openClientFolder(v); }}>
+                      <SelectTrigger className="w-auto max-w-[240px] h-auto border-0 bg-transparent shadow-none px-0 gap-2 text-sm text-[#6e5e5a] hover:text-[#29201e] focus:ring-0 [&>svg]:hidden">
+                        <Folder className="h-3.5 w-3.5 shrink-0" />
+                        <SelectValue placeholder="Pasta de cliente..." />
+                        {isOperating && <Loader2 className="h-3 w-3 animate-spin shrink-0" />}
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl max-h-64">
+                        {leads.filter(l => l.nome).sort((a, b) => (a.nome||'').localeCompare(b.nome||'')).map(l => (
+                          <SelectItem key={l.id} value={l.id} className="text-sm">{l.nome}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    <div className="flex gap-2.5 items-center">
                       <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                        <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar..." className="pl-9 h-9 w-40 rounded-xl text-sm bg-card border-border/40" />
+                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#6e5e5a]" />
+                        <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar no Drive..." className="pl-10 h-[38px] w-full sm:w-[280px] rounded-xl text-sm bg-white border-[#efebe4]" />
                       </div>
-                      <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-muted/50" onClick={() => loadFiles(currentFolderId)} disabled={driveLoading}>
-                        <RefreshCw className={`h-3.5 w-3.5 ${driveLoading ? 'animate-spin' : ''}`} />
+                      <Button variant="ghost" size="icon" className="h-[38px] w-[38px] rounded-xl hover:bg-[#f0eae1] text-[#6e5e5a] shrink-0" onClick={() => loadFiles(currentFolderId)} disabled={driveLoading}>
+                        <RefreshCw className={`h-4 w-4 ${driveLoading ? 'animate-spin' : ''}`} />
                       </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-9 rounded-xl gap-1.5 border-border/40"
-                        onClick={() => setNewFolderDialog(true)}
-                      >
-                        <FolderPlus className="h-3.5 w-3.5" />
-                        Nova Pasta
-                      </Button>
-                      {currentFolderId && (
-                        <>
-                          <input type="file" id="drive-upload" className="hidden" onChange={handleUpload} />
-                          <Button variant="outline" size="sm" className="h-9 rounded-xl gap-1.5 border-border/40" onClick={() => document.getElementById('drive-upload')?.click()} disabled={uploadingFile}>
-                            {uploadingFile ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-                            Enviar
+                      <input type="file" id="drive-upload" className="hidden" onChange={handleUpload} />
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button className="h-[38px] px-4 rounded-xl gap-2 font-semibold bg-[#3e2f2b] hover:bg-[#2d211d] text-white shrink-0" disabled={uploadingFile}>
+                            {uploadingFile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                            Novo
                           </Button>
-                        </>
-                      )}
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="rounded-xl">
+                          <DropdownMenuItem onClick={() => setNewFolderDialog(true)} className="gap-2 cursor-pointer">
+                            <FolderPlus className="h-3.5 w-3.5" /> Nova Pasta
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            disabled={!currentFolderId}
+                            onClick={() => document.getElementById('drive-upload')?.click()}
+                            className="gap-2 cursor-pointer"
+                          >
+                            <Upload className="h-3.5 w-3.5" /> Enviar Arquivo
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
 
                   {/* Breadcrumbs */}
-                  <nav className="flex items-center gap-0.5 text-sm flex-wrap -mt-2">
-                    <button onClick={() => goBreadcrumb(-1)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-all text-xs font-medium">
+                  <nav className="flex items-center gap-0.5 text-sm flex-wrap -mt-4">
+                    <button onClick={() => goBreadcrumb(-1)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[#6e5e5a] hover:text-[#29201e] hover:bg-[#f0eae1] transition-all text-xs font-medium">
                       <Home className="h-3 w-3" /> Meu Drive
                     </button>
                     {breadcrumbs.map((c, i) => (
                       <span key={c.id} className="flex items-center">
-                        <ChevronRight className="h-3 w-3 text-border mx-0.5" />
+                        <ChevronRight className="h-3 w-3 text-[#efebe4] mx-0.5" />
                         <button
                           onClick={() => goBreadcrumb(i)}
                           className={`px-2.5 py-1.5 rounded-lg transition-all text-xs font-medium ${i === breadcrumbs.length - 1
-                            ? 'bg-[#c9a96e]/10 text-[#c9a96e] border border-[#c9a96e]/20'
-                            : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'}`}
+                            ? 'bg-[#f5efe6] text-[#3e2f2b] border border-[#e3d9cd]'
+                            : 'text-[#6e5e5a] hover:text-[#29201e] hover:bg-[#f0eae1]'}`}
                         >{c.name}</button>
                       </span>
                     ))}
                     {breadcrumbs.length > 0 && (
-                      <button onClick={goBack} className="ml-2 flex items-center gap-1 text-xs text-muted-foreground/60 hover:text-muted-foreground px-2 py-1.5 rounded-lg hover:bg-muted/30 transition-all">
+                      <button onClick={goBack} className="ml-2 flex items-center gap-1 text-xs text-[#6e5e5a]/70 hover:text-[#6e5e5a] px-2 py-1.5 rounded-lg hover:bg-[#f0eae1]/60 transition-all">
                         <ArrowLeft className="h-3 w-3" /> Voltar
                       </button>
                     )}
                   </nav>
 
-                  {/* Files */}
+                  {/* Arquivos */}
                   {driveLoading ? (
                     <div className="space-y-4">
-                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                        {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-20 rounded-2xl" />)}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                        {[1,2,3].map(i => <Skeleton key={i} className="h-[92px] rounded-2xl" />)}
                       </div>
-                      <Skeleton className="h-56 rounded-2xl" />
+                      <Skeleton className="h-56 rounded-[20px]" />
                     </div>
                   ) : driveFiles.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-border/30 rounded-2xl">
-                      <Folder className="h-12 w-12 text-muted-foreground/15 mb-3" />
-                      <p className="text-sm text-muted-foreground/50 font-medium">{currentFolderId ? 'Pasta vazia' : 'Nenhum arquivo'}</p>
+                    <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-[#efebe4] rounded-2xl">
+                      <Folder className="h-12 w-12 text-[#6e5e5a]/15 mb-3" />
+                      <p className="text-sm text-[#6e5e5a]/60 font-medium">{currentFolderId ? 'Pasta vazia' : 'Nenhum arquivo'}</p>
                     </div>
                   ) : (
-                    <div className="space-y-6">
+                    <div className="space-y-8">
 
-                      {/* Folders */}
+                      {/* Pastas Recentes */}
                       {folders.length > 0 && (
-                        <div>
-                          <div className="flex items-center gap-3 mb-3">
-                            <span className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-widest">Pastas</span>
-                            <div className="flex-1 h-px bg-border/30" />
-                            <span className="text-[10px] text-muted-foreground/40">{folders.length}</span>
-                          </div>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2.5">
+                        <div className="space-y-4">
+                          <h2 className="text-lg text-[#29201e]">Pastas Recentes</h2>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                             {folders.map(f => (
                               <div
                                 key={f.id}
@@ -518,85 +523,106 @@ export default function DocumentosPage() {
                                 tabIndex={0}
                                 onClick={() => enterFolder(f)}
                                 onKeyDown={e => { if (e.key === 'Enter') enterFolder(f); }}
-                                className="group relative flex items-center gap-3 p-3.5 rounded-2xl bg-card border border-border/30 hover:border-[#c9a96e]/40 hover:shadow-sm transition-all text-left overflow-hidden cursor-pointer"
+                                className="bg-white border border-[#efebe4] rounded-2xl p-4 flex flex-col gap-3 shadow-[0_2px_2px_rgba(62,47,43,0.08)] hover:border-[#c9a96e]/50 transition-colors cursor-pointer"
                               >
-                                <div className="absolute inset-0 bg-gradient-to-br from-[#c9a96e]/0 to-[#c9a96e]/0 group-hover:from-[#c9a96e]/3 group-hover:to-transparent transition-all" />
-                                <Folder className="h-8 w-8 text-[#c9a96e] shrink-0 group-hover:scale-105 transition-transform" />
-                                <div className="min-w-0 relative flex-1">
-                                  <p className="text-xs font-semibold truncate leading-snug text-foreground">{f.name}</p>
-                                  <p className="text-[9px] text-muted-foreground/40 mt-0.5 font-medium uppercase tracking-wide">Pasta</p>
+                                <div className="flex items-center justify-between">
+                                  <div className="p-2.5 rounded-[10px] bg-[#f5efe6] border border-[#e3d9cd]">
+                                    <Folder className="h-5 w-5 text-[#c9a96e]" />
+                                  </div>
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <button onClick={e => e.stopPropagation()} className="h-6 w-6 flex items-center justify-center rounded-md hover:bg-[#f0eae1] text-[#6e5e5a]">
+                                        <MoreVertical className="h-4 w-4" />
+                                      </button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" onClick={e => e.stopPropagation()} className="rounded-xl">
+                                      <DropdownMenuItem onClick={() => setDeleteTarget({ kind: 'drive', id: f.id, name: f.name })} className="gap-2 cursor-pointer text-destructive focus:text-destructive">
+                                        <Trash2 className="h-3.5 w-3.5" /> Excluir pasta
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
                                 </div>
-                                <button
-                                  onClick={e => { e.stopPropagation(); setDeleteTarget({ kind: 'drive', id: f.id, name: f.name }); }}
-                                  className="relative h-6 w-6 shrink-0 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all"
-                                  title="Excluir pasta"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold text-[#29201e] truncate">{f.name}</p>
+                                  <p className="text-xs text-[#6e5e5a] mt-0.5">Pasta</p>
+                                </div>
                               </div>
                             ))}
                           </div>
                         </div>
                       )}
 
-                      {/* Files */}
+                      {/* Arquivos Recentes */}
                       {files.length > 0 && (
-                        <div>
-                          <div className="flex items-center gap-3 mb-3">
-                            <span className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-widest">Arquivos</span>
-                            <div className="flex-1 h-px bg-border/30" />
-                            <span className="text-[10px] text-muted-foreground/40">{files.length}</span>
-                          </div>
-                          <div className="rounded-2xl border border-border/30 bg-card overflow-hidden shadow-sm">
+                        <div className="space-y-4">
+                          <h2 className="text-lg text-[#29201e]">Arquivos Recentes</h2>
+                          <div className="bg-white border border-[#efebe4] rounded-[20px] overflow-hidden">
                             <table className="w-full">
                               <thead>
-                                <tr className="border-b border-border/20 bg-muted/20">
-                                  <th className="text-left text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest px-5 py-3">Nome</th>
-                                  <th className="text-left text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest px-5 py-3 hidden sm:table-cell">Tamanho</th>
-                                  <th className="text-left text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest px-5 py-3 hidden md:table-cell">Modificado</th>
-                                  <th className="w-48 px-5 py-3" />
+                                <tr className="bg-[#f0eae1] border-b border-[#efebe4]">
+                                  <th className="text-left text-[13px] font-semibold text-[#6e5e5a] px-6 py-3.5">Nome do arquivo</th>
+                                  <th className="text-left text-[13px] font-semibold text-[#6e5e5a] px-6 py-3.5 w-[110px] hidden sm:table-cell">Tamanho</th>
+                                  <th className="text-left text-[13px] font-semibold text-[#6e5e5a] px-6 py-3.5 w-[140px] hidden md:table-cell">Modificado em</th>
+                                  <th className="w-[80px] px-6 py-3.5" />
                                 </tr>
                               </thead>
                               <tbody>
-                                {files.map((f, i) => (
-                                  <tr key={f.id} className={`group hover:bg-[#c9a96e]/3 transition-colors ${i < files.length - 1 ? 'border-b border-border/15' : ''}`}>
-                                    <td className="px-5 py-3.5">
-                                      <button onClick={() => openDrivePreview(f)} className="flex items-center gap-3 text-left hover:underline underline-offset-2 decoration-border">
-                                        {thumbnails[f.id] ? (
-                                          <img src={thumbnails[f.id]} alt="" className="h-8 w-8 rounded object-cover shrink-0 border border-border/30" />
-                                        ) : (
-                                          <FileIcon mime={f.mimeType} />
-                                        )}
-                                        <span className="text-sm font-medium truncate max-w-[180px] sm:max-w-[280px] md:max-w-none">{f.name}</span>
-                                      </button>
-                                    </td>
-                                    <td className="px-5 py-3.5 hidden sm:table-cell">
-                                      <span className="text-xs text-muted-foreground/60 font-medium tabular-nums">{fmtSize(f.size)}</span>
-                                    </td>
-                                    <td className="px-5 py-3.5 hidden md:table-cell">
-                                      <span className="text-xs text-muted-foreground/60">{fmtDate(f.modifiedTime)}</span>
-                                    </td>
-                                    <td className="px-5 py-3.5">
-                                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button onClick={() => openDrivePreview(f)} className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-all" title="Pré-visualizar">
-                                          <Eye className="h-3.5 w-3.5" />
+                                {files.map((f, i) => {
+                                  const cat = categorize(f.mimeType);
+                                  const style = FILE_CAT_STYLE[cat];
+                                  const Icon = style.icon;
+                                  return (
+                                    <tr key={f.id} className={`border-b border-[#efebe4] last:border-b-0 ${i % 2 === 1 ? 'bg-[#faf8f5]' : ''}`}>
+                                      <td className="px-6 py-4">
+                                        <button onClick={() => openDrivePreview(f)} className="flex items-center gap-3 text-left w-full">
+                                          {thumbnails[f.id] ? (
+                                            <img src={thumbnails[f.id]} alt="" className="h-9 w-9 rounded-lg object-cover shrink-0 border border-[#efebe4]" />
+                                          ) : (
+                                            <span className="p-2 rounded-lg shrink-0" style={{ background: style.iconBg }}>
+                                              <Icon className="h-[18px] w-[18px]" style={{ color: style.iconColor }} />
+                                            </span>
+                                          )}
+                                          <span className="text-sm font-medium text-[#29201e] truncate max-w-[180px] sm:max-w-[280px] md:max-w-none">{f.name}</span>
                                         </button>
-                                        <button onClick={() => downloadDriveFile(f)} className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-all" title="Baixar">
-                                          <Download className="h-3.5 w-3.5" />
-                                        </button>
-                                        <button onClick={() => window.open(f.webViewLink, '_blank')} className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-all" title="Abrir no Drive">
-                                          <ExternalLink className="h-3.5 w-3.5" />
-                                        </button>
-                                        <button onClick={() => importFile(f)} className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-all" title="Importar para o sistema">
-                                          <FolderInput className="h-3.5 w-3.5" />
-                                        </button>
-                                        <button onClick={() => setDeleteTarget({ kind: 'drive', id: f.id, name: f.name })} className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all" title="Excluir">
-                                          <Trash2 className="h-3.5 w-3.5" />
-                                        </button>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                ))}
+                                      </td>
+                                      <td className="px-6 py-4 hidden sm:table-cell">
+                                        <span className="text-sm text-[#6e5e5a] tabular-nums">{fmtSize(f.size)}</span>
+                                      </td>
+                                      <td className="px-6 py-4 hidden md:table-cell">
+                                        <span className="text-sm text-[#6e5e5a]">{fmtDate(f.modifiedTime)}</span>
+                                      </td>
+                                      <td className="px-6 py-4">
+                                        <div className="flex items-center justify-end gap-3">
+                                          <button onClick={() => downloadDriveFile(f)} title="Baixar" className="text-[#6e5e5a] hover:text-[#29201e] transition-colors">
+                                            <Download className="h-4 w-4" />
+                                          </button>
+                                          <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                              <button className="text-[#6e5e5a] hover:text-[#29201e] transition-colors">
+                                                <MoreVertical className="h-4 w-4" />
+                                              </button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end" className="rounded-xl">
+                                              <DropdownMenuItem onClick={() => openDrivePreview(f)} className="gap-2 cursor-pointer">
+                                                <Eye className="h-3.5 w-3.5" /> Pré-visualizar
+                                              </DropdownMenuItem>
+                                              <DropdownMenuItem onClick={() => window.open(f.webViewLink, '_blank')} className="gap-2 cursor-pointer">
+                                                <ExternalLink className="h-3.5 w-3.5" /> Abrir no Drive
+                                              </DropdownMenuItem>
+                                              <DropdownMenuItem onClick={() => importFile(f)} className="gap-2 cursor-pointer">
+                                                <FolderInput className="h-3.5 w-3.5" /> Importar para o sistema
+                                              </DropdownMenuItem>
+                                              <DropdownMenuSeparator />
+                                              <DropdownMenuItem onClick={() => setDeleteTarget({ kind: 'drive', id: f.id, name: f.name })} className="gap-2 cursor-pointer text-destructive focus:text-destructive">
+                                                <Trash2 className="h-3.5 w-3.5" /> Excluir
+                                              </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                          </DropdownMenu>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
                               </tbody>
                             </table>
                           </div>
@@ -611,64 +637,88 @@ export default function DocumentosPage() {
 
           {/* ── LOCAL ── */}
           {activeTab === 'local' && (
-            <div className="space-y-5">
-              <div className="relative max-w-xs">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/60" />
-                <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar documentos..." className="pl-9 h-9 rounded-xl text-sm bg-card border-border/40" />
+            <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+                <div className="relative">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#6e5e5a]" />
+                  <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar documentos..." className="pl-10 h-[38px] w-full sm:w-[280px] rounded-xl text-sm bg-white border-[#efebe4]" />
+                </div>
+                <Button onClick={() => setUploadModalOpen(true)} className="h-[38px] px-4 rounded-xl gap-2 font-semibold bg-[#3e2f2b] hover:bg-[#2d211d] text-white shrink-0">
+                  <Upload className="h-4 w-4" /> Enviar Arquivo
+                </Button>
               </div>
 
               {localLoading ? (
                 <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-14 rounded-2xl" />)}</div>
               ) : localList.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-border/30 rounded-2xl">
-                  <HardDrive className="h-12 w-12 text-muted-foreground/15 mb-3" />
-                  <p className="text-sm text-muted-foreground/50 font-medium">Nenhum documento local</p>
-                  <p className="text-xs text-muted-foreground/30 mt-1">Clique em "Novo Documento" para adicionar</p>
+                <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-[#efebe4] rounded-2xl">
+                  <HardDrive className="h-12 w-12 text-[#6e5e5a]/15 mb-3" />
+                  <p className="text-sm text-[#6e5e5a]/60 font-medium">Nenhum documento local</p>
+                  <p className="text-xs text-[#6e5e5a]/40 mt-1">Clique em "Enviar Arquivo" para adicionar</p>
                 </div>
               ) : (
-                <div className="rounded-2xl border border-border/30 bg-card overflow-hidden shadow-sm">
+                <div className="bg-white border border-[#efebe4] rounded-[20px] overflow-hidden">
                   <table className="w-full">
                     <thead>
-                      <tr className="border-b border-border/20 bg-muted/20">
-                        <th className="text-left text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest px-5 py-3">Nome</th>
-                        <th className="text-left text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest px-5 py-3 hidden sm:table-cell">Tipo</th>
-                        <th className="text-left text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest px-5 py-3 hidden md:table-cell">Data</th>
-                        <th className="w-36 px-5 py-3" />
+                      <tr className="bg-[#f0eae1] border-b border-[#efebe4]">
+                        <th className="text-left text-[13px] font-semibold text-[#6e5e5a] px-6 py-3.5">Nome do arquivo</th>
+                        <th className="text-left text-[13px] font-semibold text-[#6e5e5a] px-6 py-3.5 w-[110px] hidden sm:table-cell">Tipo</th>
+                        <th className="text-left text-[13px] font-semibold text-[#6e5e5a] px-6 py-3.5 w-[140px] hidden md:table-cell">Data</th>
+                        <th className="w-[80px] px-6 py-3.5" />
                       </tr>
                     </thead>
                     <tbody>
-                      {localList.map((d, i) => (
-                        <tr key={d.id} className={`group hover:bg-[#c9a96e]/3 transition-colors ${i < localList.length - 1 ? 'border-b border-border/15' : ''}`}>
-                          <td className="px-5 py-3.5">
-                            <button onClick={() => openLocalPreview(d)} className="flex items-center gap-3 text-left hover:underline underline-offset-2 decoration-border">
-                              <FileText className="h-4 w-4 text-[#c9a96e]/60 shrink-0" />
-                              <span className="text-sm font-medium truncate max-w-[200px]">{d.nome}</span>
-                            </button>
-                          </td>
-                          <td className="px-5 py-3.5 hidden sm:table-cell">
-                            <span className="text-[10px] px-2 py-0.5 rounded-md bg-muted/60 text-muted-foreground font-semibold border border-border/30">{d.tipo}</span>
-                          </td>
-                          <td className="px-5 py-3.5 hidden md:table-cell">
-                            <span className="text-xs text-muted-foreground/60">{fmtDate(d.created_at)}</span>
-                          </td>
-                          <td className="px-5 py-3.5">
-                            <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button onClick={() => openLocalPreview(d)} className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-all" title="Pré-visualizar">
-                                <Eye className="h-3.5 w-3.5" />
+                      {localList.map((d, i) => {
+                        const cat = categorize(d.arquivo_nome || d.nome);
+                        const style = FILE_CAT_STYLE[cat];
+                        return (
+                          <tr key={d.id} className={`border-b border-[#efebe4] last:border-b-0 ${i % 2 === 1 ? 'bg-[#faf8f5]' : ''}`}>
+                            <td className="px-6 py-4">
+                              <button onClick={() => openLocalPreview(d)} className="flex items-center gap-3 text-left w-full">
+                                <FileText className="h-4 w-4 text-[#6e5e5a] shrink-0" />
+                                <span className="text-sm font-medium text-[#29201e] truncate max-w-[200px]">{d.nome}</span>
                               </button>
-                              <button onClick={() => downloadLocalDoc(d)} className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-all" title="Baixar">
-                                <Download className="h-3.5 w-3.5" />
-                              </button>
-                              <button onClick={() => openLocal(d.arquivo_url)} className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-all" title="Abrir em nova aba">
-                                <ExternalLink className="h-3.5 w-3.5" />
-                              </button>
-                              <button onClick={() => setDeleteTarget({ kind: 'local', id: d.id, name: d.nome, arquivoUrl: d.arquivo_url })} className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all" title="Excluir">
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+                            <td className="px-6 py-4 hidden sm:table-cell">
+                              <span
+                                className="text-[11px] px-2.5 py-1 rounded-full font-semibold"
+                                style={{ background: style.pillBg, color: style.pillText }}
+                              >
+                                {style.label}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 hidden md:table-cell">
+                              <span className="text-sm text-[#6e5e5a]">{fmtDate(d.created_at)}</span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center justify-end gap-3">
+                                <button onClick={() => downloadLocalDoc(d)} title="Baixar" className="text-[#6e5e5a] hover:text-[#29201e] transition-colors">
+                                  <Download className="h-4 w-4" />
+                                </button>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <button className="text-[#6e5e5a] hover:text-[#29201e] transition-colors">
+                                      <MoreVertical className="h-4 w-4" />
+                                    </button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="rounded-xl">
+                                    <DropdownMenuItem onClick={() => openLocalPreview(d)} className="gap-2 cursor-pointer">
+                                      <Eye className="h-3.5 w-3.5" /> Pré-visualizar
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => openLocal(d.arquivo_url)} className="gap-2 cursor-pointer">
+                                      <ExternalLink className="h-3.5 w-3.5" /> Abrir em nova aba
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onClick={() => setDeleteTarget({ kind: 'local', id: d.id, name: d.nome, arquivoUrl: d.arquivo_url })} className="gap-2 cursor-pointer text-destructive focus:text-destructive">
+                                      <Trash2 className="h-3.5 w-3.5" /> Excluir
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -692,32 +742,32 @@ export default function DocumentosPage() {
       {preview && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: 'rgba(0,0,0,0.6)' }}
+          style={{ background: 'rgba(41,32,30,0.6)' }}
           onClick={e => { if (e.target === e.currentTarget) closePreview(); }}
         >
-          <div className="w-full max-w-3xl max-h-[90vh] rounded-2xl bg-card border border-border/40 shadow-2xl flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-border/20 shrink-0">
-              <p className="text-sm font-semibold truncate">{preview.name}</p>
+          <div className="w-full max-w-3xl max-h-[90vh] rounded-2xl bg-white border border-[#efebe4] shadow-2xl flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-[#efebe4] shrink-0">
+              <p className="text-sm font-semibold text-[#29201e] truncate">{preview.name}</p>
               <div className="flex items-center gap-1.5 shrink-0">
-                <Button size="sm" variant="outline" className="h-8 rounded-lg gap-1.5 border-border/40" onClick={handleDownloadFromPreview} disabled={previewLoading || !preview.url}>
+                <Button size="sm" variant="outline" className="h-8 rounded-lg gap-1.5 border-[#efebe4]" onClick={handleDownloadFromPreview} disabled={previewLoading || !preview.url}>
                   <Download className="h-3.5 w-3.5" /> Baixar
                 </Button>
-                <button onClick={closePreview} className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-all">
+                <button onClick={closePreview} className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-[#f0eae1] text-[#6e5e5a] hover:text-[#29201e] transition-all">
                   <X className="h-4 w-4" />
                 </button>
               </div>
             </div>
-            <div className="flex-1 overflow-auto bg-muted/10 flex items-center justify-center p-4 min-h-[300px]">
+            <div className="flex-1 overflow-auto bg-[#f9f6f0] flex items-center justify-center p-4 min-h-[300px]">
               {previewLoading ? (
-                <Loader2 className="h-8 w-8 animate-spin text-[#c9a96e]/60" />
+                <Loader2 className="h-8 w-8 animate-spin text-[#3e2f2b]/50" />
               ) : preview.mime.includes('image') ? (
                 <img src={preview.url} alt={preview.name} className="max-w-full max-h-[75vh] object-contain rounded-lg" />
               ) : preview.mime.includes('pdf') ? (
                 <iframe src={preview.url} title={preview.name} className="w-full h-[75vh] rounded-lg border-0 bg-white" />
               ) : (
                 <div className="flex flex-col items-center gap-3 text-center py-10">
-                  <File className="h-10 w-10 text-muted-foreground/30" />
-                  <p className="text-sm text-muted-foreground max-w-xs">Pré-visualização não disponível para este tipo de arquivo. Baixe para abrir.</p>
+                  <File className="h-10 w-10 text-[#6e5e5a]/30" />
+                  <p className="text-sm text-[#6e5e5a] max-w-xs">Pré-visualização não disponível para este tipo de arquivo. Baixe para abrir.</p>
                 </div>
               )}
             </div>
@@ -729,12 +779,12 @@ export default function DocumentosPage() {
       {newFolderDialog && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: 'rgba(0,0,0,0.45)' }}
+          style={{ background: 'rgba(41,32,30,0.45)' }}
           onClick={e => { if (e.target === e.currentTarget) setNewFolderDialog(false); }}
         >
-          <div className="w-full max-w-sm rounded-2xl bg-card border border-border/40 shadow-2xl p-6">
-            <h2 className="text-base font-bold mb-1">Nova Pasta</h2>
-            <p className="text-xs text-muted-foreground mb-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white border border-[#efebe4] shadow-2xl p-6">
+            <h2 className="text-base font-bold text-[#29201e] mb-1">Nova Pasta</h2>
+            <p className="text-xs text-[#6e5e5a] mb-4">
               {currentFolderId
                 ? `Será criada em: ${breadcrumbs[breadcrumbs.length - 1]?.name || 'pasta atual'}`
                 : 'Será criada na raiz do Drive'}
@@ -745,15 +795,15 @@ export default function DocumentosPage() {
               value={newFolderName}
               onChange={e => setNewFolderName(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') handleCreateFolder(); if (e.key === 'Escape') setNewFolderDialog(false); }}
-              className="mb-4"
+              className="mb-4 border-[#efebe4]"
             />
             <div className="flex gap-2 justify-end">
-              <Button variant="outline" size="sm" className="rounded-xl" onClick={() => { setNewFolderDialog(false); setNewFolderName(''); }}>
+              <Button variant="outline" size="sm" className="rounded-xl border-[#efebe4]" onClick={() => { setNewFolderDialog(false); setNewFolderName(''); }}>
                 Cancelar
               </Button>
               <Button
                 size="sm"
-                className="rounded-xl gap-1.5 bg-[#3d2b1f] hover:bg-[#2d1f16] text-white"
+                className="rounded-xl gap-1.5 bg-[#3e2f2b] hover:bg-[#2d211d] text-white"
                 onClick={handleCreateFolder}
                 disabled={!newFolderName.trim() || creatingFolder}
               >
@@ -768,18 +818,18 @@ export default function DocumentosPage() {
       {deleteTarget && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: 'rgba(0,0,0,0.45)' }}
+          style={{ background: 'rgba(41,32,30,0.45)' }}
           onClick={e => { if (e.target === e.currentTarget && !deleting) setDeleteTarget(null); }}
         >
-          <div className="w-full max-w-sm rounded-2xl bg-card border border-border/40 shadow-2xl p-6">
-            <h2 className="text-base font-bold mb-1">Excluir {deleteTarget.kind === 'local' ? 'documento' : 'do Drive'}?</h2>
-            <p className="text-xs text-muted-foreground mb-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white border border-[#efebe4] shadow-2xl p-6">
+            <h2 className="text-base font-bold text-[#29201e] mb-1">Excluir {deleteTarget.kind === 'local' ? 'documento' : 'do Drive'}?</h2>
+            <p className="text-xs text-[#6e5e5a] mb-4">
               {deleteTarget.kind === 'drive'
                 ? <>"{deleteTarget.name}" será movido para a lixeira do Google Drive (recuperável por lá por 30 dias).</>
                 : <>"{deleteTarget.name}" será excluído permanentemente do sistema. Essa ação não pode ser desfeita.</>}
             </p>
             <div className="flex gap-2 justify-end">
-              <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+              <Button variant="outline" size="sm" className="rounded-xl border-[#efebe4]" onClick={() => setDeleteTarget(null)} disabled={deleting}>
                 Cancelar
               </Button>
               <Button
