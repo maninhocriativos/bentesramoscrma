@@ -302,6 +302,242 @@ function emailTemplate(title: string, content: string): string {
   `;
 }
 
+// ==================== RESUMO DE ATENDIMENTO DA EQUIPE ====================
+// Nome do grupo de WhatsApp (interno da equipe) onde a Isa posta o resumo
+// diário — "Bentes Ramos Comercial", confirmado pelo usuário em 2026-09-10.
+// A instância "Bentes Ramos Trafego" precisa estar adicionada como MEMBRO
+// desse grupo pro envio funcionar (senão buscarGroupId() não encontra o
+// grupo na lista de chats da instância, e a função só loga o texto gerado
+// em vez de falhar).
+const GRUPO_EQUIPE_NOME = 'Bentes Ramos Comercial';
+const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+
+interface MetricasPessoa {
+  nome: string;
+  leadsAtendidos: number;
+  leadsSemRetorno: number;
+  conversoes: number;
+  tempoMedioRespostaMin: number | null;
+}
+
+// sendText() do zapi-helper compartilhado passa o destino por normalizePhone
+// (tira tudo que não é dígito) — quebra um ID de grupo, que não é um
+// telefone (formato tipo "1203xxxxxxxxx-xxxxxxxxxx@g.us" ou numérico com
+// outro padrão). Envio direto aqui, sem mexer no helper usado por todo o
+// resto do sistema pra telefone de cliente de verdade.
+async function enviarTextoGrupo(config: { instance_id: string; token: string; client_token?: string }, groupId: string, mensagem: string): Promise<boolean> {
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (config.client_token) headers['Client-Token'] = config.client_token;
+    const resp = await fetch(`https://api.z-api.io/instances/${config.instance_id}/token/${config.token}/send-text`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ phone: groupId, message: mensagem }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    const data = await resp.json();
+    if (resp.ok && !data.error) return true;
+    console.error('[Resumo Equipe] Falha ao enviar pro grupo:', data);
+    return false;
+  } catch (e) {
+    console.error('[Resumo Equipe] Erro ao enviar pro grupo:', e);
+    return false;
+  }
+}
+
+async function buscarGroupId(instanceId: string, token: string, clientToken: string | undefined, nomeGrupo: string): Promise<string | null> {
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (clientToken) headers['Client-Token'] = clientToken;
+    const resp = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/chats`, { headers });
+    if (!resp.ok) { console.error('[Resumo Equipe] Falha ao listar chats/grupos:', resp.status); return null; }
+    const chats = await resp.json();
+    const alvo = (Array.isArray(chats) ? chats : []).find((c: any) =>
+      (c.isGroup || c.type === 'group') && (c.name || c.chatName || '').trim().toLowerCase() === nomeGrupo.trim().toLowerCase()
+    );
+    return alvo?.phone || alvo?.chatId || alvo?.id || null;
+  } catch (e) {
+    console.error('[Resumo Equipe] Erro ao buscar grupo:', e);
+    return null;
+  }
+}
+
+async function gerarComentarioIA(metricas: MetricasPessoa[]): Promise<Record<string, string>> {
+  if (!OPENAI_API_KEY || metricas.length === 0) return {};
+  try {
+    const resumoDados = metricas.map(m =>
+      `${m.nome}: ${m.leadsAtendidos} leads atendidos, ${m.leadsSemRetorno} sem retorno há +7 dias, ${m.conversoes} conversões hoje, tempo médio de resposta ${m.tempoMedioRespostaMin ?? 'sem dados'} min.`
+    ).join('\n');
+
+    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_API_KEY}` },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'Você é um coach de atendimento jurídico direto e construtivo. Pra cada pessoa da lista, escreva UMA frase curta (máx 18 palavras) apontando o que ela pode melhorar hoje, baseada só nos números dados. Se os números forem bons, elogie em vez de forçar uma crítica. Responda em JSON: {"Nome": "frase"}.' },
+          { role: 'user', content: resumoDados },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.4,
+      }),
+    });
+    if (!resp.ok) { console.error('[Resumo Equipe] OpenAI falhou:', resp.status, await resp.text()); return {}; }
+    const data = await resp.json();
+    return JSON.parse(data.choices?.[0]?.message?.content || '{}');
+  } catch (e) {
+    console.error('[Resumo Equipe] Erro ao gerar comentário IA:', e);
+    return {};
+  }
+}
+
+async function gerarEnviarResumoEquipe(supabase: any): Promise<any> {
+  const inicioHoje = getInicioHojeUtc();
+  const fimHoje = getInicioAmanhaUtc();
+  const ha7dias = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+  const { data: perfis } = await supabase.from('perfis').select('id, nome').eq('aprovado', true);
+  const nomePorId = new Map((perfis || []).map((p: any) => [p.id, (p.nome || '').split(' ')[0]]));
+
+  // 1. Leads atendidos hoje (interações de hoje, distinto por lead, por responsável)
+  const { data: interacoesHoje } = await supabase
+    .from('interacoes')
+    .select('cliente_id, responsavel_id')
+    .gte('data_interacao', inicioHoje.toISOString())
+    .lt('data_interacao', fimHoje.toISOString())
+    .not('responsavel_id', 'is', null);
+
+  const leadsAtendidosPorPessoa = new Map<string, Set<string>>();
+  for (const i of interacoesHoje || []) {
+    if (!i.responsavel_id || !i.cliente_id) continue;
+    if (!leadsAtendidosPorPessoa.has(i.responsavel_id)) leadsAtendidosPorPessoa.set(i.responsavel_id, new Set());
+    leadsAtendidosPorPessoa.get(i.responsavel_id)!.add(i.cliente_id);
+  }
+
+  // 2. Leads "Em Atendimento" parados há +7 dias — atribuídos a quem fez a
+  // última interação de cada um (mesma janela de 1 query embutida usada em
+  // email_leads_sem_retorno, sem precisar de .in() em massa).
+  const { data: leadsEmAtendimento } = await supabase
+    .from('leads_juridicos')
+    .select('id, updated_at, interacoes(responsavel_id, data_interacao)')
+    .eq('status', 'Em Atendimento');
+
+  const semRetornoPorPessoa = new Map<string, number>();
+  for (const lead of leadsEmAtendimento || []) {
+    const interacoesLead = (lead.interacoes || []) as { responsavel_id: string | null; data_interacao: string }[];
+    const ultima = interacoesLead.sort((a, b) => new Date(b.data_interacao).getTime() - new Date(a.data_interacao).getTime())[0];
+    const dataRef = ultima ? new Date(ultima.data_interacao) : new Date(lead.updated_at);
+    if (dataRef < ha7dias && ultima?.responsavel_id) {
+      semRetornoPorPessoa.set(ultima.responsavel_id, (semRetornoPorPessoa.get(ultima.responsavel_id) || 0) + 1);
+    }
+  }
+
+  // 3. Conversões hoje (contrato assinado hoje), atribuídas à última interação
+  // registrada em cada lead convertido.
+  const { data: leadsConvertidosHoje } = await supabase
+    .from('leads_juridicos')
+    .select('id, contract_signed_at, interacoes(responsavel_id, data_interacao)')
+    .gte('contract_signed_at', inicioHoje.toISOString())
+    .lt('contract_signed_at', fimHoje.toISOString());
+
+  const conversoesPorPessoa = new Map<string, number>();
+  for (const lead of leadsConvertidosHoje || []) {
+    const interacoesLead = (lead.interacoes || []) as { responsavel_id: string | null; data_interacao: string }[];
+    const ultima = interacoesLead.sort((a, b) => new Date(b.data_interacao).getTime() - new Date(a.data_interacao).getTime())[0];
+    if (ultima?.responsavel_id) conversoesPorPessoa.set(ultima.responsavel_id, (conversoesPorPessoa.get(ultima.responsavel_id) || 0) + 1);
+  }
+
+  // 4. Tempo médio de resposta: pareia cada mensagem de ENTRADA com a
+  // próxima SAÍDA (com metadata.sent_by_id, ou seja, mandada por um
+  // humano — bots/automação não têm esse campo) do mesmo lead, hoje.
+  const { data: mensagensHoje } = await supabase
+    .from('manychat_mensagens')
+    .select('lead_id, direcao, created_at, metadata')
+    .gte('created_at', inicioHoje.toISOString())
+    .lt('created_at', fimHoje.toISOString())
+    .not('lead_id', 'is', null)
+    .order('created_at', { ascending: true });
+
+  const porLead = new Map<string, any[]>();
+  for (const m of mensagensHoje || []) {
+    if (!porLead.has(m.lead_id)) porLead.set(m.lead_id, []);
+    porLead.get(m.lead_id)!.push(m);
+  }
+  const temposRespostaPorPessoa = new Map<string, number[]>();
+  for (const msgs of porLead.values()) {
+    for (let idx = 0; idx < msgs.length - 1; idx++) {
+      if (msgs[idx].direcao !== 'entrada') continue;
+      const proxima = msgs[idx + 1];
+      const sentBy = proxima?.metadata?.sent_by_id;
+      if (proxima?.direcao === 'saida' && sentBy) {
+        const minutos = (new Date(proxima.created_at).getTime() - new Date(msgs[idx].created_at).getTime()) / 60000;
+        if (minutos >= 0 && minutos < 24 * 60) {
+          if (!temposRespostaPorPessoa.has(sentBy)) temposRespostaPorPessoa.set(sentBy, []);
+          temposRespostaPorPessoa.get(sentBy)!.push(minutos);
+        }
+      }
+    }
+  }
+
+  // Monta a lista final — só gente que apareceu em alguma métrica hoje.
+  const idsEnvolvidos = new Set([
+    ...leadsAtendidosPorPessoa.keys(), ...semRetornoPorPessoa.keys(),
+    ...conversoesPorPessoa.keys(), ...temposRespostaPorPessoa.keys(),
+  ]);
+
+  const metricas: MetricasPessoa[] = [...idsEnvolvidos].map(id => {
+    const tempos = temposRespostaPorPessoa.get(id);
+    return {
+      nome: nomePorId.get(id) || 'Sem nome',
+      leadsAtendidos: leadsAtendidosPorPessoa.get(id)?.size || 0,
+      leadsSemRetorno: semRetornoPorPessoa.get(id) || 0,
+      conversoes: conversoesPorPessoa.get(id) || 0,
+      tempoMedioRespostaMin: tempos?.length ? Math.round(tempos.reduce((a, b) => a + b, 0) / tempos.length) : null,
+    };
+  }).sort((a, b) => b.leadsAtendidos - a.leadsAtendidos);
+
+  if (metricas.length === 0) {
+    return { tipo: 'resumo_atendimento_equipe', enviado: false, motivo: 'sem_dados_hoje' };
+  }
+
+  const comentarios = await gerarComentarioIA(metricas);
+
+  const dataHojeFmt = formatarDataExtenso(new Date());
+  let texto = `📊 *Resumo do Atendimento — ${dataHojeFmt}*\n\n`;
+  for (const m of metricas) {
+    texto += `*${m.nome}*\n`;
+    texto += `• Leads atendidos: ${m.leadsAtendidos}\n`;
+    if (m.leadsSemRetorno > 0) texto += `• ⚠️ Sem retorno há +7 dias: ${m.leadsSemRetorno}\n`;
+    if (m.conversoes > 0) texto += `• ✅ Contratos fechados hoje: ${m.conversoes}\n`;
+    if (m.tempoMedioRespostaMin !== null) texto += `• Tempo médio de resposta: ${m.tempoMedioRespostaMin} min\n`;
+    if (comentarios[m.nome]) texto += `💡 _${comentarios[m.nome]}_\n`;
+    texto += '\n';
+  }
+
+  let enviado = false;
+  let motivo = 'grupo_nao_configurado';
+  if (GRUPO_EQUIPE_NOME) {
+    const config = await getZapiConfig(supabase, '3EDDF959BC2B81F86B410203B614D70E'); // Bentes Ramos Trafego
+    if (config) {
+      const groupId = await buscarGroupId(config.instance_id, config.token, config.client_token, GRUPO_EQUIPE_NOME);
+      if (groupId) {
+        enviado = await enviarTextoGrupo(config, groupId, texto);
+        motivo = enviado ? 'ok' : 'falha_envio';
+      } else {
+        motivo = 'grupo_nao_encontrado';
+      }
+    } else {
+      motivo = 'instancia_nao_encontrada';
+    }
+  }
+
+  if (!enviado) {
+    console.log('[Resumo Equipe] Não enviado (' + motivo + '). Conteúdo gerado:\n' + texto);
+  }
+
+  return { tipo: 'resumo_atendimento_equipe', pessoas: metricas.length, enviado, motivo: enviado ? 'ok' : motivo, textoGerado: texto };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -1250,6 +1486,12 @@ serve(async (req) => {
           enviados: totalEnviados,
         });
       }
+    }
+
+    // ==================== RESUMO DE ATENDIMENTO DA EQUIPE (WHATSAPP) ====================
+    if (task === 'resumo_atendimento_equipe' || task === 'all') {
+      const resultado = await gerarEnviarResumoEquipe(supabase);
+      results.actions.push(resultado);
     }
 
     // Registrar execução
