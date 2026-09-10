@@ -888,6 +888,76 @@ A partir daqui cada entrada tem: **o que**, **por quê / causa raiz**, **commit(
   e dar instrução específica. Ainda depende dela liberar o microfone nas
   configurações do navegador — a mensagem só explica, não desbloqueia.
 
+### 2026-09-10 (mesmo dia, sessão seguinte) — Redesenho das telas de Petições (Figma real) + responsividade mobile
+- Usuário mandou print das miniaturas de 18 frames do Figma
+  (`SISTEMA-BENTES-E-RAMOS`) — 9 desktop + 9 mobile: dashboard, modal
+  "Nova Petição" e as 7 etapas do formulário (cliente, endereço, réu,
+  contrato, valores, outros, revisão). Confirmado que eram do arquivo
+  real antes de implementar.
+- **`PeticoesPage.tsx`** (dashboard) redesenhado a partir dos nodes
+  `37:8`/`37:123`: 4 cards de estatística, busca + filtros em pill,
+  tabela com paleta da marca, painel "Biblioteca de Modelos". Todos os
+  hooks/handlers originais preservados. Achado ao comparar com o
+  arquivo antes da reescrita: o header original usava `<AppHeader>`
+  (sino de notificação, nome/cargo, sair) — a reescrita inicial tinha
+  derrubado isso; corrigido plugando `NotificacoesBell`/`useAuth`/
+  `usePerfil` de verdade no novo header, em vez de ícones estáticos.
+- **`PeticaoEditarPage.tsx`** (wizard de 7 etapas) redesenhado a partir
+  dos nodes `37:200`/`37:1216` com o mesmo "chrome" (header, stepper,
+  card, rodapé de ações) pras 7 etapas — só muda `currentStep`. Mesmo
+  cuidado com o `AppHeader`, aplicado preventivamente desta vez. Etapa
+  de Revisão ganhou cards de resumo (cliente/réu/valor) que não
+  existiam antes.
+- **`PeticaoRevisaoPage.tsx`** (tela pós-geração, com histórico de
+  versões) não tinha frame próprio no Figma — só aplicada a mesma
+  paleta/padrão de card das outras duas telas, mantendo toda a lógica
+  (marcar protocolado, arquivar, baixar versões antigas).
+- Achado só depois do deploy: o botão flutuante "Nova Petição" tampava
+  a bolha do chat interno (usuário mandou print). Ajustado a posição
+  (`bottom-24`).
+- **Responsividade mobile das 3 telas**, a partir dos nodes mobile do
+  Figma (`37:1361` dashboard, `37:1455` modal, `37:1514` cliente):
+  stats em grid 2×2, lista de petições em cards em vez de tabela,
+  painel de modelos empilhado, indicador de etapa condensado
+  ("Etapa N de M" + barra) no wizard em vez do stepper horizontal
+  completo.
+  - **Bug de raiz nº 1** (achado testando com Playwright em viewport
+    390×844, não visualmente óbvio a 1440px): o botão flutuante fixo
+    ficava **invisível até rolar até o fim da página**. Causa:
+    `PageTransition.tsx` (usado por toda a AppLayout) aplica um CSS
+    `transform` no wrapper de qualquer página — e qualquer `transform`
+    (mesmo `translateY(0) scale(1)`, o estado "parado") vira o
+    *containing block* de todo `position:fixed` dentro dele, fazendo o
+    botão se comportar como se estivesse "grudado" na altura do
+    CONTEÚDO, não da viewport. Corrigido com `createPortal` renderizando
+    o botão direto em `document.body` (mesma técnica que o chat interno
+    já usa, só que ele fica fora do `PageTransition` por estrutura).
+  - **Bug de raiz nº 2**: ao empilhar os campos do formulário em 1
+    coluna no mobile, os rótulos de campos adjacentes ("Nacionalidade"/
+    "Estado Civil", "Profissão"/"RG") apareciam sobrepostos um no
+    outro. Causa: `FieldInput` aplicava `col-span-2` fixo pros campos
+    "largura total", e pedir `span 2` numa grid com só 1 coluna
+    explícita força o CSS a criar uma coluna implícita — colapsando a
+    coluna real pra `0px` de largura. Corrigido pra `sm:col-span-2`
+    (só pede a 2ª coluna quando ela realmente existe).
+  - **Bug de raiz nº 3**: o rodapé de ações do wizard ("Voltar" /
+    "Salvar" / "Pré-visualizar" / "Gerar Petição") ficava atrás da
+    barra de navegação inferior do mobile — confirmado com o próprio
+    Playwright reportando "elemento intercepta o clique". A página não
+    tem scroll interno de verdade (mesma raiz do bug nº 1: sem
+    `overflow-auto` funcionando, o documento inteiro rola). Corrigido
+    com `position: sticky` no rodapé (funciona mesmo dentro do
+    `transform` do `PageTransition`, ao contrário de `fixed`).
+  - Tudo verificado ao vivo com Playwright logado (390×844), inclusive
+    rolando até o fim de cada tela pra garantir que nada fica atrás da
+    barra de tabs/bolha do chat.
+- Ainda falta: mobile das 7 etapas restantes do wizard (só "Cliente"
+  foi verificada tela a tela; o "chrome" é compartilhado, então o
+  risco é baixo, mas não foi olhado campo a campo) e o modal "Nova
+  Petição" no mobile ficou "quase full-width" (Dialog do shadcn com
+  scroll interno), não é o sheet full-screen exato do Figma — decisão
+  de custo/benefício, não uma limitação técnica.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
@@ -1000,6 +1070,12 @@ Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a dat
 33. Versão mobile da página de Documentos (`documentos-mobile` no Figma) —
     specs/cores já puxadas do Figma real, só falta implementar (a versão
     desktop já foi redesenhada em 09-10).
+34. ~~Redesenho das telas de Petições (dashboard, wizard, revisão) a partir
+    do Figma real~~ — **concluído em 09-10** (desktop + mobile), ver linha
+    do tempo. Resta só: mobile campo-a-campo das 6 etapas do wizard além
+    de "Cliente" (chrome compartilhado, risco baixo) e o modal "Nova
+    Petição" ficar mais próximo do sheet full-screen do Figma no mobile
+    (hoje é um Dialog quase full-width com scroll interno).
 
 **Em andamento (planos aprovados)**
 19. Contratos/Procuração via templates + ZapSign nativo — Fases 4–9
