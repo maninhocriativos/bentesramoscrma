@@ -37,7 +37,7 @@ interface Crumb { id: string; name: string; }
 export default function DocumentosPage() {
   const { canAccessSettings: isAdmin } = usePerfil();
   const { toast: toastHook } = useToast();
-  const { documentos, loading: localLoading, uploadDocumento, deleteDocumento } = useDocumentos();
+  const { documentos, loading: localLoading, uploadDocumento, deleteDocumento, fetchDocumentos } = useDocumentos();
   const { leads } = useLeads();
 
   const [driveFiles, setDriveFiles] = useState<DriveFile[]>([]);
@@ -680,6 +680,7 @@ export default function DocumentosPage() {
       <DocumentoUploadModal
         open={uploadModalOpen}
         onOpenChange={setUploadModalOpen}
+        onUploaded={() => { fetchDocumentos(); if (isConnected) loadFiles(currentFolderId); }}
         driveFolder={
           activeTab === 'drive' && currentFolderId && breadcrumbs.length > 0
             ? breadcrumbs[breadcrumbs.length - 1]

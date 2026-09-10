@@ -26,12 +26,13 @@ interface DocumentoUploadModalProps {
   clienteId?: string;
   processoId?: string;
   driveFolder?: FolderCrumb; // pasta já aberta no Drive quando o modal é aberto
+  onUploaded?: () => void; // avisa quem abriu o modal (sua própria instância de useDocumentos/loadFiles não vê o upload feito por esta)
 }
 
 const ANON_KEY = 'sb_publishable__O6J3-8NscavVIOhuxsD4w_kZwkZ7pi';
 
 export function DocumentoUploadModal({
-  open, onOpenChange, clienteId, processoId, driveFolder,
+  open, onOpenChange, clienteId, processoId, driveFolder, onUploaded,
 }: DocumentoUploadModalProps) {
   const { uploadDocumento, uploading } = useDocumentos(processoId, clienteId);
   const { leads } = useLeads();
@@ -210,6 +211,7 @@ export function DocumentoUploadModal({
       if (destino === 'local') toast.success('Documento salvo localmente!');
       if (destino === 'ambos') toast.success('Documento salvo local e no Drive!');
 
+      onUploaded?.();
       reset();
       onOpenChange(false);
     } catch (err) {
