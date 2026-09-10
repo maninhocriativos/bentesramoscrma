@@ -1034,6 +1034,27 @@ A partir daqui cada entrada tem: **o que**, **por quê / causa raiz**, **commit(
   direito (paginar o `.in()`, revisar a lógica de criação de alerta em
   massa) fica pendente — item novo na lista de pendências.
 
+### 2026-09-10 (mesmo dia, sessão seguinte) — Corrigida a escala do Board de vez, "Visual Board" volta a ser o padrão
+- Usuário pediu explicitamente: layout tem que ser o do Figma (Board
+  como padrão) E os problemas têm que ser resolvidos de verdade, sem
+  desviar. Contenção anterior (limite de 200 leads) era um curativo,
+  não a correção — resolvida a causa raiz.
+- `useIsaInsights`, `useLeadExtras` e `useLeadsProcessoCounts` agora
+  paginam o filtro `.in(coluna, leadIds)` em lotes de 150 IDs
+  (`Promise.all` + merge dos resultados) em vez de mandar todos os IDs
+  filtrados numa única consulta — a URL não estoura mais de tamanho
+  com a pipeline inteira (3500+ leads).
+- **Achado revisando `useLeadExtras`**: o loop que inseria um alerta
+  "agendar_atendimento" por lead sem agendamento era uma **duplicata**
+  do que a Edge Function `isa-check-appointments` já faz corretamente
+  — rodando via `cron.schedule` a cada 2h, escopada só a leads Em
+  Atendimento/Em Negociação (migration `20260105014245`). Removida a
+  versão client-side (e as 2 queries que só existiam pra sustentar
+  ela) — não era funcionalidade real perdida, era risco sem propósito.
+- "Visual Board" voltou a ser o padrão da página; removido o
+  aviso/limite de 200 leads. Testado ao vivo com os 3567 leads reais
+  em produção, todas as 8 colunas do Board, sem erro de fetch.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
@@ -1155,16 +1176,14 @@ Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a dat
     concluídos em 09-10 (ver linha do tempo). Falta: vistas "Cards" e
     "Lista" (visual antigo, sem frame no Figma), `LeadDetailModal.tsx`
     e versão mobile.
-36. **`useIsaInsights`/`useLeadExtras` não escalam pra pipeline inteira**
-    (achado em 09-10 testando o Board da Pipeline de Leads ao vivo):
-    fazem `.in(lead_id, [...])` com TODOS os IDs recebidos de uma vez,
-    sem paginar — com milhares de leads a URL fica grande demais e
-    falha. `useLeadExtras` também roda um loop que pode inserir um
-    alerta pra Isa por lead sem agendamento — em escala, risco de
-    inserir centenas de `system_events` de uma vez. Contido por ora
-    limitando o Board a 200 leads filtrados (ver `LeadsTableView.tsx`,
-    `BOARD_SAFE_LIMIT`); a correção de verdade (paginar o `.in()`,
-    revisar a lógica de alerta em massa) ainda não foi feita.
+36. ~~`useIsaInsights`/`useLeadExtras` não escalam pra pipeline inteira~~
+    — **corrigido em 09-10** (mesmo dia, sessão seguinte): `.in()`
+    paginado em lotes de 150 IDs em `useIsaInsights`,
+    `useLeadExtras` e `useLeadsProcessoCounts`; loop de criação de
+    alerta duplicado removido de `useLeadExtras` (já feito certo pela
+    Edge Function `isa-check-appointments`, cron a cada 2h). "Visual
+    Board" voltou a ser o padrão da página, sem limite artificial. Ver
+    linha do tempo.
 
 **Em andamento (planos aprovados)**
 19. Contratos/Procuração via templates + ZapSign nativo — Fases 4–9
