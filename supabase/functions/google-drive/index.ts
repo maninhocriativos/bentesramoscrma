@@ -348,6 +348,23 @@ serve(async (req) => {
         return new Response(JSON.stringify({ name: meta.name, mimeType: meta.mimeType, content: base64 }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
+      // Excluir arquivo/pasta — move para a lixeira do Drive (recuperável por até
+      // 30 dias) em vez de apagar de vez, já que são documentos de clientes.
+      if (postAction === 'delete_file') {
+        const { file_id: fileId } = body;
+        if (!fileId) return new Response(JSON.stringify({ error: 'ID do arquivo não fornecido' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
+          method: 'PATCH',
+          headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ trashed: true }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          return new Response(JSON.stringify({ error: data.error?.message || 'Erro ao excluir' }), { status: res.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+        return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
       return new Response(JSON.stringify({ error: 'Ação não reconhecida' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 

@@ -15,7 +15,7 @@ import {
   Folder, File, FileText, Upload, ArrowLeft, Search,
   Loader2, Plus, RefreshCw, ExternalLink, Download,
   Cloud, HardDrive, ChevronRight, Home, FolderOpen,
-  FileImage, FileSpreadsheet, FolderPlus, Eye, X, FolderInput,
+  FileImage, FileSpreadsheet, FolderPlus, Eye, X, FolderInput, Trash2,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -37,7 +37,7 @@ interface Crumb { id: string; name: string; }
 export default function DocumentosPage() {
   const { canAccessSettings: isAdmin } = usePerfil();
   const { toast: toastHook } = useToast();
-  const { documentos, loading: localLoading, uploadDocumento } = useDocumentos();
+  const { documentos, loading: localLoading, uploadDocumento, deleteDocumento } = useDocumentos();
   const { leads } = useLeads();
 
   const [driveFiles, setDriveFiles] = useState<DriveFile[]>([]);
@@ -58,6 +58,8 @@ export default function DocumentosPage() {
   const [preview, setPreview] = useState<{ name: string; mime: string; url: string; isBlob: boolean } | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
+  const [deleteTarget, setDeleteTarget] = useState<{ kind: 'drive' | 'local'; id: string; name: string; arquivoUrl?: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Busca o token do Drive compartilhado do escritório via edge function
   // (service role no servidor — não depende de RLS, funciona para todos os usuários)
@@ -153,6 +155,25 @@ export default function DocumentosPage() {
       loadFiles(currentFolderId); toast.success('Arquivo enviado!'); setUploadingFile(false);
     };
     reader.readAsDataURL(f); e.target.value = '';
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      if (deleteTarget.kind === 'local') {
+        await deleteDocumento(deleteTarget.id, deleteTarget.arquivoUrl || '');
+      } else {
+        await callDrive('delete_file', { file_id: deleteTarget.id });
+        toast.success(`"${deleteTarget.name}" movido para a lixeira do Drive`);
+        loadFiles(currentFolderId);
+      }
+      setDeleteTarget(null);
+    } catch {
+      toast.error('Erro ao excluir');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const importFile = async (df: DriveFile) => {
@@ -491,18 +512,28 @@ export default function DocumentosPage() {
                           </div>
                           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2.5">
                             {folders.map(f => (
-                              <button
+                              <div
                                 key={f.id}
+                                role="button"
+                                tabIndex={0}
                                 onClick={() => enterFolder(f)}
-                                className="group relative flex items-center gap-3 p-3.5 rounded-2xl bg-card border border-border/30 hover:border-[#c9a96e]/40 hover:shadow-sm transition-all text-left overflow-hidden"
+                                onKeyDown={e => { if (e.key === 'Enter') enterFolder(f); }}
+                                className="group relative flex items-center gap-3 p-3.5 rounded-2xl bg-card border border-border/30 hover:border-[#c9a96e]/40 hover:shadow-sm transition-all text-left overflow-hidden cursor-pointer"
                               >
                                 <div className="absolute inset-0 bg-gradient-to-br from-[#c9a96e]/0 to-[#c9a96e]/0 group-hover:from-[#c9a96e]/3 group-hover:to-transparent transition-all" />
                                 <Folder className="h-8 w-8 text-[#c9a96e] shrink-0 group-hover:scale-105 transition-transform" />
-                                <div className="min-w-0 relative">
+                                <div className="min-w-0 relative flex-1">
                                   <p className="text-xs font-semibold truncate leading-snug text-foreground">{f.name}</p>
                                   <p className="text-[9px] text-muted-foreground/40 mt-0.5 font-medium uppercase tracking-wide">Pasta</p>
                                 </div>
-                              </button>
+                                <button
+                                  onClick={e => { e.stopPropagation(); setDeleteTarget({ kind: 'drive', id: f.id, name: f.name }); }}
+                                  className="relative h-6 w-6 shrink-0 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all"
+                                  title="Excluir pasta"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
                             ))}
                           </div>
                         </div>
@@ -523,7 +554,7 @@ export default function DocumentosPage() {
                                   <th className="text-left text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest px-5 py-3">Nome</th>
                                   <th className="text-left text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest px-5 py-3 hidden sm:table-cell">Tamanho</th>
                                   <th className="text-left text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest px-5 py-3 hidden md:table-cell">Modificado</th>
-                                  <th className="w-40 px-5 py-3" />
+                                  <th className="w-48 px-5 py-3" />
                                 </tr>
                               </thead>
                               <tbody>
@@ -558,6 +589,9 @@ export default function DocumentosPage() {
                                         </button>
                                         <button onClick={() => importFile(f)} className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-all" title="Importar para o sistema">
                                           <FolderInput className="h-3.5 w-3.5" />
+                                        </button>
+                                        <button onClick={() => setDeleteTarget({ kind: 'drive', id: f.id, name: f.name })} className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all" title="Excluir">
+                                          <Trash2 className="h-3.5 w-3.5" />
                                         </button>
                                       </div>
                                     </td>
@@ -599,7 +633,7 @@ export default function DocumentosPage() {
                         <th className="text-left text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest px-5 py-3">Nome</th>
                         <th className="text-left text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest px-5 py-3 hidden sm:table-cell">Tipo</th>
                         <th className="text-left text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest px-5 py-3 hidden md:table-cell">Data</th>
-                        <th className="w-28 px-5 py-3" />
+                        <th className="w-36 px-5 py-3" />
                       </tr>
                     </thead>
                     <tbody>
@@ -627,6 +661,9 @@ export default function DocumentosPage() {
                               </button>
                               <button onClick={() => openLocal(d.arquivo_url)} className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-all" title="Abrir em nova aba">
                                 <ExternalLink className="h-3.5 w-3.5" />
+                              </button>
+                              <button onClick={() => setDeleteTarget({ kind: 'local', id: d.id, name: d.nome, arquivoUrl: d.arquivo_url })} className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all" title="Excluir">
+                                <Trash2 className="h-3.5 w-3.5" />
                               </button>
                             </div>
                           </td>
@@ -721,6 +758,38 @@ export default function DocumentosPage() {
               >
                 {creatingFolder ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderPlus className="h-3.5 w-3.5" />}
                 Criar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── Dialog Confirmar Exclusão ── */}
+      {deleteTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.45)' }}
+          onClick={e => { if (e.target === e.currentTarget && !deleting) setDeleteTarget(null); }}
+        >
+          <div className="w-full max-w-sm rounded-2xl bg-card border border-border/40 shadow-2xl p-6">
+            <h2 className="text-base font-bold mb-1">Excluir {deleteTarget.kind === 'local' ? 'documento' : 'do Drive'}?</h2>
+            <p className="text-xs text-muted-foreground mb-4">
+              {deleteTarget.kind === 'drive'
+                ? <>"{deleteTarget.name}" será movido para a lixeira do Google Drive (recuperável por lá por 30 dias).</>
+                : <>"{deleteTarget.name}" será excluído permanentemente do sistema. Essa ação não pode ser desfeita.</>}
+            </p>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+                Cancelar
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                className="rounded-xl gap-1.5"
+                onClick={handleConfirmDelete}
+                disabled={deleting}
+              >
+                {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                Excluir
               </Button>
             </div>
           </div>
