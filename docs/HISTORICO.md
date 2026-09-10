@@ -1092,6 +1092,35 @@ A partir daqui cada entrada tem: **o que**, **por quê / causa raiz**, **commit(
   leads); só os cards renderizados no Board ficam limitados a 30 por
   página. Trocar de pílula reseta pra página 1.
 
+### 2026-09-10 (mesmo dia, sessão seguinte) — Processos não vinculados + filtro de período no Relatório
+- Usuário mandou print de um lead "Contrato Assinado" mostrando "0
+  Processos" e perguntou por que processos cadastrados não aparecem
+  na ficha do lead.
+- Investigado com dados reais de produção (não achismo): a busca de
+  auto-vínculo em `useLeadProcessos.ts` só checava a tabela
+  `processo_partes` (partes citadas no processo, útil pra sync
+  automático DJEN/DataJud) — nunca checava `processos.cpf_cliente`/
+  `nome_cliente`, o campo que o CADASTRO MANUAL do processo usa pra
+  registrar o cliente. Query direta confirmou o alcance: **70 leads**
+  com status "Contrato Assinado"/"Ganho" têm processo com CPF batendo
+  exatamente em `processos.cpf_cliente`, sem aparecer na ficha.
+  Corrigido: busca agora inclui essas duas colunas também. Mantida a
+  posse (`cliente_id`) intacta quando já pertence a outro lead — achado
+  um caso de lead duplicado (mesma pessoa, CPF idêntico, 2 registros)
+  no caminho; não reatribui automaticamente, só passa a EXIBIR o
+  processo, que é o problema relatado. Verificado ao vivo: lead
+  "Raimundo Nonato Sousa das Chagas" foi de 0 → 4 processos exibidos.
+  O lead do print original (Rafaela Maria Farias Correia) não tinha
+  CPF cadastrado nem nenhum processo achável por nome em lugar
+  nenhum — pra esse caso específico não havia processo real no
+  sistema ainda, o bug achado é de escopo mais amplo (os 70 outros).
+- **Modal de Relatório**: usuário pediu filtro por mês/semana/dia/hora
+  (hoje pegava os 3000+ leads filtrados de uma vez sem estreitar por
+  data). Adicionadas pílulas de período rápido (Última hora, Hoje,
+  Esta Semana, Este Mês, Mês Passado) + seletor de data customizado,
+  filtrando por `created_at` do lead. Opcional — sem período
+  selecionado, mantém o comportamento de antes.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
