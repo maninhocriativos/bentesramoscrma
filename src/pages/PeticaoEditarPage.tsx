@@ -78,7 +78,7 @@ function FieldInput({
 }) {
   const isEmpty = submitted && !config.optional && !value?.trim();
   return (
-    <div className={config.span === 'full' ? 'col-span-2' : ''}>
+    <div className={config.span === 'full' ? 'sm:col-span-2' : ''}>
       <Label className={cn('text-[13px] font-semibold mb-2 flex items-center gap-1', isEmpty ? 'text-destructive' : 'text-[#29201e]')}>
         {config.label}
         {config.optional && <span className="text-[#6e5e5a] font-normal">(opcional)</span>}
@@ -389,12 +389,12 @@ export default function PeticaoEditarPage() {
   return (
     <>
       <div className="flex flex-col h-full bg-[#f9f6f0]">
-        <div className="bg-white border-b border-[#efebe4] px-6 sm:px-10 py-5 flex items-center justify-between shrink-0 gap-4">
+        <div className="bg-white border-b border-[#efebe4] px-4 sm:px-10 py-4 sm:py-5 flex items-center justify-between shrink-0 gap-3">
           <div className="min-w-0">
-            <h1 className="text-2xl text-[#29201e] truncate">{modelNome || 'Petição'}</h1>
-            <p className="text-sm text-[#6e5e5a] mt-1 truncate">{actionName}</p>
+            <h1 className="text-lg sm:text-2xl text-[#29201e] truncate">{modelNome || 'Petição'}</h1>
+            <p className="text-sm text-[#6e5e5a] mt-1 truncate hidden sm:block">{actionName}</p>
           </div>
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border bg-[#dcfce7] border-[#15803d] text-[#15803d]">
               <span className="h-2 w-2 rounded-full bg-[#22c55e]" />
               Google Drive Conectado
@@ -408,8 +408,17 @@ export default function PeticaoEditarPage() {
           </div>
         </div>
 
-        <div className="bg-white border-b border-[#efebe4] px-6 sm:px-10 py-5 shrink-0">
-          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        <div className="bg-white border-b border-[#efebe4] px-4 sm:px-10 py-4 sm:py-5 shrink-0">
+          {/* Mobile: indicador condensado (nome da etapa atual + "Etapa N de M") */}
+          <div className="sm:hidden flex items-center justify-between gap-2 mb-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="h-[22px] w-[22px] rounded-[11px] bg-[#3e2f2b] text-white flex items-center justify-center text-xs font-bold shrink-0">{currentStepConfig.id}</span>
+              <span className="text-sm font-semibold text-[#29201e] truncate">{currentStepConfig.title}</span>
+            </div>
+            <span className="text-[13px] text-[#6e5e5a] shrink-0">Etapa {currentIdx + 1} de {steps.length}</span>
+          </div>
+          {/* Desktop/tablet: stepper completo */}
+          <div className="hidden sm:flex items-center gap-2 overflow-x-auto pb-1">
             {steps.map((step, i) => {
               const Icon = step.icon;
               const isActive = step.id === currentStep;
@@ -428,13 +437,13 @@ export default function PeticaoEditarPage() {
               );
             })}
           </div>
-          <div className="h-1 rounded-full bg-[#f5efe6] mt-4 overflow-hidden">
+          <div className="h-1 rounded-full bg-[#f5efe6] mt-3 sm:mt-4 overflow-hidden">
             <div className="h-full bg-[#3e2f2b] rounded-full transition-all" style={{ width: `${progress}%` }} />
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto p-6 sm:p-10">
-          <div className="bg-white border border-[#efebe4] rounded-2xl p-6 sm:p-8">
+        <div className="flex-1 overflow-auto p-4 sm:p-10">
+          <div className="bg-white border border-[#efebe4] rounded-2xl p-4 sm:p-8">
             {!isReviewStep && !isPrintStep && currentStepConfig.fields.length > 0 && (
               <div className="space-y-6">
                 <div className="flex items-center gap-3">
@@ -466,7 +475,7 @@ export default function PeticaoEditarPage() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   {currentStepConfig.fields.map(field => (
                     <FieldInput key={field.key} config={field} value={formData[field.key] || ''} onChange={v => updateField(field.key, v)} submitted={submitted} />
                   ))}
@@ -592,25 +601,28 @@ export default function PeticaoEditarPage() {
           </div>
         </div>
 
-        <div className="bg-white border-t border-[#efebe4] px-6 sm:px-10 py-5 flex items-center justify-between gap-3 shrink-0">
-          <button onClick={goPrev} className="flex items-center gap-2 px-5 py-3 rounded-xl border border-[#efebe4] text-sm font-semibold text-[#29201e] hover:bg-[#f5efe6] transition-colors">
+        {/* Sticky no mobile: a barra de tabs (fixed) + bolha do chat cobririam os
+            botões se a barra ficasse só no fluxo normal do documento (essa
+            página não tem scroll interno de verdade — ver PeticoesPage). */}
+        <div className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] sm:static bg-white border-t border-[#efebe4] px-4 sm:px-10 py-3 sm:py-5 flex items-center justify-between gap-2 sm:gap-3 shrink-0 flex-wrap z-30">
+          <button onClick={goPrev} className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2.5 sm:py-3 rounded-xl border border-[#efebe4] text-[13px] sm:text-sm font-semibold text-[#29201e] hover:bg-[#f5efe6] transition-colors">
             <ArrowLeft className="h-4 w-4" /> Voltar
           </button>
-          <div className="flex items-center gap-3">
-            <button onClick={handleSaveDraft} disabled={saving} className="flex items-center gap-2 px-5 py-3 rounded-xl border border-[#c5a47e] text-sm font-semibold text-[#3e2f2b] hover:bg-[#f5efe6] transition-colors disabled:opacity-60">
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Salvar Rascunho
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
+            <button onClick={handleSaveDraft} disabled={saving} className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2.5 sm:py-3 rounded-xl border border-[#c5a47e] text-[13px] sm:text-sm font-semibold text-[#3e2f2b] hover:bg-[#f5efe6] transition-colors disabled:opacity-60">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} <span className="hidden sm:inline">Salvar Rascunho</span><span className="sm:hidden">Salvar</span>
             </button>
             {isReviewStep ? (
               <>
-                <button onClick={handlePreview} disabled={previewLoading} className="flex items-center gap-2 px-5 py-3 rounded-xl border border-[#3e2f2b] text-sm font-semibold text-[#3e2f2b] hover:bg-[#f5efe6] transition-colors disabled:opacity-60">
-                  {previewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />} Pré-visualizar
+                <button onClick={handlePreview} disabled={previewLoading} className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2.5 sm:py-3 rounded-xl border border-[#3e2f2b] text-[13px] sm:text-sm font-semibold text-[#3e2f2b] hover:bg-[#f5efe6] transition-colors disabled:opacity-60">
+                  {previewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />} <span className="hidden sm:inline">Pré-visualizar</span><span className="sm:hidden">Prévia</span>
                 </button>
-                <button onClick={handleGenerate} disabled={generating} className="flex items-center gap-2 px-6 py-3 rounded-xl bg-[#3e2f2b] hover:bg-[#2d211d] text-white text-sm font-semibold transition-colors disabled:opacity-60">
-                  {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Gerar Petição
+                <button onClick={handleGenerate} disabled={generating} className="flex items-center gap-1.5 sm:gap-2 px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl bg-[#3e2f2b] hover:bg-[#2d211d] text-white text-[13px] sm:text-sm font-semibold transition-colors disabled:opacity-60">
+                  {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} <span className="hidden sm:inline">Gerar Petição</span><span className="sm:hidden">Gerar</span>
                 </button>
               </>
             ) : (
-              <button onClick={goNext} className="flex items-center gap-2 px-6 py-3 rounded-xl bg-[#3e2f2b] hover:bg-[#2d211d] text-white text-sm font-semibold transition-colors">
+              <button onClick={goNext} className="flex items-center gap-1.5 sm:gap-2 px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl bg-[#3e2f2b] hover:bg-[#2d211d] text-white text-[13px] sm:text-sm font-semibold transition-colors">
                 Próximo <ArrowRight className="h-4 w-4" />
               </button>
             )}

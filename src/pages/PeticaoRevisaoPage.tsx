@@ -123,12 +123,12 @@ export default function PeticaoRevisaoPage() {
 
   return (
     <div className="flex flex-col h-full bg-[#f9f6f0]">
-      <div className="bg-white border-b border-[#efebe4] px-6 sm:px-10 py-5 flex items-center justify-between shrink-0 gap-4">
+      <div className="bg-white border-b border-[#efebe4] px-4 sm:px-10 py-4 sm:py-5 flex items-center justify-between shrink-0 gap-3">
         <div className="min-w-0">
-          <h1 className="text-2xl text-[#29201e] truncate">Revisão da Petição</h1>
-          <p className="text-sm text-[#6e5e5a] mt-1 truncate">{petition.action_types?.nome} · {petition.petition_models?.nome}</p>
+          <h1 className="text-lg sm:text-2xl text-[#29201e] truncate">Revisão da Petição</h1>
+          <p className="text-sm text-[#6e5e5a] mt-1 truncate hidden sm:block">{petition.action_types?.nome} · {petition.petition_models?.nome}</p>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <NotificacoesBell />
           {user && (
             <>
@@ -142,28 +142,28 @@ export default function PeticaoRevisaoPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-6 sm:p-10">
-        <div className="max-w-[1000px] mx-auto space-y-6">
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <button onClick={() => navigate('/peticoes')} className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-[#6e5e5a] hover:bg-[#f5efe6] transition-colors">
+      <div className="flex-1 overflow-auto px-4 sm:px-10 pt-4 sm:pt-10 pb-24 sm:pb-10">
+        <div className="max-w-[1000px] mx-auto space-y-4 sm:space-y-6">
+          <div className="flex items-center justify-between flex-wrap gap-2 sm:gap-3">
+            <button onClick={() => navigate('/peticoes')} className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[13px] sm:text-sm font-semibold text-[#6e5e5a] hover:bg-[#f5efe6] transition-colors">
               <ArrowLeft className="h-4 w-4" /> Voltar
             </button>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap justify-end">
               {petition.status === 'generated' && (
-                <button onClick={handleMarkFiled} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#3e2f2b] hover:bg-[#2d211d] text-white text-sm font-semibold transition-colors">
-                  <CheckCircle2 className="h-4 w-4" /> Marcar Protocolado
+                <button onClick={handleMarkFiled} className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-[#3e2f2b] hover:bg-[#2d211d] text-white text-[13px] sm:text-sm font-semibold transition-colors">
+                  <CheckCircle2 className="h-4 w-4" /> <span className="hidden sm:inline">Marcar Protocolado</span><span className="sm:hidden">Protocolar</span>
                 </button>
               )}
-              <button onClick={() => navigate(`/peticoes/${id}/editar`)} className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[#efebe4] text-sm font-semibold text-[#29201e] hover:bg-[#f5efe6] transition-colors">
-                <Edit3 className="h-4 w-4" /> Editar Dados
+              <button onClick={() => navigate(`/peticoes/${id}/editar`)} className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl border border-[#efebe4] text-[13px] sm:text-sm font-semibold text-[#29201e] hover:bg-[#f5efe6] transition-colors">
+                <Edit3 className="h-4 w-4" /> Editar
               </button>
-              <button onClick={handleArchive} className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[#efebe4] text-sm font-semibold text-[#29201e] hover:bg-[#f5efe6] transition-colors">
+              <button onClick={handleArchive} className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl border border-[#efebe4] text-[13px] sm:text-sm font-semibold text-[#29201e] hover:bg-[#f5efe6] transition-colors">
                 <Archive className="h-4 w-4" /> Arquivar
               </button>
             </div>
           </div>
 
-          <div className="bg-white border border-[#efebe4] rounded-2xl p-6 sm:p-8">
+          <div className="bg-white border border-[#efebe4] rounded-2xl p-4 sm:p-8">
             <div className="flex items-start justify-between mb-5 gap-3">
               <div>
                 <h2 className="text-lg text-[#29201e]">{petition.action_types?.nome || 'Petição'}</h2>
@@ -217,7 +217,7 @@ export default function PeticaoRevisaoPage() {
           </div>
 
           {versions.length > 0 && (
-            <div className="bg-white border border-[#efebe4] rounded-2xl p-6 sm:p-8">
+            <div className="bg-white border border-[#efebe4] rounded-2xl p-4 sm:p-8">
               <div className="flex items-center gap-2 mb-4">
                 <Clock className="h-4 w-4 text-[#3e2f2b]" />
                 <span className="text-sm font-semibold text-[#29201e]">Histórico de Versões</span>
