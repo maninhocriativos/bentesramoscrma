@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { stripHtml, classifyMovimento, TIPOS_INTIMACAO } from "../_shared/intimacoes-helpers.ts";
+import { getDjenHttpClient } from "../_shared/djen-proxy.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -42,7 +43,8 @@ type DjenResult = { blocked: boolean; items: any[] };
 async function fetchDjenPorProcesso(cnjNorm: string): Promise<DjenResult> {
   try {
     const url = `https://comunicaapi.pje.jus.br/api/v1/comunicacao?numeroProcesso=${cnjNorm}&itensPorPagina=50&pagina=1`;
-    const resp = await fetch(url, { headers: DJEN_HEADERS, signal: AbortSignal.timeout(15000) });
+    const client = getDjenHttpClient();
+    const resp = await fetch(url, { headers: DJEN_HEADERS, signal: AbortSignal.timeout(15000), client } as RequestInit & { client?: Deno.HttpClient });
     if (resp.ok) {
       const data = await resp.json();
       return { blocked: false, items: Array.isArray(data?.items) ? data.items : [] };

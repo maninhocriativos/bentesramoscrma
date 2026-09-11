@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 // Importar novas estratégias
 import { fetchFromTJAM } from "./strategies/tjam-scraping.ts";
+import { getDjenHttpClient } from "../_shared/djen-proxy.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -605,9 +606,10 @@ serve(async (req) => {
         "Accept": "application/json",
       };
       async function fetchDjen(url: string): Promise<Response | null> {
+        const client = getDjenHttpClient();
         for (let attempt = 0; attempt < 3; attempt++) {
           try {
-            const resp = await fetch(url, { headers: DJEN_HEADERS, signal: AbortSignal.timeout(15000) });
+            const resp = await fetch(url, { headers: DJEN_HEADERS, signal: AbortSignal.timeout(15000), client } as RequestInit & { client?: Deno.HttpClient });
             if (resp.ok) return resp;
             console.warn(`⚠️ [DJEN] tentativa ${attempt + 1} → HTTP ${resp.status}`);
             if (resp.status !== 403 && resp.status !== 429) return resp;
