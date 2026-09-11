@@ -1078,7 +1078,7 @@ serve(async (req) => {
     // Limit alto para não perder registros em escritórios com muitas intimações
     const { data: existing } = await supabase
       .from("intimacoes")
-      .select("id, processo_cnj, tipo_intimacao, data_disponibilizacao, tribunal, data_publicacao, data_intimacao, conteudo")
+      .select("id, processo_cnj, tipo_intimacao, data_disponibilizacao, tribunal, data_publicacao, data_intimacao, conteudo, raw_json")
       .eq("oab_numero", oab_numero)
       .eq("oab_uf", oab_uf)
       .gte("created_at", new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString())
@@ -1087,7 +1087,20 @@ serve(async (req) => {
     // Itens com CNJ: chave por processo+tipo+data (processo identificado com precisão)
     // Itens sem CNJ (V1/Diário): chave inclui início do conteúdo para distinguir publicações
     // diferentes no mesmo dia da mesma fonte
-    const dedupeKey = (item: { processo_cnj?: string | null; tipo_intimacao?: string | null; data_disponibilizacao?: string | null; conteudo?: string | null }) => {
+    //
+    // BUG achado 2026-09-11 (usuário relatou intimações já lidas voltando como
+    // "não lida"): `data_disponibilizacao` do MESMO item real do DJEN pode vir
+    // diferente entre consultas (confirmado com dado real: item original com
+    // data_disponibilizacao=2026-08-07, a mesma comunicação reaparecendo numa
+    // consulta posterior com data_disponibilizacao=2026-09-10) — a chave por
+    // data sozinha não detectava que já existia, duplicava a linha (nova, não
+    // lida) por cima da antiga (já lida). O item do DJEN tem um `id` numérico
+    // próprio, estável, que não muda entre consultas — usar ele como chave
+    // primária de dedup quando disponível (guardado em `raw_json.id`), só
+    // caindo pro heurístico de data pra fontes sem esse id (TJAM/Escavador).
+    const dedupeKey = (item: { processo_cnj?: string | null; tipo_intimacao?: string | null; data_disponibilizacao?: string | null; conteudo?: string | null; raw_json?: any }) => {
+      const djenId = item.raw_json?.id ?? item.raw_json?.numeroComunicacao;
+      if (djenId != null) return `djenid|${djenId}`;
       const date = item.data_disponibilizacao?.slice(0, 10) || "";
       if (item.processo_cnj) return `cnj|${item.processo_cnj}|${item.tipo_intimacao || ""}|${date}`;
       return `nocnj|${item.tipo_intimacao || ""}|${date}|${(item.conteudo || "").slice(0, 200)}`;

@@ -148,17 +148,25 @@ serve(async (req) => {
         if (items.length > 0) {
           const { data: existentes } = await supabase
             .from("intimacoes")
-            .select("tipo_intimacao, data_disponibilizacao")
+            .select("tipo_intimacao, data_disponibilizacao, raw_json")
             .eq("processo_id", processo.id);
+          // Mesmo bug/fix de intimacoes-oab (2026-09-11): data_disponibilizacao
+          // do mesmo item pode vir diferente entre consultas ao DJEN, então
+          // priorizar o `id` numérico estável do item (raw_json.id) como chave
+          // de dedup — só cai pro par tipo+data quando esse id não existe.
           const existingKeys = new Set(
-            (existentes || []).map((e: any) => `${e.tipo_intimacao || ""}|${(e.data_disponibilizacao || "").slice(0, 10)}`)
+            (existentes || []).map((e: any) => {
+              const djenId = e.raw_json?.id ?? e.raw_json?.numeroComunicacao;
+              return djenId != null ? `djenid|${djenId}` : `${e.tipo_intimacao || ""}|${(e.data_disponibilizacao || "").slice(0, 10)}`;
+            })
           );
 
           for (const item of items) {
             const dataDisp: string = item.data_disponibilizacao || "";
             const tipoRaw = classifyMovimento(item.texto || "", item.tipoComunicacao || "");
             const tipo = TIPOS_INTIMACAO.has(tipoRaw) ? tipoRaw : "Publicação";
-            const key = `${tipo}|${dataDisp.slice(0, 10)}`;
+            const djenId = item.id ?? item.numeroComunicacao;
+            const key = djenId != null ? `djenid|${djenId}` : `${tipo}|${dataDisp.slice(0, 10)}`;
             if (existingKeys.has(key)) continue;
 
             const conteudo = stripHtml(item.texto || "");
