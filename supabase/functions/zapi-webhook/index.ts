@@ -1,6 +1,7 @@
 const serve = Deno.serve;
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { normalizePhone, gerarSubscriberId, identificarInstanciaOrigem, getZapiConfig, sendText, sanitizarNomeContato, PHONE_TRAFEGO, PHONE_ESCRITORIO } from '../_shared/zapi-helper.ts';
+import { enviarComoGrupo } from '../_shared/grupo-equipe.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -38,6 +39,60 @@ async function registrarMensagemGrupoMemoria(remetenteNome: string | null, remet
     });
   } catch (e) {
     console.error('[Z-API Webhook] Falha ao registrar mensagem na memória do grupo:', e);
+  }
+}
+
+// ============================================
+// RESPOSTA EM TEMPO REAL QUANDO A ISA É MARCADA NO GRUPO — pedido do
+// usuário 2026-09-11. Mentions do WhatsApp chegam embutidas no próprio
+// texto como "@<telefone só dígitos>" (confirmado na doc oficial Z-API,
+// mesmo formato usado pro envio) — não existe um campo separado tipo
+// "mentionedIds" no payload de recebimento, então a detecção é por texto.
+const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+
+function normalizarDigitos(s: string): string {
+  return s.replace(/\D/g, '');
+}
+
+// O número "marcável" é o da própria instância (quem recebe o webhook) —
+// connectedPhoneForDetection já vem calculado mais abaixo, então essa
+// checagem só compara texto, não decide QUAL número é o bot.
+function mensagemMencionaBot(mensagem: string, connectedPhone: string | null): boolean {
+  if (!connectedPhone) return false;
+  const digitos = normalizarDigitos(connectedPhone);
+  if (!digitos) return false;
+  // "@5592..." — aceita com ou sem o "55" do país, e com/sem o 9º dígito,
+  // já que o WhatsApp às vezes marca com o número "cru" da conta.
+  const semPais = digitos.startsWith('55') ? digitos.slice(2) : digitos;
+  return mensagem.includes(`@${digitos}`) || mensagem.includes(`@${semPais}`);
+}
+
+async function gerarRespostaIsaMencao(mensagem: string, remetenteNome: string | null): Promise<string | null> {
+  if (!OPENAI_API_KEY) return null;
+  try {
+    const textoLimpo = mensagem.replace(/@\d+/g, '').trim();
+    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_API_KEY}` },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: 'Você é a Isa, assistente virtual do escritório de advocacia Bentes Ramos, respondendo dentro do grupo interno da equipe no WhatsApp (não é atendimento a cliente). Alguém da equipe acabou de te marcar. Responda em português, no máximo 2 frases curtas, tom natural e direto. Se a mensagem for uma atualização/confirmação (ex: "audiência realizada", "liguei pro cliente"), confirme que anotou. Se for uma pergunta que você não tem como saber a resposta certa, diga isso com honestidade em vez de inventar.',
+          },
+          { role: 'user', content: `${remetenteNome || 'Alguém'} escreveu: "${textoLimpo}"` },
+        ],
+        max_tokens: 120,
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    return data.choices?.[0]?.message?.content?.trim() || null;
+  } catch (e) {
+    console.error('[Z-API Webhook] Falha ao gerar resposta da Isa:', e);
+    return null;
   }
 }
 
@@ -406,6 +461,20 @@ serve(async (req: Request) => {
           normalized.message,
           new Date(normalized.timestamp).getTime()
         );
+
+        // Isa marcada no grupo → responde em tempo real (pedido do usuário
+        // 2026-09-11). Nunca deve travar o resto do webhook — falha aqui é
+        // só logada, igual o registro de memória acima.
+        if (mensagemMencionaBot(normalized.message, connectedPhoneForDetection)) {
+          try {
+            const resposta = await gerarRespostaIsaMencao(normalized.message, normalized.name);
+            if (resposta) {
+              await enviarComoGrupo(supabase, resposta, normalized.phone ? [normalizePhone(normalized.phone)] : undefined);
+            }
+          } catch (e) {
+            console.error('[Z-API Webhook] Falha ao responder marcação no grupo:', e);
+          }
+        }
       }
       console.log('[Z-API Webhook] Ignorando mensagem de grupo');
       return new Response(JSON.stringify({ success: true, skipped: true, reason: 'group_message' }), {

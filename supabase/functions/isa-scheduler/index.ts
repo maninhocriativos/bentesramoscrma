@@ -20,6 +20,7 @@ import {
   resolveInstanceForLead,
   normalizePhone,
 } from '../_shared/zapi-helper.ts';
+import { GRUPO_EQUIPE_NOME, enviarComoGrupo } from '../_shared/grupo-equipe.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -304,13 +305,9 @@ function emailTemplate(title: string, content: string): string {
 }
 
 // ==================== RESUMO DE ATENDIMENTO DA EQUIPE ====================
-// Nome do grupo de WhatsApp (interno da equipe) onde a Isa posta o resumo
-// diário — "Bentes Ramos Comercial", confirmado pelo usuário em 2026-09-10.
-// A instância "Bentes Ramos Trafego" precisa estar adicionada como MEMBRO
-// desse grupo pro envio funcionar (senão buscarGroupId() não encontra o
-// grupo na lista de chats da instância, e a função só loga o texto gerado
-// em vez de falhar).
-const GRUPO_EQUIPE_NOME = 'Bentes Ramos Comercial';
+// GRUPO_EQUIPE_NOME e enviarComoGrupo agora vêm de ../_shared/grupo-equipe.ts
+// (também usado por zapi-webhook pra responder em tempo real quando a Isa é
+// marcada no grupo).
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 
 // Worker Cloudflare separado (isa-memoria) que guarda o texto bruto das
@@ -333,56 +330,6 @@ interface MetricasPessoa {
   leadsSemRetorno: number;
   conversoes: number;
   tempoMedioRespostaMin: number | null;
-}
-
-// sendText() do zapi-helper compartilhado passa o destino por normalizePhone
-// (tira tudo que não é dígito) — quebra um ID de grupo, que não é um
-// telefone (formato tipo "1203xxxxxxxxx-xxxxxxxxxx@g.us" ou numérico com
-// outro padrão). Envio direto aqui, sem mexer no helper usado por todo o
-// resto do sistema pra telefone de cliente de verdade.
-// `mentioned` (opcional): telefones (formato internacional, só dígitos) a
-// marcar — a mensagem precisa conter "@<telefone>" pra cada um pro WhatsApp
-// renderizar a marcação (confirmado na doc oficial Z-API, "Mentioning a
-// member"). Sem isso, `mentioned` sozinho não marca ninguém.
-async function enviarTextoGrupo(config: { instance_id: string; token: string; client_token?: string }, groupId: string, mensagem: string, mentioned?: string[]): Promise<boolean> {
-  try {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (config.client_token) headers['Client-Token'] = config.client_token;
-    const body: Record<string, unknown> = { phone: groupId, message: mensagem };
-    if (mentioned?.length) body.mentioned = mentioned;
-    const resp = await fetch(`https://api.z-api.io/instances/${config.instance_id}/token/${config.token}/send-text`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(10_000),
-    });
-    const data = await resp.json();
-    if (resp.ok && !data.error) return true;
-    console.error('[Resumo Equipe] Falha ao enviar pro grupo:', data);
-    return false;
-  } catch (e) {
-    console.error('[Resumo Equipe] Erro ao enviar pro grupo:', e);
-    return false;
-  }
-}
-
-async function buscarGroupId(instanceId: string, token: string, clientToken: string | undefined, nomeGrupo: string): Promise<string | null> {
-  try {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (clientToken) headers['Client-Token'] = clientToken;
-    const resp = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/chats`, { headers });
-    if (!resp.ok) { console.error('[Resumo Equipe] Falha ao listar chats/grupos:', resp.status); return null; }
-    const chats = await resp.json();
-    const normalizar = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
-    const alvoNome = normalizar(nomeGrupo);
-    const alvo = (Array.isArray(chats) ? chats : []).find((c: any) =>
-      (c.isGroup || c.type === 'group') && normalizar(c.name || c.chatName || '') === alvoNome
-    );
-    return alvo?.phone || alvo?.chatId || alvo?.id || null;
-  } catch (e) {
-    console.error('[Resumo Equipe] Erro ao buscar grupo:', e);
-    return null;
-  }
 }
 
 async function gerarComentarioIA(metricas: MetricasPessoa[]): Promise<Record<string, string>> {
@@ -549,16 +496,6 @@ async function montarSecaoAudiencias(supabase: any): Promise<string> {
 async function resolverTelefoneGabriel(supabase: any): Promise<string | null> {
   const { data } = await supabase.from('perfis').select('telefone').ilike('nome', 'Gabriel%').eq('aprovado', true).limit(1).maybeSingle();
   return data?.telefone ? normalizePhone(data.telefone) : null;
-}
-
-async function enviarComoGrupo(supabase: any, mensagem: string, mentioned?: string[]): Promise<{ enviado: boolean; motivo: string }> {
-  if (!GRUPO_EQUIPE_NOME) return { enviado: false, motivo: 'grupo_nao_configurado' };
-  const config = await getZapiConfig(supabase, '3EDDF959BC2B81F86B410203B614D70E'); // Bentes Ramos Trafego
-  if (!config) return { enviado: false, motivo: 'instancia_nao_encontrada' };
-  const groupId = await buscarGroupId(config.instance_id, config.token, config.client_token, GRUPO_EQUIPE_NOME);
-  if (!groupId) return { enviado: false, motivo: 'grupo_nao_encontrado' };
-  const enviado = await enviarTextoGrupo(config, groupId, mensagem, mentioned);
-  return { enviado, motivo: enviado ? 'ok' : 'falha_envio' };
 }
 
 // Aviso matinal (task própria, cron separado) — lista as audiências de HOJE
