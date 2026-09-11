@@ -18,6 +18,7 @@ import {
   enviarParaLead,
   enviarMensagemZapi,
   resolveInstanceForLead,
+  normalizePhone,
 } from '../_shared/zapi-helper.ts';
 
 const corsHeaders = {
@@ -320,6 +321,7 @@ const ISA_MEMORIA_URL = Deno.env.get('ISA_MEMORIA_URL');
 const ISA_MEMORIA_SECRET = Deno.env.get('ISA_MEMORIA_SECRET');
 
 interface AudienciaProxima {
+  chave: string;
   clienteNome: string;
   dataStr: string;
   horario: string | null;
@@ -338,14 +340,20 @@ interface MetricasPessoa {
 // telefone (formato tipo "1203xxxxxxxxx-xxxxxxxxxx@g.us" ou numérico com
 // outro padrão). Envio direto aqui, sem mexer no helper usado por todo o
 // resto do sistema pra telefone de cliente de verdade.
-async function enviarTextoGrupo(config: { instance_id: string; token: string; client_token?: string }, groupId: string, mensagem: string): Promise<boolean> {
+// `mentioned` (opcional): telefones (formato internacional, só dígitos) a
+// marcar — a mensagem precisa conter "@<telefone>" pra cada um pro WhatsApp
+// renderizar a marcação (confirmado na doc oficial Z-API, "Mentioning a
+// member"). Sem isso, `mentioned` sozinho não marca ninguém.
+async function enviarTextoGrupo(config: { instance_id: string; token: string; client_token?: string }, groupId: string, mensagem: string, mentioned?: string[]): Promise<boolean> {
   try {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (config.client_token) headers['Client-Token'] = config.client_token;
+    const body: Record<string, unknown> = { phone: groupId, message: mensagem };
+    if (mentioned?.length) body.mentioned = mentioned;
     const resp = await fetch(`https://api.z-api.io/instances/${config.instance_id}/token/${config.token}/send-text`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ phone: groupId, message: mensagem }),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(10_000),
     });
     const data = await resp.json();
@@ -448,11 +456,11 @@ async function buscarAudienciasProximas(supabase: any): Promise<AudienciaProxima
     .lte('data_inicio', fimHorizonte.toISOString());
 
   const tarefaIdsUsadas = new Set((tarefasBrutas || []).map((t: any) => t.id));
-  const candidatos = new Map<string, { processoId: string | null; clienteId: string | null; dataStr: string; horario: string | null }>();
+  const candidatos = new Map<string, { chave: string; processoId: string | null; clienteId: string | null; dataStr: string; horario: string | null }>();
 
   for (const t of tarefasBrutas || []) {
     const chave = t.processo_id || `tar:${t.id}`;
-    candidatos.set(chave, { processoId: t.processo_id || null, clienteId: t.cliente_id || null, dataStr: t.data_limite, horario: t.horario ? String(t.horario).slice(0, 5) : null });
+    candidatos.set(chave, { chave, processoId: t.processo_id || null, clienteId: t.cliente_id || null, dataStr: t.data_limite, horario: t.horario ? String(t.horario).slice(0, 5) : null });
   }
   for (const c of compromissosBrutos || []) {
     if (c.tarefa_id && tarefaIdsUsadas.has(c.tarefa_id) && !c.processo_id) continue;
@@ -460,7 +468,7 @@ async function buscarAudienciasProximas(supabase: any): Promise<AudienciaProxima
     if (candidatos.has(chave)) continue;
     const dataStr = new Intl.DateTimeFormat('en-CA', { timeZone: MANAUS_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(c.data_inicio));
     const horario = new Intl.DateTimeFormat('pt-BR', { timeZone: MANAUS_TIMEZONE, hour: '2-digit', minute: '2-digit' }).format(new Date(c.data_inicio));
-    candidatos.set(chave, { processoId: c.processo_id || null, clienteId: c.lead_id || null, dataStr, horario });
+    candidatos.set(chave, { chave, processoId: c.processo_id || null, clienteId: c.lead_id || null, dataStr, horario });
   }
 
   if (candidatos.size === 0) return [];
@@ -482,13 +490,10 @@ async function buscarAudienciasProximas(supabase: any): Promise<AudienciaProxima
   const resultado: AudienciaProxima[] = [];
   for (const a of candidatos.values()) {
     const clienteId = a.clienteId || (a.processoId ? processosPorId.get(a.processoId)?.cliente_id : null);
-    // processos.nome_cliente é cadastro manual livre — às vezes vem com
-    // telefone colado ("Fulano - (71) 98809-9101"), tira o sufixo pro
-    // resumo da equipe ficar limpo.
     const nomeBruto = (clienteId && leadsPorId.get(clienteId)) || (a.processoId ? processosPorId.get(a.processoId)?.nome_cliente : null);
-    const nome = nomeBruto ? String(nomeBruto).replace(/\s*[-–]\s*\(?\+?\d[\d\s()-]{6,}\)?\s*$/, '').trim() : nomeBruto;
+    const nome = nomeBruto ? limparNomeCliente(String(nomeBruto)) : nomeBruto;
     if (!nome) continue;
-    resultado.push({ clienteNome: nome, dataStr: a.dataStr, horario: a.horario });
+    resultado.push({ chave: a.chave, clienteNome: nome, dataStr: a.dataStr, horario: a.horario });
   }
   return resultado;
 }
@@ -536,6 +541,94 @@ async function montarSecaoAudiencias(supabase: any): Promise<string> {
     secao += `• *${a.clienteNome}* — ${a.dataStr}${a.horario ? ' às ' + a.horario : ''} — ${status}\n`;
   }
   return secao + '\n';
+}
+
+// Gabriel é quem cuida de audiência/contrato/petição (confirmado pelo
+// usuário 2026-09-10) — as 2 tarefas abaixo marcam (@) ele especificamente
+// no grupo, em vez de um aviso genérico pra equipe toda.
+async function resolverTelefoneGabriel(supabase: any): Promise<string | null> {
+  const { data } = await supabase.from('perfis').select('telefone').ilike('nome', 'Gabriel%').eq('aprovado', true).limit(1).maybeSingle();
+  return data?.telefone ? normalizePhone(data.telefone) : null;
+}
+
+async function enviarComoGrupo(supabase: any, mensagem: string, mentioned?: string[]): Promise<{ enviado: boolean; motivo: string }> {
+  if (!GRUPO_EQUIPE_NOME) return { enviado: false, motivo: 'grupo_nao_configurado' };
+  const config = await getZapiConfig(supabase, '3EDDF959BC2B81F86B410203B614D70E'); // Bentes Ramos Trafego
+  if (!config) return { enviado: false, motivo: 'instancia_nao_encontrada' };
+  const groupId = await buscarGroupId(config.instance_id, config.token, config.client_token, GRUPO_EQUIPE_NOME);
+  if (!groupId) return { enviado: false, motivo: 'grupo_nao_encontrado' };
+  const enviado = await enviarTextoGrupo(config, groupId, mensagem, mentioned);
+  return { enviado, motivo: enviado ? 'ok' : 'falha_envio' };
+}
+
+// Aviso matinal (task própria, cron separado) — lista as audiências de HOJE
+// e marca o Gabriel, pedido do usuário: "ele deve ser informado no grupo
+// logo cedo".
+async function informarGabrielAudienciasDia(supabase: any): Promise<any> {
+  const audiencias = await buscarAudienciasProximas(supabase);
+  const hoje = getHojeManaus();
+  const audienciasHoje = audiencias.filter(a => a.dataStr === hoje);
+
+  if (audienciasHoje.length === 0) {
+    return { tipo: 'gabriel_informe_manha', enviado: false, motivo: 'sem_audiencia_hoje' };
+  }
+
+  const telefoneGabriel = await resolverTelefoneGabriel(supabase);
+  if (!telefoneGabriel) {
+    return { tipo: 'gabriel_informe_manha', enviado: false, motivo: 'gabriel_sem_telefone' };
+  }
+
+  let texto = `☀️ Bom dia, @${telefoneGabriel}! Audiências de hoje — já confere se contrato/petição de cada uma está em ordem:\n\n`;
+  for (const a of audienciasHoje) {
+    texto += `• *${a.clienteNome}*${a.horario ? ' — ' + a.horario : ' — horário a confirmar'}\n`;
+  }
+
+  const { enviado, motivo } = await enviarComoGrupo(supabase, texto, [telefoneGabriel]);
+  return { tipo: 'gabriel_informe_manha', audiencias: audienciasHoje.length, enviado, motivo, textoGerado: texto };
+}
+
+// Checagem 1h antes de cada audiência (cron frequente) — pedido do
+// usuário: "verificar também com ele uma hora antes da audiência". Dedup
+// via system_events (mesma chave de processo/tarefa usada no lembrete de
+// 15/7/3 dias pro cliente, ação própria pra não colidir).
+async function checarAudienciasGabriel1hAntes(supabase: any): Promise<any> {
+  const audiencias = await buscarAudienciasProximas(supabase);
+  const agora = Date.now();
+  const alvo = audiencias.filter(a => {
+    if (!a.horario) return false;
+    const instanteAudiencia = new Date(`${a.dataStr}T${a.horario}:00-04:00`).getTime();
+    const minutosRestantes = (instanteAudiencia - agora) / 60000;
+    return minutosRestantes > 0 && minutosRestantes <= 65; // janela de checagem do cron (roda a cada ~15min)
+  });
+
+  if (alvo.length === 0) {
+    return { tipo: 'gabriel_checagem_1h', enviado: 0, motivo: 'nenhuma_na_janela' };
+  }
+
+  const telefoneGabriel = await resolverTelefoneGabriel(supabase);
+  if (!telefoneGabriel) {
+    return { tipo: 'gabriel_checagem_1h', enviado: 0, motivo: 'gabriel_sem_telefone' };
+  }
+
+  const resultados: any[] = [];
+  for (const a of alvo) {
+    const acao = 'gabriel_checagem_1h_antes';
+    const { data: jaEnviado } = await supabase
+      .from('system_events').select('id').eq('acao', acao).eq('entidade_id', a.chave).limit(1).maybeSingle();
+    if (jaEnviado) continue;
+
+    const texto = `⏰ @${telefoneGabriel}, faltam ~1h pra audiência de *${a.clienteNome}* (${a.horario}). Tudo certo?`;
+    const { enviado, motivo } = await enviarComoGrupo(supabase, texto, [telefoneGabriel]);
+    if (enviado) {
+      await supabase.from('system_events').insert({
+        acao, entidade_tipo: 'audiencia', entidade_id: a.chave,
+        descricao: `Checagem 1h antes enviada pro Gabriel (${a.clienteNome})`,
+      });
+    }
+    resultados.push({ cliente: a.clienteNome, enviado, motivo });
+  }
+
+  return { tipo: 'gabriel_checagem_1h', resultados };
 }
 
 async function gerarEnviarResumoEquipe(supabase: any): Promise<any> {
@@ -663,22 +756,7 @@ async function gerarEnviarResumoEquipe(supabase: any): Promise<any> {
     texto += '\n';
   }
 
-  let enviado = false;
-  let motivo = 'grupo_nao_configurado';
-  if (GRUPO_EQUIPE_NOME) {
-    const config = await getZapiConfig(supabase, '3EDDF959BC2B81F86B410203B614D70E'); // Bentes Ramos Trafego
-    if (config) {
-      const groupId = await buscarGroupId(config.instance_id, config.token, config.client_token, GRUPO_EQUIPE_NOME);
-      if (groupId) {
-        enviado = await enviarTextoGrupo(config, groupId, texto);
-        motivo = enviado ? 'ok' : 'falha_envio';
-      } else {
-        motivo = 'grupo_nao_encontrado';
-      }
-    } else {
-      motivo = 'instancia_nao_encontrada';
-    }
-  }
+  const { enviado, motivo } = await enviarComoGrupo(supabase, texto);
 
   if (!enviado) {
     console.log('[Resumo Equipe] Não enviado (' + motivo + '). Conteúdo gerado:\n' + texto);
@@ -1641,6 +1719,14 @@ serve(async (req) => {
     if (task === 'resumo_atendimento_equipe' || task === 'all') {
       const resultado = await gerarEnviarResumoEquipe(supabase);
       results.actions.push(resultado);
+    }
+
+    // ==================== GABRIEL: AVISO MATINAL + CHECAGEM 1H ANTES ====================
+    if (task === 'gabriel_informe_manha' || task === 'all') {
+      results.actions.push(await informarGabrielAudienciasDia(supabase));
+    }
+    if (task === 'gabriel_checagem_1h' || task === 'all') {
+      results.actions.push(await checarAudienciasGabriel1hAntes(supabase));
     }
 
     // Registrar execução
