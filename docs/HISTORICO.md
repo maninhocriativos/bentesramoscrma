@@ -1200,6 +1200,43 @@ pro cliente.
     verdade, enviada no grupo pra confirmar visualmente que o WhatsApp
     renderiza a marcação (@) nesse grupo específico.
 
+### 2026-09-11 — DJEN geoblock RESOLVIDO (proxy residencial, não datacenter)
+
+Usuário foi provisionar o VPS BR recomendado desde 08-09
+([[project_intimacoes_djen_geoblock]]) e virou uma sessão longa e cara (mais
+de $20 gastos, com razão frustrante pro usuário — eu não avisei os riscos
+antes de indicar cada compra):
+
+1. **Vultr**: conta nova só liberava região EUA sem cartão cadastrado;
+   cadastrou cartão, ainda assim não resolveu de imediato — abandonado.
+2. **Webshare proxy de datacenter** (100 IPs, Brasil): confirmado via
+   `ipinfo.io` que o IP era REAL do Brasil (São Paulo) — mesmo assim o DJEN
+   retornou 403 (um 403 genérico de nginx, diferente do 403 do CloudFront
+   "blocked from your country" visto em 08-09). **Descoberta importante**: o
+   bloqueio não é só por país, é também por classe de IP — datacenter/
+   hospedagem é bloqueado independente da localização. Isso significa que
+   **qualquer VPS comum (Vultr, OVH, etc.) provavelmente também seria
+   bloqueado**, mudando a suposição original de que "qualquer VPS BR resolve".
+3. **Webshare Static Residential** (IP-travado): testado com o IP de casa do
+   usuário autorizado manualmente → **funcionou de verdade**, retornou dado
+   real do DJEN (247+ comunicações). Confirmou a hipótese (residencial passa,
+   datacenter não), mas exige autorização manual de IP — não serve pra
+   produção (Supabase não tem IP de saída fixo).
+4. **Webshare Rotating Residential** (gateway `p.webshare.io:80`, usuário com
+   sufixo `-br-` força saída no Brasil, autenticação só usuário/senha, **sem
+   IP travado**): testado e **funcionou perfeitamente** — IP residencial real
+   (Itapecerica da Serra/SP), 2907 comunicações reais retornadas.
+
+**Implementado e no ar**: novo helper `_shared/djen-proxy.ts`
+(`Deno.createHttpClient({proxy})` — Deno não lê `HTTP_PROXY` automaticamente
+no `fetch()` global, precisa de client explícito), usado em `fetchDjen()`
+(`intimacoes-oab`) e `fetchDjenPorProcesso()` (`processo-djen-sync`). Secret
+`DJEN_PROXY_URL` configurado. Commit `e3ec0b9e`, deploy confirmado.
+**Verificado ao vivo em produção** (não só teste isolado): chamada real a
+`intimacoes-oab` retornou 690 itens via DJEN (`"by_strategy":{"djen":690}`) —
+antes retornava 0/bloqueado sempre. Falta só observar os próximos ciclos
+automáticos do cron confirmarem intimações genuinamente novas chegando.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
@@ -1208,26 +1245,13 @@ Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a dat
 1. `peticoes-cloudflare` e `peticoes-modelos-admin`: WIP de blocos dinâmicos (08-30) e
    contratos ZapSign (08-28) **sem commit há 10 dias**; os 3 Workers **sem remoto no
    GitHub**. Commitar, criar repos, pushar.
-2. DJEN geoblock: intimações por OAB e por CNJ dependem de IP brasileiro. **Usuário
-   combinou provisionar a VPS BR em 2026-09-08** (ver VPS + proxy no Brasil já
-   recomendado em [project_intimacoes_djen_geoblock](project_intimacoes_djen_geoblock.md)
-   — DigitalOcean/Vultr/Hostinger/Contabo, ~R$20–35/mês). Depois de provisionada:
-   - Escrever/configurar o proxy (Caddy ou relay Node/nginx simples) pra rotear saída
-     pro `comunicaapi.pje.jus.br`.
-   - **Smoke-test da VPS antes de wirar no CRM**: confirmar da própria VPS (SSH) que
-     `curl https://comunicaapi.pje.jus.br/api/v1/comunicacao?...` retorna 200 (não
-     403) — só then o IP brasileiro está de fato resolvendo o geoblock.
-   - Adicionar `DJEN_PROXY_URL` como secret das Edge Functions e apontar
-     `intimacoes-oab` e `processo-djen-sync` pra usá-lo (`fetchDjen`/`fetchDjenPorProcesso`).
-   - Verificar ao vivo pós-deploy: `processo-djen-sync` voltando a atualizar
-     `ultima_consulta_djen_at` nas últimas 24h (estava zerado desde 08-22, ver
-     sessão 09-07) e novas intimações com `fonte='djen_processo'`.
-   - Remover bloco Escavador V1/V2 de `intimacoes-oab` (decisão já tomada em 08-22,
-     código só não foi limpo ainda).
-3. `zapi-webhook` ainda consulta `metadata->>message_id` em vez de `message_id_key`
+2. `zapi-webhook` ainda consulta `metadata->>message_id` em vez de `message_id_key`
    (linhas ~681 e ~712) — Seq Scan provavelmente continua.
-4. Lembretes de compromisso pausados (jobid 6, confirmado `active: false` em 09-08) —
+3. Lembretes de compromisso pausados (jobid 6, confirmado `active: false` em 09-08) —
    decidir se/quando reativar; botão "Testar Lembretes" ainda envia de verdade.
+4. Remover bloco Escavador V1/V2 de `intimacoes-oab` (decisão já tomada em 08-22,
+   código só não foi limpo ainda — não bloqueia nada, só desperdiça uma chamada
+   HTTP fadada a 402 em toda sincronização).
 
 **Segurança (da auditoria de 08-25)**
 5. ~50 Edge Functions invocáveis sem auth (`zapi-send`, `zapi-bulk-campaign`,
