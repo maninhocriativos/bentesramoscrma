@@ -305,6 +305,28 @@ export default function DadosPage() {
 
     const reus = rankPlanilha(l => l.reclamada_requerido, 'Não informado');
     const justica = rankPlanilha(l => l.justica, 'Não informado');
+    const materia = rankPlanilha(l => l.materia, 'Não informado');
+    const qualificacao = rankPlanilha(l => l.qualificacao_cliente, 'Não informado');
+    const comMateria = planilhaLinhas.filter(l => l.materia && l.materia.trim()).length;
+    const comQualificacao = planilhaLinhas.filter(l => l.qualificacao_cliente && l.qualificacao_cliente.trim()).length;
+
+    // Sazonalidade — ordem de calendário (não por valor), corrigindo grafia
+    // ("Janeiro"/"janeiro"/"janeio" digitado errado em 13 anos de planilha).
+    const MESES: { chave: string; label: string }[] = [
+      { chave: 'janeiro', label: 'Jan' }, { chave: 'fevereiro', label: 'Fev' }, { chave: 'marco', label: 'Mar' },
+      { chave: 'abril', label: 'Abr' }, { chave: 'maio', label: 'Mai' }, { chave: 'junho', label: 'Jun' },
+      { chave: 'julho', label: 'Jul' }, { chave: 'agosto', label: 'Ago' }, { chave: 'setembro', label: 'Set' },
+      { chave: 'outubro', label: 'Out' }, { chave: 'novembro', label: 'Nov' }, { chave: 'dezembro', label: 'Dez' },
+    ];
+    const ALIAS_MES: Record<string, string> = { janeio: 'janeiro' };
+    const contagemMes: Record<string, number> = {};
+    planilhaLinhas.forEach(l => {
+      let k = normKey(l.mes_entrada || '');
+      k = ALIAS_MES[k] || k;
+      if (MESES.some(m => m.chave === k)) contagemMes[k] = (contagemMes[k] || 0) + 1;
+    });
+    const mesEntradaData = MESES.map(m => ({ mes: m.label, value: contagemMes[m.chave] || 0 }));
+    const totalComMes = Object.values(contagemMes).reduce((a, b) => a + b, 0);
 
     // Êxito: só as linhas que têm "Resultado" preenchido (coluna existe só a
     // partir de 2024 na planilha — cobertura parcial, avisado no rodapé).
@@ -316,7 +338,10 @@ export default function DadosPage() {
     const negativo = comResultado.length - positivo;
     const taxaExito = pct(positivo, comResultado.length);
 
-    return { porAnoData, reus, justica, totalHistorico: planilhaLinhas.length, positivo, negativo, comResultadoTotal: comResultado.length, taxaExito };
+    return {
+      porAnoData, reus, justica, totalHistorico: planilhaLinhas.length, positivo, negativo, comResultadoTotal: comResultado.length, taxaExito,
+      materia, qualificacao, comMateria, comQualificacao, mesEntradaData, totalComMes,
+    };
   }, [planilhaLinhas]);
 
   const exitoPlanilhaDonut = [
@@ -575,6 +600,39 @@ export default function DadosPage() {
                 <Card accent="#7c3aed" icon={Scale} title="Tipo de Justiça" iconBg="rgba(124,58,237,0.09)" iconColor="#7c3aed">
                   <BarList data={p.justica} total={p.totalHistorico} color="#7c3aed" />
                 </Card>
+
+                <Card accent="#ca8a04" icon={CalendarDays} title="Sazonalidade — Mês de Entrada" iconBg="rgba(202,138,4,0.1)" iconColor="#ca8a04">
+                  <div style={{ width: '100%', height: 200 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={p.mesEntradaData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                        <CartesianGrid vertical={false} stroke="rgba(201,169,110,0.15)" />
+                        <XAxis dataKey="mes" tick={{ fontSize: 11, fill: NEUTRAL }} axisLine={false} tickLine={false} />
+                        <YAxis tick={{ fontSize: 11, fill: NEUTRAL }} axisLine={false} tickLine={false} allowDecimals={false} />
+                        <Tooltip contentStyle={{ borderRadius: 12, fontSize: 12, border: '1px solid rgba(201,169,110,0.3)' }} formatter={(v: number) => [`${num(v)} processos`, '']} />
+                        <Bar dataKey="value" fill="#ca8a04" radius={[6, 6, 0, 0]} isAnimationActive={false} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <p className="text-[11px] mt-3 pt-3" style={{ color: NEUTRAL, borderTop: '0.5px solid rgba(201,169,110,0.12)' }}>
+                    Em qual mês o caso entrou no escritório, somando todos os anos · base de {num(p.totalComMes)} de {num(p.totalHistorico)} processos com mês identificável.
+                  </p>
+                </Card>
+
+                <div className="grid gap-5 grid-cols-1 lg:grid-cols-2">
+                  <Card accent="#2563eb" icon={Briefcase} title="Matéria" iconBg="rgba(37,99,235,0.09)" iconColor="#2563eb">
+                    <BarList data={p.materia} total={p.totalHistorico} color="#2563eb" max={10} />
+                    <p className="text-[11px] mt-3 pt-3" style={{ color: AMBER, borderTop: '0.5px solid rgba(201,169,110,0.12)' }}>
+                      ⚠ Coluna "Matéria" só existe na planilha a partir de 2026 — baseado em {num(p.comMateria)} de {num(p.totalHistorico)} processos ({pct(p.comMateria, p.totalHistorico)}%).
+                    </p>
+                  </Card>
+
+                  <Card accent="#db2777" icon={Users} title="Qualificação do Cliente" iconBg="rgba(219,39,119,0.09)" iconColor="#db2777">
+                    <BarList data={p.qualificacao} total={p.totalHistorico} color="#db2777" max={10} />
+                    <p className="text-[11px] mt-3 pt-3" style={{ color: AMBER, borderTop: '0.5px solid rgba(201,169,110,0.12)' }}>
+                      ⚠ Coluna "Qualificação cliente" só existe na planilha a partir de 2026 — baseado em {num(p.comQualificacao)} de {num(p.totalHistorico)} processos ({pct(p.comQualificacao, p.totalHistorico)}%).
+                    </p>
+                  </Card>
+                </div>
               </>
             )}
           </>

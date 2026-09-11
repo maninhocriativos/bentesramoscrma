@@ -7,7 +7,7 @@ import { fetchAllPaginated } from '@/lib/fetchAllPaginated';
 // — ver planilha_processos_historico. 3400+ linhas: SEMPRE paginar (teto de
 // 1000 linhas por página do PostgREST), classe de bug já vista várias vezes
 // nesse projeto.
-const SELECT = 'ano,nome_cliente,reclamada_requerido,justica,tribunal,andamento,resultado,mes_entrada' as const;
+const SELECT = 'ano,nome_cliente,reclamada_requerido,justica,tribunal,andamento,resultado,mes_entrada,materia,qualificacao_cliente' as const;
 
 export interface LinhaPlanilhaProcesso {
   ano: number;
@@ -18,6 +18,8 @@ export interface LinhaPlanilhaProcesso {
   andamento: string | null;
   resultado: string | null;
   mes_entrada: string | null;
+  materia: string | null;
+  qualificacao_cliente: string | null;
 }
 
 export interface SyncEstado {
