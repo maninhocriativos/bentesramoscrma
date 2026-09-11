@@ -100,7 +100,7 @@ export function TarefaDetailModal({ open, onOpenChange, tarefa, onEdit, onSucces
       <Dialog open={open && !entregarModal && !aprovarModal} onOpenChange={onOpenChange}>
         <DialogContent
           hideCloseButton
-          className="p-0 overflow-hidden"
+          className="p-0 overflow-hidden flex flex-col"
           style={{
             maxWidth: 520,
             width: 'calc(100vw - 32px)',
@@ -110,10 +110,10 @@ export function TarefaDetailModal({ open, onOpenChange, tarefa, onEdit, onSucces
           }}
         >
           {/* ── Barra de prioridade ── */}
-          <div style={{ height: 4, background: prio.bar }} />
+          <div className="shrink-0" style={{ height: 4, background: prio.bar }} />
 
           {/* ── Header ── */}
-          <div className="flex items-start gap-3 px-5 pt-4 pb-3"
+          <div className="shrink-0 flex items-start gap-3 px-5 pt-4 pb-3"
             style={{ borderBottom: `0.5px solid ${GOLD}20` }}>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -154,8 +154,8 @@ export function TarefaDetailModal({ open, onOpenChange, tarefa, onEdit, onSucces
             </div>
           </div>
 
-          {/* ── Corpo ── */}
-          <div className="px-5 py-4 space-y-4">
+          {/* ── Corpo (rola internamente — o modal inteiro é limitado a 96vh) ── */}
+          <div className="px-5 py-4 space-y-4 overflow-y-auto flex-1 min-h-0">
 
             {/* Grid de info */}
             <div className="grid grid-cols-2 gap-x-4 gap-y-3">
@@ -196,13 +196,17 @@ export function TarefaDetailModal({ open, onOpenChange, tarefa, onEdit, onSucces
               </a>
             )}
 
-            {/* Descrição */}
+            {/* Descrição — junta título/processo/observações/resumo da publicação
+                separados por linha em branco (ver IntimacoesPage.tsx
+                handleCreateRelatedTask); sem pre-wrap o navegador colapsava
+                tudo numa única linha corrida, escondendo as instruções
+                escritas por quem criou a tarefa no meio do texto legal bruto. */}
             {tarefa.descricao && (
               <div className="rounded-xl p-3" style={{ background: `${BROWN}05`, border: `0.5px solid ${GOLD}20` }}>
                 <p style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
                   Descrição
                 </p>
-                <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.55 }}>{tarefa.descricao}</p>
+                <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{tarefa.descricao}</p>
               </div>
             )}
 
@@ -234,7 +238,7 @@ export function TarefaDetailModal({ open, onOpenChange, tarefa, onEdit, onSucces
 
           {/* ── Botões ── */}
           {(canStart || canDeliver || canResubmit || canApprove) && (
-            <div className="px-5 pb-5">
+            <div className="shrink-0 px-5 pb-5">
               <div className="flex gap-2">
                 {canStart && (
                   <button
