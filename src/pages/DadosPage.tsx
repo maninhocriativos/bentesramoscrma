@@ -227,6 +227,11 @@ export default function DadosPage() {
   } = useLeadsAnalytics();
   const { linhas: planilhaLinhas, syncEstado, loading: loadingPlanilha } = usePlanilhaProcessos();
   const [periodo, setPeriodo] = useState<Periodo>('tudo');
+  const [anoFiltro, setAnoFiltro] = useState<string>('todos');
+  const anosDisponiveis = useMemo(
+    () => [...new Set(planilhaLinhas.map(l => l.ano))].sort((a, b) => b - a),
+    [planilhaLinhas]
+  );
 
   const d = useMemo(() => {
     const start = periodoStart(periodo);
@@ -281,16 +286,21 @@ export default function DadosPage() {
 
   // ─── Planilha histórica (2013-2026, sincronizada do Drive) ───────────────────
   const p = useMemo(() => {
+    // "Processos por Ano" sempre mostra a linha do tempo inteira (não faz
+    // sentido filtrar esse gráfico específico por ano) — os demais respeitam
+    // o filtro de ano selecionado abaixo.
     const porAno: Record<number, number> = {};
     planilhaLinhas.forEach(l => { porAno[l.ano] = (porAno[l.ano] || 0) + 1; });
     const porAnoData = Object.entries(porAno).map(([ano, value]) => ({ ano, value })).sort((a, b) => Number(a.ano) - Number(b.ano));
+
+    const linhas = anoFiltro === 'todos' ? planilhaLinhas : planilhaLinhas.filter(l => String(l.ano) === anoFiltro);
 
     // Mesmo agrupamento por normKey/titleCase usado em tipo_acao acima — 13
     // anos de digitação manual geram muita variação de grafia pro mesmo
     // valor ("Justiça Comum"/"justiça comum"/"Juizado Civel"/"juizado civel").
     const rankPlanilha = (getKey: (l: LinhaPlanilhaProcesso) => string | null, emptyLabel: string) => {
       const buckets: Record<string, { total: number; labels: Record<string, number> }> = {};
-      planilhaLinhas.forEach(l => {
+      linhas.forEach(l => {
         const raw = (getKey(l) || '').trim();
         const key = raw ? normKey(raw) : '__empty__';
         const b = (buckets[key] ||= { total: 0, labels: {} });
@@ -307,8 +317,8 @@ export default function DadosPage() {
     const justica = rankPlanilha(l => l.justica, 'Não informado');
     const materia = rankPlanilha(l => l.materia, 'Não informado');
     const qualificacao = rankPlanilha(l => l.qualificacao_cliente, 'Não informado');
-    const comMateria = planilhaLinhas.filter(l => l.materia && l.materia.trim()).length;
-    const comQualificacao = planilhaLinhas.filter(l => l.qualificacao_cliente && l.qualificacao_cliente.trim()).length;
+    const comMateria = linhas.filter(l => l.materia && l.materia.trim()).length;
+    const comQualificacao = linhas.filter(l => l.qualificacao_cliente && l.qualificacao_cliente.trim()).length;
 
     // Sazonalidade — ordem de calendário (não por valor), corrigindo grafia
     // ("Janeiro"/"janeiro"/"janeio" digitado errado em 13 anos de planilha).
@@ -320,7 +330,7 @@ export default function DadosPage() {
     ];
     const ALIAS_MES: Record<string, string> = { janeio: 'janeiro' };
     const contagemMes: Record<string, number> = {};
-    planilhaLinhas.forEach(l => {
+    linhas.forEach(l => {
       let k = normKey(l.mes_entrada || '');
       k = ALIAS_MES[k] || k;
       if (MESES.some(m => m.chave === k)) contagemMes[k] = (contagemMes[k] || 0) + 1;
@@ -330,7 +340,7 @@ export default function DadosPage() {
 
     // Êxito: só as linhas que têm "Resultado" preenchido (coluna existe só a
     // partir de 2024 na planilha — cobertura parcial, avisado no rodapé).
-    const comResultado = planilhaLinhas.filter(l => l.resultado && l.resultado.trim());
+    const comResultado = linhas.filter(l => l.resultado && l.resultado.trim());
     const positivo = comResultado.filter(l => {
       const r = l.resultado!.toLowerCase();
       return r.includes('êxito') || r.includes('exito') || (r.includes('procedência') && !r.includes('improcedência')) || (r.includes('procedencia') && !r.includes('improcedencia'));
@@ -339,10 +349,10 @@ export default function DadosPage() {
     const taxaExito = pct(positivo, comResultado.length);
 
     return {
-      porAnoData, reus, justica, totalHistorico: planilhaLinhas.length, positivo, negativo, comResultadoTotal: comResultado.length, taxaExito,
+      porAnoData, reus, justica, totalHistorico: linhas.length, totalGeral: planilhaLinhas.length, positivo, negativo, comResultadoTotal: comResultado.length, taxaExito,
       materia, qualificacao, comMateria, comQualificacao, mesEntradaData, totalComMes,
     };
-  }, [planilhaLinhas]);
+  }, [planilhaLinhas, anoFiltro]);
 
   const exitoPlanilhaDonut = [
     { name: 'Êxito', value: p.positivo, color: GREEN },
@@ -530,11 +540,34 @@ export default function DadosPage() {
               )}
             </div>
 
+            {/* Filtro de ano — afeta todos os gráficos daqui pra baixo, exceto
+                "Processos por Ano" (que sempre mostra a linha do tempo inteira). */}
+            <div className="flex gap-1.5 overflow-x-auto pb-1" style={{ scrollbarWidth: 'thin' }}>
+              <button onClick={() => setAnoFiltro('todos')} className="shrink-0 transition-all rounded-lg"
+                style={{
+                  padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  background: anoFiltro === 'todos' ? BROWN : 'transparent', color: anoFiltro === 'todos' ? GOLD : NEUTRAL,
+                  border: `0.5px solid ${anoFiltro === 'todos' ? BROWN : 'rgba(201,169,110,0.25)'}`,
+                }}>
+                Todos os anos
+              </button>
+              {anosDisponiveis.map(ano => (
+                <button key={ano} onClick={() => setAnoFiltro(String(ano))} className="shrink-0 transition-all rounded-lg"
+                  style={{
+                    padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                    background: anoFiltro === String(ano) ? BROWN : 'transparent', color: anoFiltro === String(ano) ? GOLD : NEUTRAL,
+                    border: `0.5px solid ${anoFiltro === String(ano) ? BROWN : 'rgba(201,169,110,0.25)'}`,
+                  }}>
+                  {ano}
+                </button>
+              ))}
+            </div>
+
             {loadingPlanilha ? (
               <div className="h-40 flex items-center justify-center">
                 <Loader2 className="h-6 w-6 animate-spin" style={{ color: GOLD }} />
               </div>
-            ) : p.totalHistorico === 0 ? (
+            ) : p.totalGeral === 0 ? (
               <div className="rounded-2xl p-6 text-center bg-card" style={{ border: BORDER, color: NEUTRAL, fontSize: 13 }}>
                 Ainda não sincronizado — a planilha atualiza sozinha a cada 20 minutos.
               </div>
@@ -553,7 +586,7 @@ export default function DadosPage() {
                     </ResponsiveContainer>
                   </div>
                   <p className="text-[11px] mt-3 pt-3" style={{ color: NEUTRAL, borderTop: '0.5px solid rgba(201,169,110,0.12)' }}>
-                    Fonte: planilha "Relação de Processos" do Drive do escritório · {num(p.totalHistorico)} processos ao todo.
+                    Fonte: planilha "Relação de Processos" do Drive do escritório · {num(p.totalGeral)} processos ao todo.
                   </p>
                 </Card>
 
@@ -614,7 +647,7 @@ export default function DadosPage() {
                     </ResponsiveContainer>
                   </div>
                   <p className="text-[11px] mt-3 pt-3" style={{ color: NEUTRAL, borderTop: '0.5px solid rgba(201,169,110,0.12)' }}>
-                    Em qual mês o caso entrou no escritório, somando todos os anos · base de {num(p.totalComMes)} de {num(p.totalHistorico)} processos com mês identificável.
+                    Em qual mês o caso entrou no escritório{anoFiltro === 'todos' ? ', somando todos os anos' : ` em ${anoFiltro}`} · base de {num(p.totalComMes)} de {num(p.totalHistorico)} processos com mês identificável.
                   </p>
                 </Card>
 
