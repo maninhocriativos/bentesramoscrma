@@ -50,14 +50,27 @@ async function registrarMensagemGrupoMemoria(remetenteNome: string | null, remet
 // "mentionedIds" no payload de recebimento, então a detecção é por texto.
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 
+// IMPORTANTE (achado testando ao vivo 2026-09-11): quem tem o "LID privacy"
+// do WhatsApp ativado NÃO marca pelo número de telefone — marca pelo "lid"
+// (identificador alternativo). Confirmado com um teste real do usuário:
+// a marcação usou "@149753312624678", que bate exatamente com o campo
+// `lid` retornado por GET /instances/{id}/token/{token}/device pra essa
+// instância (Bentes Ramos Trafego, telefone 5592985888190). Sem checar o
+// lid também, a marcação por LID passaria batido e a Isa nunca responderia
+// pra quem usa esse modo — que já é o caso confirmado do próprio usuário.
+const BOT_LID = '149753312624678';
+
 function normalizarDigitos(s: string): string {
   return s.replace(/\D/g, '');
 }
 
 // O número "marcável" é o da própria instância (quem recebe o webhook) —
 // connectedPhoneForDetection já vem calculado mais abaixo, então essa
-// checagem só compara texto, não decide QUAL número é o bot.
+// checagem só compara texto, não decide QUAL número é o bot. Checa tanto
+// o telefone quanto o LID (ver nota acima) — depende de qual dos dois o
+// WhatsApp de quem mencionou usa.
 function mensagemMencionaBot(mensagem: string, connectedPhone: string | null): boolean {
+  if (mensagem.includes(`@${BOT_LID}`)) return true;
   if (!connectedPhone) return false;
   const digitos = normalizarDigitos(connectedPhone);
   if (!digitos) return false;
