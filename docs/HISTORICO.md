@@ -1173,6 +1173,32 @@ pro cliente.
     manualmente às vezes vem com telefone colado
     (`processos.nome_cliente`) — sufixo removido pro resumo ficar limpo.
   - Credenciais em `docs/SECRETS.local.md` seção 2.5.
+- **Usuário perguntou**: "ela consegue marcar pessoas no grupo?" — sim,
+  confirmado na doc oficial do Z-API (`mentioned` no `/send-text`, mesmo
+  endpoint já usado). Usuário esclareceu o escopo: "o gabriel é responsavel
+  pelas informações de audiência, contratos, petições, ele deve ser
+  informado no grupo logo cedo e verificar também com ele uma hora antes
+  da audiência".
+  - `enviarTextoGrupo()` ganhou parâmetro opcional `mentioned` (array de
+    telefones) — a marcação real exige @telefone no texto E o telefone no
+    array, confirmado na doc "Mentioning a member".
+  - Nova task `gabriel_informe_manha` (cron `0 11 * * 1-5`, 7h Manaus):
+    lista as audiências de HOJE e marca o Gabriel.
+  - Nova task `gabriel_checagem_1h` (cron `*/15 10-23 * * 1-5`, a cada
+    15min em horário comercial): pinga o Gabriel ~1h antes de cada
+    audiência, dedupado por `system_events` (não repete no mesmo dia).
+  - Refatoração de reuso: `gerarEnviarResumoEquipe` passou a usar o novo
+    helper `enviarComoGrupo()` (elimina a lógica de resolver
+    instância/grupo duplicada); `buscarAudienciasProximas` passou a usar
+    `limparNomeCliente()` — helper que já existia no arquivo — em vez de
+    reimplementar a mesma regex de novo.
+  - Verificado ao vivo: cron confirmado com `cron.timezone = GMT` (as
+    contas de fuso Manaus↔UTC usadas em todos os crons do dia estão
+    corretas); as 2 tasks novas rodaram sem erro (sem audiência hoje/na
+    janela de 1h no momento do teste, então só os caminhos "nada a fazer"
+    foram exercitados); mensagem de teste isolada, marcando o Gabriel de
+    verdade, enviada no grupo pra confirmar visualmente que o WhatsApp
+    renderiza a marcação (@) nesse grupo específico.
 
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
