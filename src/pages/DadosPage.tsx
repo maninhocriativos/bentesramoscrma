@@ -1,14 +1,18 @@
 import { useMemo, useState } from 'react';
 import { AppHeader } from '@/components/AppHeader';
 import { useLeadsAnalytics, LeadAnalytics, ExitoEstado } from '@/hooks/useLeadsAnalytics';
+import { usePlanilhaProcessos, LinhaPlanilhaProcesso } from '@/hooks/usePlanilhaProcessos';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from 'recharts';
 import {
   Users, Trophy, XCircle, Target, PieChart as PieIcon, MapPin,
   Scale, Briefcase, Loader2, CalendarDays, Landmark, TrendingUp, Cake,
+  History, Building2, Gavel, RefreshCw,
 } from 'lucide-react';
-import { startOfMonth, startOfQuarter, startOfYear, isAfter } from 'date-fns';
+import { startOfMonth, startOfQuarter, startOfYear, isAfter, formatDistanceToNow } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 
 // ─── Paleta ───────────────────────────────────────────────────────────────────
@@ -44,8 +48,11 @@ const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / who
 // Chave normalizada p/ agrupar variações de texto (acento/caixa/espaços): "Bancário" == "bancario".
 const normKey = (s: string) =>
   s.trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/\s+/g, ' ');
+// \b do JS é ASCII-only — tratava "ç"/"ã"/"í" como fim de palavra e
+// maiusculizava a letra seguinte também ("justiça" virava "JustiÇA").
+// Início de palavra de verdade = 1ª letra Unicode não precedida por outra letra.
 const titleCase = (s: string) =>
-  s.trim().replace(/\s+/g, ' ').replace(/\b[\p{L}]/gu, (c) => c.toUpperCase());
+  s.trim().replace(/\s+/g, ' ').replace(/(^|[^\p{L}])(\p{L})/gu, (_m, pre, letter) => pre + letter.toUpperCase());
 
 // ─── Classificações derivadas ──────────────────────────────────────────────────
 function isGanho(l: LeadAnalytics) {
@@ -218,6 +225,7 @@ export default function DadosPage() {
     leads, loading, categoriaProcessos, totalProcessos,
     estadoProcessos, exitoPorEstado, exitoCobertura, idadeClientes,
   } = useLeadsAnalytics();
+  const { linhas: planilhaLinhas, syncEstado, loading: loadingPlanilha } = usePlanilhaProcessos();
   const [periodo, setPeriodo] = useState<Periodo>('tudo');
 
   const d = useMemo(() => {
@@ -269,6 +277,51 @@ export default function DadosPage() {
   const winDonut = [
     { name: 'Ganhos', value: d.ganhos, color: GREEN },
     { name: 'Perdidos', value: d.perdidos, color: RED },
+  ];
+
+  // ─── Planilha histórica (2013-2026, sincronizada do Drive) ───────────────────
+  const p = useMemo(() => {
+    const porAno: Record<number, number> = {};
+    planilhaLinhas.forEach(l => { porAno[l.ano] = (porAno[l.ano] || 0) + 1; });
+    const porAnoData = Object.entries(porAno).map(([ano, value]) => ({ ano, value })).sort((a, b) => Number(a.ano) - Number(b.ano));
+
+    // Mesmo agrupamento por normKey/titleCase usado em tipo_acao acima — 13
+    // anos de digitação manual geram muita variação de grafia pro mesmo
+    // valor ("Justiça Comum"/"justiça comum"/"Juizado Civel"/"juizado civel").
+    const rankPlanilha = (getKey: (l: LinhaPlanilhaProcesso) => string | null, emptyLabel: string) => {
+      const buckets: Record<string, { total: number; labels: Record<string, number> }> = {};
+      planilhaLinhas.forEach(l => {
+        const raw = (getKey(l) || '').trim();
+        const key = raw ? normKey(raw) : '__empty__';
+        const b = (buckets[key] ||= { total: 0, labels: {} });
+        b.total += 1;
+        if (raw) b.labels[raw] = (b.labels[raw] || 0) + 1;
+      });
+      return Object.entries(buckets).map(([key, b]) => ({
+        name: key === '__empty__' ? emptyLabel : titleCase(Object.entries(b.labels).sort((a, c) => c[1] - a[1])[0][0]),
+        value: b.total,
+      })).sort((a, b) => b.value - a.value);
+    };
+
+    const reus = rankPlanilha(l => l.reclamada_requerido, 'Não informado');
+    const justica = rankPlanilha(l => l.justica, 'Não informado');
+
+    // Êxito: só as linhas que têm "Resultado" preenchido (coluna existe só a
+    // partir de 2024 na planilha — cobertura parcial, avisado no rodapé).
+    const comResultado = planilhaLinhas.filter(l => l.resultado && l.resultado.trim());
+    const positivo = comResultado.filter(l => {
+      const r = l.resultado!.toLowerCase();
+      return r.includes('êxito') || r.includes('exito') || (r.includes('procedência') && !r.includes('improcedência')) || (r.includes('procedencia') && !r.includes('improcedencia'));
+    }).length;
+    const negativo = comResultado.length - positivo;
+    const taxaExito = pct(positivo, comResultado.length);
+
+    return { porAnoData, reus, justica, totalHistorico: planilhaLinhas.length, positivo, negativo, comResultadoTotal: comResultado.length, taxaExito };
+  }, [planilhaLinhas]);
+
+  const exitoPlanilhaDonut = [
+    { name: 'Êxito', value: p.positivo, color: GREEN },
+    { name: 'Sem êxito', value: p.negativo, color: RED },
   ];
 
   return (
@@ -437,6 +490,93 @@ export default function DadosPage() {
                 </p>
               </Card>
             </div>
+
+            {/* ─── Histórico de Processos (planilha do Drive, 2013-2026) ─── */}
+            <div className="flex items-center justify-between flex-wrap gap-2 pt-2">
+              <div className="flex items-center gap-2">
+                <History style={{ width: 17, height: 17, color: BROWN }} />
+                <h2 className="text-base font-bold text-foreground">Histórico de Processos (2013-2026)</h2>
+              </div>
+              {syncEstado?.ultima_sincronizacao && (
+                <div className="flex items-center gap-1.5" style={{ color: NEUTRAL, fontSize: 11.5 }}>
+                  <RefreshCw style={{ width: 12, height: 12 }} />
+                  Planilha sincronizada {formatDistanceToNow(new Date(syncEstado.ultima_sincronizacao), { locale: ptBR, addSuffix: true })}
+                </div>
+              )}
+            </div>
+
+            {loadingPlanilha ? (
+              <div className="h-40 flex items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin" style={{ color: GOLD }} />
+              </div>
+            ) : p.totalHistorico === 0 ? (
+              <div className="rounded-2xl p-6 text-center bg-card" style={{ border: BORDER, color: NEUTRAL, fontSize: 13 }}>
+                Ainda não sincronizado — a planilha atualiza sozinha a cada 20 minutos.
+              </div>
+            ) : (
+              <>
+                <Card accent={BROWN} icon={History} title="Processos por Ano" iconBg="rgba(61,43,31,0.08)" iconColor={BROWN}>
+                  <div style={{ width: '100%', height: 220 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={p.porAnoData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                        <CartesianGrid vertical={false} stroke="rgba(201,169,110,0.15)" />
+                        <XAxis dataKey="ano" tick={{ fontSize: 11, fill: NEUTRAL }} axisLine={false} tickLine={false} />
+                        <YAxis tick={{ fontSize: 11, fill: NEUTRAL }} axisLine={false} tickLine={false} allowDecimals={false} />
+                        <Tooltip contentStyle={{ borderRadius: 12, fontSize: 12, border: '1px solid rgba(201,169,110,0.3)' }} formatter={(v: number) => [`${num(v)} processos`, '']} labelFormatter={(l) => `${l}`} />
+                        <Bar dataKey="value" fill={GOLD} radius={[6, 6, 0, 0]} isAnimationActive={false} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <p className="text-[11px] mt-3 pt-3" style={{ color: NEUTRAL, borderTop: '0.5px solid rgba(201,169,110,0.12)' }}>
+                    Fonte: planilha "Relação de Processos" do Drive do escritório · {num(p.totalHistorico)} processos ao todo.
+                  </p>
+                </Card>
+
+                <div className="grid gap-5 grid-cols-1 lg:grid-cols-2">
+                  <Card accent={GREEN} icon={Gavel} title="Taxa de Êxito (histórico)" iconBg="rgba(22,163,74,0.09)" iconColor={GREEN}>
+                    {p.comResultadoTotal > 0 ? (
+                      <div className="flex items-center gap-5">
+                        <div style={{ width: 150, height: 150 }} className="relative shrink-0">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie data={exitoPlanilhaDonut} cx="50%" cy="50%" innerRadius={48} outerRadius={72} paddingAngle={3} dataKey="value" stroke="none" isAnimationActive={false}>
+                                {exitoPlanilhaDonut.map((e, i) => <Cell key={i} fill={e.color} />)}
+                              </Pie>
+                              <Tooltip contentStyle={{ borderRadius: 12, fontSize: 12, border: '1px solid rgba(201,169,110,0.3)' }} formatter={(v: number, n: string) => [`${num(v)} casos`, n]} />
+                            </PieChart>
+                          </ResponsiveContainer>
+                          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                            <span className="text-2xl font-extrabold" style={{ color: GREEN }}>{p.taxaExito}%</span>
+                            <span className="text-[10px]" style={{ color: NEUTRAL }}>êxito</span>
+                          </div>
+                        </div>
+                        <div className="flex-1 space-y-3">
+                          <div className="flex items-center justify-between p-3 rounded-xl" style={{ background: 'rgba(22,163,74,0.06)' }}>
+                            <span className="text-[13px] font-medium text-foreground">Êxito</span>
+                            <span className="text-lg font-extrabold tabular-nums" style={{ color: GREEN }}>{num(p.positivo)}</span>
+                          </div>
+                          <div className="flex items-center justify-between p-3 rounded-xl" style={{ background: 'rgba(220,38,38,0.05)' }}>
+                            <span className="text-[13px] font-medium text-foreground">Sem êxito</span>
+                            <span className="text-lg font-extrabold tabular-nums" style={{ color: RED }}>{num(p.negativo)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : <EmptyState label="Sem casos com resultado preenchido na planilha" />}
+                    <p className="text-[11px] mt-3 pt-3" style={{ color: AMBER, borderTop: '0.5px solid rgba(201,169,110,0.12)' }}>
+                      ⚠ A coluna "Resultado" só existe na planilha a partir de 2024 — baseado em {num(p.comResultadoTotal)} de {num(p.totalHistorico)} processos ({pct(p.comResultadoTotal, p.totalHistorico)}%).
+                    </p>
+                  </Card>
+
+                  <Card accent="#0d9488" icon={Building2} title="Réus Mais Recorrentes" iconBg="rgba(13,148,136,0.1)" iconColor="#0d9488">
+                    <BarList data={p.reus} total={p.totalHistorico} color="#0d9488" max={10} />
+                  </Card>
+                </div>
+
+                <Card accent="#7c3aed" icon={Scale} title="Tipo de Justiça" iconBg="rgba(124,58,237,0.09)" iconColor="#7c3aed">
+                  <BarList data={p.justica} total={p.totalHistorico} color="#7c3aed" />
+                </Card>
+              </>
+            )}
           </>
         )}
       </div>
