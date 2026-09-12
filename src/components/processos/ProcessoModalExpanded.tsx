@@ -1437,21 +1437,23 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
 
                 {/* Form — scroll interno */}
                 <ScrollArea className="flex-1 min-w-0 h-full">
-                  <div className="px-6 py-5 space-y-5">
+                  {/* Navegação rápida entre seções — fora do padding do conteúdo pra ficar
+                      flush no topo (alinhado com o cabeçalho "Partes" ao lado), em vez de
+                      só "grudar" (sticky) depois de rolar um pouco */}
+                  <div className="sticky top-0 z-10 px-6 py-2 bg-card/95 backdrop-blur-sm border-b border-border/30 flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+                    {SECOES_PROCESSO.map(sec => (
+                      <button
+                        key={sec.label}
+                        type="button"
+                        onClick={() => scrollToSecao(sec.ref)}
+                        className="shrink-0 text-[10px] font-semibold px-2.5 py-1 rounded-full border border-border/40 text-muted-foreground hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-colors whitespace-nowrap"
+                      >
+                        {sec.label}
+                      </button>
+                    ))}
+                  </div>
 
-                    {/* Navegação rápida entre seções */}
-                    <div className="sticky top-0 z-10 -mx-6 px-6 py-2 bg-card/95 backdrop-blur-sm border-b border-border/30 flex items-center gap-1.5 overflow-x-auto scrollbar-none">
-                      {SECOES_PROCESSO.map(sec => (
-                        <button
-                          key={sec.label}
-                          type="button"
-                          onClick={() => scrollToSecao(sec.ref)}
-                          className="shrink-0 text-[10px] font-semibold px-2.5 py-1 rounded-full border border-border/40 text-muted-foreground hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-colors whitespace-nowrap"
-                        >
-                          {sec.label}
-                        </button>
-                      ))}
-                    </div>
+                  <div className="px-6 py-5 space-y-5">
 
                     <div ref={secNumeracaoRef}>
                       <SectionTitle icon={Hash} label="Numeração" />
