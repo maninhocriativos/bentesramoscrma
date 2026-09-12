@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { usePerfil } from '@/hooks/usePerfil';
 import { useOfficeSettings } from '@/hooks/useOfficeSettings';
 import { supabase } from '@/integrations/supabase/client';
@@ -124,8 +124,6 @@ export default function IntimacoesPage() {
   const [filterLida, setFilterLida] = useState<'all' | 'unread' | 'read' | 'urgent' | 'today'>('all');
   const [selectedIntimacao, setSelectedIntimacao] = useState<Intimacao | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
-  const dwellTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const [lastSyncAt, setLastSyncAt] = useState<Date | null>(() => {
     const s = localStorage.getItem('intimacoes-last-sync');
     return s ? new Date(s) : null;
@@ -368,54 +366,6 @@ export default function IntimacoesPage() {
   const paginated = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
   const pageStart = filtered.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
   const pageEnd = Math.min(safePage * pageSize, filtered.length);
-
-  // Pedido do usuário 2026-09-12: "tem que reconhecer quando o advogado lê" —
-  // antes só marcava como lida no clique (abrir o detalhe), mas o resumo já
-  // aparece na própria linha da tabela, então dava pra ler sem nunca clicar e
-  // a intimação ficava "Pendente" pra sempre. Observa quais linhas não lidas
-  // estão realmente visíveis na tela e, depois de um tempo de permanência
-  // (não um piscar rápido ao rolar), marca como lida sozinho.
-  useEffect(() => {
-    const unread = paginated.filter(i => !i.lida);
-    if (unread.length === 0) return;
-
-    // Polling em vez de IntersectionObserver: mais previsível entre browsers
-    // (e funcionou de forma inconsistente em teste headless) pra um caso de
-    // uso simples como este — só precisamos saber se a linha ficou visível
-    // por tempo suficiente, não reagir instantaneamente a cada scroll.
-    const visibleSince = new Map<string, number>();
-    const marked = new Set<string>();
-    const DWELL_MS = 2000;
-    const MIN_RATIO = 0.6;
-
-    const tick = () => {
-      const vh = window.innerHeight;
-      for (const i of unread) {
-        if (marked.has(i.id)) continue;
-        const el = rowRefs.current.get(i.id);
-        if (!el) { visibleSince.delete(i.id); continue; }
-        const rect = el.getBoundingClientRect();
-        const visibleHeight = Math.min(rect.bottom, vh) - Math.max(rect.top, 0);
-        const ratio = rect.height > 0 ? visibleHeight / rect.height : 0;
-        const isVisible = ratio >= MIN_RATIO && rect.width > 0;
-
-        if (isVisible) {
-          const since = visibleSince.get(i.id);
-          if (since == null) visibleSince.set(i.id, Date.now());
-          else if (Date.now() - since >= DWELL_MS) {
-            marked.add(i.id);
-            handleMarkRead(i.id);
-          }
-        } else {
-          visibleSince.delete(i.id);
-        }
-      }
-    };
-
-    const interval = setInterval(tick, 400);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paginated.map(i => i.id + (i.lida ? '1' : '0')).join(',')]);
 
   const kpis = [
     { icon: BookOpen, label: 'Total de Publicações', value: intimacoes.length, numClr: 'text-foreground', iconBg: 'bg-primary/10', iconClr: 'text-primary', barClr: 'from-primary to-primary/50', filter: null },
@@ -704,9 +654,7 @@ export default function IntimacoesPage() {
                     return (
                       <tr
                         key={intimacao.id}
-                        ref={el => { if (el) rowRefs.current.set(intimacao.id, el); else rowRefs.current.delete(intimacao.id); }}
-                        data-intimacao-id={intimacao.id}
-                        onClick={() => { setSelectedIntimacao(intimacao); if (isUnread) handleMarkRead(intimacao.id); }}
+                        onClick={() => setSelectedIntimacao(intimacao)}
                         className={`cursor-pointer border-b border-border/30 last:border-0 transition-colors ${isSelected ? 'bg-primary/[0.04]' : isUnread ? 'hover:bg-muted/30' : 'hover:bg-muted/20 opacity-80'}`}
                         style={isUnread ? { backgroundColor: tc.cardUnread } : undefined}
                       >
