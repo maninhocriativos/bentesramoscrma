@@ -123,6 +123,30 @@ serve(async (req) => {
       return { oab_numero: oabFallback.numero, oab_uf: oabFallback.uf };
     }
 
+    // BUG real achado pelo usuário em 2026-09-12: o mesmo item do DJEN podia
+    // ser inserido tanto por este sync (por CNJ) quanto pelo intimacoes-oab
+    // (por OAB) — uma intimação já lida "voltava" como não lida porque virava
+    // 2 linhas. Causa: quando intimacoes-oab insere um item antes do processo
+    // existir em `processos`, a linha fica com processo_id=null (só é
+    // vinculada depois, quando alguém abre /intimacoes — ver
+    // IntimacoesPage.tsx). O dedup abaixo (`.eq("processo_id", processo.id)`)
+    // não enxergava essas linhas órfãs, então o mesmo djenId parecia "novo"
+    // aqui e duplicava. Busca única (fora do loop — tabela é pequena, poucas
+    // dezenas de órfãs hoje) por processo_cnj normalizado das ainda sem
+    // processo_id, indexada por CNJ pra consulta O(1) dentro do loop.
+    const { data: orfas } = await supabase
+      .from("intimacoes")
+      .select("processo_cnj, raw_json")
+      .is("processo_id", null);
+    const orfasPorCnj = new Map<string, Set<string>>();
+    for (const o of orfas || []) {
+      const cnjDigits = (o.processo_cnj || "").replace(/\D/g, "");
+      const djenId = o.raw_json?.id ?? o.raw_json?.numeroComunicacao;
+      if (!cnjDigits || djenId == null) continue;
+      if (!orfasPorCnj.has(cnjDigits)) orfasPorCnj.set(cnjDigits, new Set());
+      orfasPorCnj.get(cnjDigits)!.add(`djenid|${djenId}`);
+    }
+
     const startTime = Date.now();
     const TIME_BUDGET_MS = 100_000;
     let processados = 0, novas = 0, comErro = 0, tempoEsgotado = false, bloqueadoPeloDjen = false;
@@ -160,6 +184,7 @@ serve(async (req) => {
               return djenId != null ? `djenid|${djenId}` : `${e.tipo_intimacao || ""}|${(e.data_disponibilizacao || "").slice(0, 10)}`;
             })
           );
+          for (const k of orfasPorCnj.get(processo.cnj_normalizado) || []) existingKeys.add(k);
 
           for (const item of items) {
             const dataDisp: string = item.data_disponibilizacao || "";

@@ -1075,14 +1075,19 @@ serve(async (req) => {
     }
 
     // ── Deduplicação em memória ───────────────────────────────────────────────
-    // Limit alto para não perder registros em escritórios com muitas intimações
+    // Sem filtro de created_at: um corte de 90 dias aqui é exatamente o que
+    // causava o bug relatado pelo usuário em 2026-09-12 — uma intimação já
+    // lida, com created_at fora da janela, deixava de entrar no `existingMap`
+    // e o DJEN reenviando o MESMO item (com data_disponibilizacao ligeiramente
+    // diferente) batia como "novo" e duplicava a linha (nova, não lida) por
+    // cima da antiga (já lida). Tabela é pequena (~2 mil linhas por escritório
+    // hoje), então buscar tudo é seguro; limit alto só como rede de segurança.
     const { data: existing } = await supabase
       .from("intimacoes")
       .select("id, processo_cnj, tipo_intimacao, data_disponibilizacao, tribunal, data_publicacao, data_intimacao, conteudo, raw_json")
       .eq("oab_numero", oab_numero)
       .eq("oab_uf", oab_uf)
-      .gte("created_at", new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString())
-      .limit(5000);
+      .limit(20000);
 
     // Itens com CNJ: chave por processo+tipo+data (processo identificado com precisão)
     // Itens sem CNJ (V1/Diário): chave inclui início do conteúdo para distinguir publicações
