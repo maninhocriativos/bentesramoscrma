@@ -1297,6 +1297,35 @@ PageTransition (mesma classe de bug já documentada nas Petições em
 ao vivo que o `AgendaPDFModal` NÃO tem esse problema antes de mexer nele
 à toa (mesmo padrão de modal fixo, mas não afetado).
 
+### 2026-09-12 (mesmo dia, sessão seguinte) — Timesheet vinculado a tarefas reais + 2 bugs reportados pelo usuário
+
+1. **"Horas/Mês" sempre em 0.0h, corrigido de vez.** Causa real (achada
+   consultando o banco antes de mexer): a tabela `timesheet` estava
+   vazia porque "Registrar Horas" era um texto livre solto, sem
+   `processo_id`/`tarefa_id`/`cliente_id` — nada vinculava a nenhuma
+   tarefa de verdade. Agora o modal deixa escolher uma tarefa real do
+   próprio usuário (via `ehResponsavel`) e preenche os vínculos
+   sozinho; a tabela de Timesheet ganhou colunas Responsável/Tarefa; o
+   KPI e a aba passam a respeitar o mês corrente e o filtro de pessoa.
+   Testado ao vivo ponta a ponta (criar registro → aparecer na tabela
+   → KPI atualizar) e o registro de teste foi apagado do banco depois.
+2. **Bug real no modal de processo, reportado pelo usuário com print**:
+   a pílula de navegação rápida (Numeração/Detalhes/...) ficava dentro
+   do padding do conteúdo, então só "grudava" no topo depois de rolar
+   ~20px — antes disso sobrava um respiro vazio que não existia no
+   cabeçalho "Partes" ao lado, criando um degrau visual bem na divisa
+   entre as duas colunas. Corrigido movendo a navegação pra fora do
+   padding, flush no topo como o cabeçalho "Partes". Diagnosticado
+   comparando pixel a pixel (getBoundingClientRect) as duas colunas
+   antes de mexer, não por tentativa e erro.
+3. **Relatório de Agenda "não funciona" (reportado pelo usuário) — ainda
+   não reproduzido.** Testado ao vivo em produção (abrir modal + clicar
+   "Baixar PDF" com captura real do evento de download) sem nenhum
+   erro, com os dados do processo aparecendo corretamente. Falta
+   perguntar ao usuário o que exatamente falha (não abre? PDF vem
+   vazio/errado? erro em algum filtro específico?) antes de mexer mais,
+   pra não "consertar" algo que já funciona.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
