@@ -1237,6 +1237,66 @@ no `fetch()` global, precisa de client explícito), usado em `fetchDjen()`
 antes retornava 0/bloqueado sempre. Falta só observar os próximos ciclos
 automáticos do cron confirmarem intimações genuinamente novas chegando.
 
+### 2026-09-11 (mesmo dia, sessão seguinte) — Isa marcável no grupo (LID) + planilha histórica de processos na página de Dados
+
+Duas entregas grandes:
+
+**1. Isa responde quando marcada no grupo.** Pedido do usuário. Marcação
+do WhatsApp chega embutida no texto como "@&lt;dígitos&gt;" — sem campo
+separado no payload de recebimento do Z-API. Ao detectar, gera resposta
+curta via IA (gpt-4o-mini) e envia de volta marcando quem chamou.
+**Bug real achado testando ao vivo**: quem tem o "LID privacy" do
+WhatsApp ativado (caso do usuário) marca por um identificador diferente
+do telefone — confirmado via `GET /device` da Z-API (campo `lid`),
+batendo exato com a marcação real que o usuário já tinha feito. Sem essa
+checagem a Isa nunca responderia pra esse caso. Refatoração no caminho:
+`GRUPO_EQUIPE_NOME`/`buscarGroupId`/`enviarTextoGrupo`/`enviarComoGrupo`
+extraídos pra `_shared/grupo-equipe.ts` (estavam duplicados só no
+isa-scheduler, agora o zapi-webhook também precisa).
+
+**2. Planilha histórica de processos (2013-2026) na página de Dados.**
+Usuário pediu consultar via API uma planilha do Drive ("Relação de
+Processos 2013 à 2026.xlsx", 1 aba por ano, ~3.500 processos) e refletir
+em gráficos, atualizando sozinho quando a planilha mudar. Nova função
+`sync-planilha-processos` (cron 20min, só reprocessa se o `modifiedTime`
+do Drive mudou) parseia com SheetJS por nome de coluna normalizado
+(cabeçalhos variam entre as 14 abas). Novos gráficos: processos por ano,
+taxa de êxito (só a partir de 2024, aviso de cobertura), réus mais
+recorrentes, tipo de justiça, sazonalidade por mês (corrigindo "Janeiro"/
+"janeiro"/"janeio"), matéria e qualificação do cliente (só a partir de
+2026). Filtro de ano adicionado depois, a pedido do usuário. **Bug real
+achado e corrigido no caminho**: `titleCase()` (compartilhada, já usada
+em outros gráficos da página) usava `\b` do regex — ASCII-only, tratava
+acento como fim de palavra e maiusculizava a letra seguinte também
+("justiça" virava "JustiÇA"). Corrigido pra todo mundo, não só pro
+gráfico novo.
+
+### 2026-09-12 — 4 melhorias em Processos e Agenda
+
+Pedido do usuário, tudo testado ao vivo antes de subir:
+1. **Status "Arquivado" virou 4 motivos específicos** (Arquivado Ganho/
+   Perda/Acordo/Extinção) no cadastro manual. Genérico continua válido
+   como legado (sync automático via DataJud/Escavador não sabe o motivo).
+   Atualizado em 12 pontos reais (mapeados por auditoria antes de editar,
+   não achismo): tipo `ProcessoStatus`, 2 modais, tabela de processos,
+   modal de criação, aba de processos do lead, exclusão de métricas do
+   Dashboard (2 arquivos, virou prefixo em vez de igualdade exata),
+   KPI/filtro de ProcessosPage e exclusão do monitor automático de status.
+2. **Aba "Contatos" no modal de processo** — registro de contatos com o
+   cliente, reaproveitando `interacoes.processo_id` (coluna já existia,
+   não era usada em lugar nenhum). Mesmo padrão de LeadRegistrosTab.
+3. **Relatório do processo** (PDF, seleção de seções) — mesma mecânica
+   de geração do relatório de agenda já existente.
+4. **Relatório de Agenda** passou a mostrar processo/cliente vinculado a
+   cada compromisso (não mostrava nada disso antes).
+
+**Bug real achado testando o relatório de processo ao vivo**: o modal não
+aparecia — `position:fixed` quebrado por um ancestral com `transform` do
+PageTransition (mesma classe de bug já documentada nas Petições em
+2026-09-10). Corrigido com `createPortal` direto pro `body`. Verificado
+ao vivo que o `AgendaPDFModal` NÃO tem esse problema antes de mexer nele
+à toa (mesmo padrão de modal fixo, mas não afetado).
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
