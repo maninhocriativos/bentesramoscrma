@@ -18,7 +18,10 @@ interface CreateProcessoModalProps {
 const STATUSES: ProcessoStatus[] = [
   'Em Andamento',
   'Suspenso',
-  'Arquivado',
+  'Arquivado Ganho',
+  'Arquivado Perda',
+  'Arquivado Acordo',
+  'Arquivado Extinção',
   'Ganho',
   'Perdido',
 ];

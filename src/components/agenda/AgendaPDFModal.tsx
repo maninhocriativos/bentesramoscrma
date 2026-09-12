@@ -1,8 +1,9 @@
-import { useState, useRef, useCallback, useMemo } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { format, startOfMonth, endOfMonth, addMonths, isToday, isPast, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { X, FileText, ChevronLeft, ChevronRight, Download, Loader2, Filter } from 'lucide-react';
+import { X, FileText, ChevronLeft, ChevronRight, Download, Loader2, Filter, Scale } from 'lucide-react';
 import { Compromisso } from '@/types/compromissos';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Props {
   onClose: () => void;
@@ -29,6 +30,8 @@ const STATUS_LABEL: Record<string, { text: string; color: string }> = {
 
 const ALL_TIPOS = ['Audiência', 'Reunião', 'Prazo', 'Tarefa', 'Intimação', 'Outro'];
 
+interface ProcessoInfo { numero_processo: string | null; nome_cliente: string | null; tribunal: string | null; }
+
 export function AgendaPDFModal({ onClose, compromissos }: Props) {
   const today = new Date();
   const [year, setYear]         = useState(today.getFullYear());
@@ -36,7 +39,42 @@ export function AgendaPDFModal({ onClose, compromissos }: Props) {
   const [rangeMode, setRangeMode]     = useState<RangeMode>('1');
   const [selectedTipos, setSelectedTipos] = useState<string[]>(ALL_TIPOS);
   const [generating, setGenerating] = useState(false);
+  const [processosMap, setProcessosMap] = useState<Record<string, ProcessoInfo>>({});
+  const [leadsMap, setLeadsMap] = useState<Record<string, string>>({});
   const printRef = useRef<HTMLDivElement>(null);
+
+  // Dados do processo/cliente vinculado a cada compromisso — pedido do
+  // usuário 2026-09-12: o relatório só mostrava título/tipo/status, sem
+  // dizer a qual processo/cliente a audiência ou prazo pertence. Busca uma
+  // vez (todos os compromissos recebidos, não só o período em exibição),
+  // pra navegar entre meses sem refazer a consulta.
+  useEffect(() => {
+    const processoIds = [...new Set(compromissos.map(c => c.processo_id).filter((v): v is string => !!v))];
+    const leadIds = [...new Set(compromissos.map(c => c.lead_id).filter((v): v is string => !!v))];
+    if (processoIds.length === 0 && leadIds.length === 0) return;
+    (async () => {
+      const [{ data: processos }, { data: leads }] = await Promise.all([
+        processoIds.length ? supabase.from('processos').select('id, numero_processo, nome_cliente, tribunal, cliente_id').in('id', processoIds) : Promise.resolve({ data: [] as any[] }),
+        leadIds.length ? supabase.from('leads_juridicos').select('id, nome').in('id', leadIds) : Promise.resolve({ data: [] as any[] }),
+      ]);
+      const lMap: Record<string, string> = {};
+      (leads || []).forEach((l: any) => { lMap[l.id] = l.nome; });
+      // Processo sem nome_cliente preenchido, mas com cliente_id vinculado a
+      // um lead — usa o nome do lead como fallback (mesmo padrão já usado
+      // em useLeadProcessos.ts).
+      const extraLeadIds = (processos || []).map((p: any) => p.cliente_id).filter((v: string | null): v is string => !!v && !lMap[v]);
+      if (extraLeadIds.length > 0) {
+        const { data: extraLeads } = await supabase.from('leads_juridicos').select('id, nome').in('id', extraLeadIds);
+        (extraLeads || []).forEach((l: any) => { lMap[l.id] = l.nome; });
+      }
+      const pMap: Record<string, ProcessoInfo> = {};
+      (processos || []).forEach((p: any) => {
+        pMap[p.id] = { numero_processo: p.numero_processo, nome_cliente: p.nome_cliente || (p.cliente_id ? lMap[p.cliente_id] : null) || null, tribunal: p.tribunal };
+      });
+      setProcessosMap(pMap);
+      setLeadsMap(lMap);
+    })();
+  }, [compromissos]);
 
   const prevMonth = () => { if (month === 0) { setMonth(11); setYear(y => y - 1); } else setMonth(m => m - 1); };
   const nextMonth = () => { if (month === 11) { setMonth(0); setYear(y => y + 1); } else setMonth(m => m + 1); };
@@ -309,6 +347,8 @@ export function AgendaPDFModal({ onClose, compromissos }: Props) {
                         const statusCfg = STATUS_LABEL[c.confirmacao_status || 'pendente'];
                         const hora      = format(new Date(c.data_inicio), 'HH:mm');
                         const horaFim   = c.data_fim ? format(new Date(c.data_fim), 'HH:mm') : null;
+                        const processo  = c.processo_id ? processosMap[c.processo_id] : null;
+                        const nomeCliente = processo?.nome_cliente || (c.lead_id ? leadsMap[c.lead_id] : null) || null;
                         return (
                           <div key={c.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 16px', borderBottom: ci < dayComps.length - 1 ? '1px solid rgba(232,221,208,0.6)' : 'none', background: ci % 2 === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(250,247,242,0.5)' }}>
                             <div style={{ minWidth: 48, textAlign: 'right', flexShrink: 0, paddingTop: 2 }}>
@@ -319,6 +359,16 @@ export function AgendaPDFModal({ onClose, compromissos }: Props) {
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ fontSize: 13, fontWeight: 700, color: '#1e1008', marginBottom: 4, fontFamily: 'Arial, sans-serif' }}>{c.titulo}</div>
                               {c.descricao && <div style={{ fontSize: 11, color: '#6b3f25', marginBottom: 5, fontFamily: 'Arial, sans-serif', lineHeight: 1.5 }}>{c.descricao}</div>}
+                              {(nomeCliente || processo?.numero_processo) && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 5, fontFamily: 'Arial, sans-serif' }}>
+                                  <Scale size={10} style={{ color: '#8a7260', flexShrink: 0 }} />
+                                  <span style={{ fontSize: 10.5, color: '#3d2010', fontWeight: 600 }}>
+                                    {nomeCliente}
+                                    {processo?.numero_processo && <span style={{ color: '#8a7260', fontWeight: 400 }}> · {processo.numero_processo}</span>}
+                                    {processo?.tribunal && <span style={{ color: '#8a7260', fontWeight: 400 }}> · {processo.tribunal}</span>}
+                                  </span>
+                                </div>
+                              )}
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                                 <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 20, background: tipoCfg.bg, color: tipoCfg.text, fontFamily: 'Arial, sans-serif', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{c.tipo}</span>
                                 <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 20, background: `${statusCfg.color}18`, color: statusCfg.color, fontFamily: 'Arial, sans-serif' }}>● {statusCfg.text}</span>

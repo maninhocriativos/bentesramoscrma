@@ -298,7 +298,9 @@ function ProcessosPage() {
     total:           processos.length,
     'Em Andamento':  processos.filter(p => p.status === 'Em Andamento').length,
     'Suspenso':      processos.filter(p => p.status === 'Suspenso').length,
-    'Arquivado':     processos.filter(p => p.status === 'Arquivado').length,
+    // Agrega os 4 motivos específicos ('Arquivado Ganho'/'Perda'/'Acordo'/
+    // 'Extinção') + o valor genérico legado (~10 processos antigos).
+    'Arquivado':     processos.filter(p => p.status?.startsWith('Arquivado')).length,
     'Ganho':         processos.filter(p => p.status === 'Ganho').length,
     'Perdido':       processos.filter(p => p.status === 'Perdido').length,
     recursal:        processos.filter(p => p.fase?.toLowerCase() === 'recursal').length,
@@ -316,6 +318,10 @@ function ProcessosPage() {
     let matchStatus = true;
     if (statusFilter === 'recursal') matchStatus = p.fase?.toLowerCase() === 'recursal';
     else if (statusFilter === 'execucao') matchStatus = ['execução', 'execucao'].includes(p.fase?.toLowerCase() || '');
+    // 'Arquivado' agrega os 4 motivos específicos + o valor genérico legado
+    // (mesmo critério do KPI acima) — sem isso o card mostraria uma
+    // contagem e o filtro clicado mostraria uma lista vazia/diferente.
+    else if (statusFilter === 'Arquivado') matchStatus = !!p.status?.startsWith('Arquivado');
     else if (statusFilter !== 'todos') matchStatus = p.status === statusFilter;
     const matchAdvogado = advogadoFilter === 'todos' || p.advogado_responsavel?.replace(/\s*\(OAB.*\)/i, '').trim() === advogadoFilter;
     const matchFase = faseFilter === 'todos' || p.fase?.trim() === faseFilter;

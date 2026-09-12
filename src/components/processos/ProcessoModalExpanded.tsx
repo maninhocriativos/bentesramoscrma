@@ -5,7 +5,7 @@ import {
   FileText, Bell, Hash, FolderOpen, Shield, Pencil, ChevronRight,
   CheckCircle2, Search, Tag, UserPlus, AlertTriangle,
   CheckCircle, PauseCircle, Archive, Trophy, XCircle, Activity,
-  Link2, Link2Off, GitBranch, ListTodo, Send, Play, RotateCcw, Star, Video,
+  Link2, Link2Off, GitBranch, ListTodo, Send, Play, RotateCcw, Star, Video, PhoneCall,
 } from 'lucide-react';
 import { useTarefas } from '@/hooks/useTarefas';
 import { Tarefa, TipoTarefa, TIPOS_TAREFA, responsaveisDe, inferirTipoTarefa } from '@/types/tarefas';
@@ -26,6 +26,8 @@ import { LeadName } from '@/hooks/useLeadNames';
 import { useProcessos } from '@/hooks/useProcessos';
 import { ProcessoNotificacaoConfig } from './ProcessoNotificacaoConfig';
 import { ProcessoNotificacoesTab } from './ProcessoNotificacoesTab';
+import { ProcessoContatosTab } from './ProcessoContatosTab';
+import { ProcessoRelatorioModal } from './ProcessoRelatorioModal';
 import { MovimentoDetailModal } from './MovimentoDetailModal';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -72,7 +74,11 @@ interface ProcessoModalDraft {
 
 interface Assunto { id: string; nome: string; categoria?: string; }
 
-const STATUSES: ProcessoStatus[] = ['Em Andamento', 'Suspenso', 'Arquivado', 'Ganho', 'Perdido'];
+// 'Arquivado' genérico saiu da lista de opções — cadastro manual sempre
+// pede o motivo específico agora (pedido do usuário 2026-09-12). O valor
+// genérico continua existindo só pra sync automático (DataJud/Escavador,
+// que não sabe o motivo) e pros ~10 processos já salvos com esse valor.
+const STATUSES: ProcessoStatus[] = ['Em Andamento', 'Suspenso', 'Arquivado Ganho', 'Arquivado Perda', 'Arquivado Acordo', 'Arquivado Extinção', 'Ganho', 'Perdido'];
 const CNJ_REGEX    = /^\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}$/;
 const DRAFT_PREFIX = 'processo_modal_draft_v1';
 const DRAFT_MAX_AGE = 1000 * 60 * 60 * 24;
@@ -95,7 +101,11 @@ const STATUS_CONFIG: Record<string, { cls: string; dot: string; barColor: string
   'Ganho':        { cls: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300', dot: 'bg-emerald-500', barColor: '#10b981', icon: Trophy },
   'Perdido':      { cls: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-300', dot: 'bg-red-500', barColor: '#ef4444', icon: XCircle },
   'Suspenso':     { cls: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300', dot: 'bg-amber-500', barColor: '#f59e0b', icon: PauseCircle },
-  'Arquivado':    { cls: 'bg-muted text-muted-foreground border-border', dot: 'bg-muted-foreground', barColor: '#94a3b8', icon: Archive },
+  'Arquivado':           { cls: 'bg-muted text-muted-foreground border-border', dot: 'bg-muted-foreground', barColor: '#94a3b8', icon: Archive },
+  'Arquivado Ganho':     { cls: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300', dot: 'bg-emerald-500', barColor: '#10b981', icon: Archive },
+  'Arquivado Perda':     { cls: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-300', dot: 'bg-red-500', barColor: '#ef4444', icon: Archive },
+  'Arquivado Acordo':    { cls: 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/30 dark:text-sky-300', dot: 'bg-sky-500', barColor: '#0ea5e9', icon: Archive },
+  'Arquivado Extinção':  { cls: 'bg-muted text-muted-foreground border-border', dot: 'bg-muted-foreground', barColor: '#94a3b8', icon: Archive },
 };
 
 const parseMoney = (v: string): number | null => {
@@ -606,6 +616,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
   const [fetchingData,      setFetchingData]      = useState(false);
   const [sendingNotif,      setSendingNotif]      = useState(false);
   const [activeTab,         setActiveTab]         = useState('processo');
+  const [showRelatorio,     setShowRelatorio]     = useState(false);
   const [selectedMovimento, setSelectedMovimento] = useState<MovimentoEnriquecido | null>(null);
   const [movModalOpen,      setMovModalOpen]      = useState(false);
   const [autoFetchDone,     setAutoFetchDone]     = useState(false);
@@ -1321,6 +1332,11 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {fetchingData && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+                {!isNew && (
+                  <Button variant="outline" size="sm" onClick={() => setShowRelatorio(true)} className="h-8 gap-1.5 text-xs rounded-lg font-semibold">
+                    <FileText className="h-3.5 w-3.5" /> Relatório
+                  </Button>
+                )}
                 {formData.valor_causa && !isNew && (
                   <span className="hidden lg:flex items-center gap-1 text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800/40">
                     <DollarSign className="h-3.5 w-3.5 shrink-0" />
@@ -1391,6 +1407,11 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                 <TabsTrigger value="notificacoes" className="rounded-lg text-xs h-7 px-4 gap-1.5 data-[state=active]:shadow-sm data-[state=active]:bg-card font-semibold">
                   <MessageSquare className="h-3.5 w-3.5" /> Notificações
                 </TabsTrigger>
+                {!isNew && (
+                  <TabsTrigger value="contatos" className="rounded-lg text-xs h-7 px-4 gap-1.5 data-[state=active]:shadow-sm data-[state=active]:bg-card font-semibold">
+                    <PhoneCall className="h-3.5 w-3.5" /> Contatos
+                  </TabsTrigger>
+                )}
                 {!isNew && (
                   <TabsTrigger value="tarefas" className="rounded-lg text-xs h-7 px-4 gap-1.5 data-[state=active]:shadow-sm data-[state=active]:bg-card font-semibold">
                     <ListTodo className="h-3.5 w-3.5" /> Tarefas
@@ -2226,6 +2247,19 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                 </div>
               </ScrollArea>
             </TabsContent>
+
+            {/* ── TAB CONTATOS — registro de contatos com o cliente ── */}
+            <TabsContent value="contatos" className="flex-1 min-h-0 mt-0 overflow-hidden">
+              {!isNew && processo ? (
+                <ProcessoContatosTab processoId={processo.id} clienteId={processo.cliente_id} />
+              ) : (
+                <div className="flex flex-col items-center justify-center py-24 gap-3 border-2 border-dashed border-border/40 rounded-2xl mx-6 mt-5">
+                  <div className="h-14 w-14 rounded-2xl bg-muted/60 flex items-center justify-center"><PhoneCall className="h-7 w-7 text-muted-foreground/20" /></div>
+                  <p className="text-sm font-semibold text-foreground">Salve o processo primeiro</p>
+                  <p className="text-xs text-muted-foreground">Registro de contatos disponível após criar</p>
+                </div>
+              )}
+            </TabsContent>
           </Tabs>
 
           {/* ── Footer ── */}
@@ -2286,6 +2320,20 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
 
       <AssuntoPickerModal isOpen={assuntoPickerOpen} onClose={() => setAssuntoPickerOpen(false)} currentValue={formData.assunto} onSelect={v => update('assunto', v)} />
       <NovoClienteModal isOpen={novoClienteOpen} onClose={() => setNovoClienteOpen(false)} onCreated={lead => { setLeads(prev => [...prev, lead].sort((a, b) => a.nome.localeCompare(b.nome))); update('cliente_id', lead.id); }} />
+      {showRelatorio && processo && (
+        <ProcessoRelatorioModal
+          onClose={() => setShowRelatorio(false)}
+          processo={processo}
+          clienteNome={clienteName || null}
+          statusAtual={formData.status || processo.status || ''}
+          tituloAcaoAtual={formData.titulo_acao || processo.titulo_acao || ''}
+          partes={partes}
+          movimentos={movimentos}
+          tarefas={processoTarefas}
+          despesas={despesas}
+          honorarios={honorarios}
+        />
+      )}
     </>
   );
 }

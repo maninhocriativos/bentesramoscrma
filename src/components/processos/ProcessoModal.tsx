@@ -66,10 +66,15 @@ interface ProcessoModalProps {
   leads: Lead[];
 }
 
+// 'Arquivado' genérico saiu da lista de opções — cadastro manual sempre
+// pede o motivo específico agora (mesma mudança de ProcessoModalExpanded).
 const STATUSES: ProcessoStatus[] = [
   'Em Andamento',
   'Suspenso',
-  'Arquivado',
+  'Arquivado Ganho',
+  'Arquivado Perda',
+  'Arquivado Acordo',
+  'Arquivado Extinção',
   'Ganho',
   'Perdido',
 ];

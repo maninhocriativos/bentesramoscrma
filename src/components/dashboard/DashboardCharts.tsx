@@ -10,7 +10,10 @@ import { cn } from '@/lib/utils';
 
 interface DashboardChartsProps { leads: Lead[]; processos: Processo[]; }
 
-const PROCESSO_STATUS_EXCLUIDOS = ['Arquivado', 'Perdido'];
+// 'Arquivado' virou 4 sub-motivos ('Arquivado Ganho'/'Perda'/'Acordo'/
+// 'Extinção') — prefixo cobre todos + o valor genérico legado.
+const PROCESSO_STATUS_EXCLUIDOS = ['Perdido'];
+const isProcessoExcluido = (status: string) => status.startsWith('Arquivado') || PROCESSO_STATUS_EXCLUIDOS.includes(status);
 
 const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0 }).format(v);
 
@@ -51,7 +54,7 @@ export function DashboardCharts({ leads, processos }: DashboardChartsProps) {
     const map = new Map<string, number>();
     processos.forEach(p => {
       if (!p.cliente_id) return;
-      if (p.status && PROCESSO_STATUS_EXCLUIDOS.includes(p.status)) return;
+      if (p.status && isProcessoExcluido(p.status)) return;
       if (!p.valor_causa) return;
       map.set(p.cliente_id, (map.get(p.cliente_id) || 0) + p.valor_causa);
     });

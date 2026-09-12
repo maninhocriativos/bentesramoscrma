@@ -26,6 +26,10 @@ const statusColors: Record<string, string> = {
   'Em Andamento': 'bg-blue-500/10 text-blue-600',
   'Aguardando': 'bg-amber-500/10 text-amber-600',
   'Arquivado': 'bg-slate-500/10 text-slate-600',
+  'Arquivado Ganho': 'bg-green-500/10 text-green-600',
+  'Arquivado Perda': 'bg-red-500/10 text-red-600',
+  'Arquivado Acordo': 'bg-sky-500/10 text-sky-600',
+  'Arquivado Extinção': 'bg-slate-500/10 text-slate-600',
   'Ganho': 'bg-green-500/10 text-green-600',
   'Perdido': 'bg-red-500/10 text-red-600',
 };

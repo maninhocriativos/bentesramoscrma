@@ -627,7 +627,10 @@ serve(async (req) => {
           movimentos_json, data_ultima_atualizacao, cliente_id,
           lead:leads_juridicos!inner(id, nome, telefone, tipo_origem)
         `)
-        .not('status', 'in', '("Arquivado","Perdido","Transitado em Julgado")')
+        // 'Arquivado' virou 4 motivos específicos (pedido do usuário
+        // 2026-09-12) — todos precisam continuar fora do monitoramento
+        // automático, igual o genérico legado.
+        .not('status', 'in', '("Arquivado","Arquivado Ganho","Arquivado Perda","Arquivado Acordo","Arquivado Extinção","Perdido","Transitado em Julgado")')
         .not('numero_processo', 'is', null)
         .not('cliente_id', 'is', null)
         .eq('nosso_processo', true);

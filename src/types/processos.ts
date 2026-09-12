@@ -1,4 +1,11 @@
-export type ProcessoStatus = 'Em Andamento' | 'Suspenso' | 'Arquivado' | 'Ganho' | 'Perdido';
+// 'Arquivado' genérico continua válido como legado (sync automático via
+// DataJud/Escavador não tem como saber o motivo do arquivamento) e pra
+// não quebrar os ~10 processos já salvos com esse valor — mas o cadastro
+// manual (ProcessoModalExpanded) só oferece os 4 motivos específicos.
+export type ProcessoStatus =
+  | 'Em Andamento' | 'Suspenso'
+  | 'Arquivado' | 'Arquivado Ganho' | 'Arquivado Perda' | 'Arquivado Acordo' | 'Arquivado Extinção'
+  | 'Ganho' | 'Perdido';
 
 export interface ProcessoMovimento {
   dataHora: string;

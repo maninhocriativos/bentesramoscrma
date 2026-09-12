@@ -39,6 +39,22 @@ const statusConfig: Record<string, {
     cls: 'bg-muted text-muted-foreground border-border',
     dot: 'bg-muted-foreground', icon: Archive, barColor: '#94a3b8',
   },
+  'Arquivado Ganho': {
+    cls: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300',
+    dot: 'bg-emerald-500', icon: Archive, barColor: '#10b981',
+  },
+  'Arquivado Perda': {
+    cls: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-300',
+    dot: 'bg-red-500', icon: Archive, barColor: '#ef4444',
+  },
+  'Arquivado Acordo': {
+    cls: 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/30 dark:text-sky-300',
+    dot: 'bg-sky-500', icon: Archive, barColor: '#0ea5e9',
+  },
+  'Arquivado Extinção': {
+    cls: 'bg-muted text-muted-foreground border-border',
+    dot: 'bg-muted-foreground', icon: Archive, barColor: '#94a3b8',
+  },
   'Ganho': {
     cls: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800/40',
     dot: 'bg-emerald-500', icon: Trophy, barColor: '#10b981',
