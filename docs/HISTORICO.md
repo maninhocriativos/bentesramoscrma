@@ -1381,6 +1381,17 @@ por menos que isso não é marcada). Linhas tocadas só pelos meus testes
 foram revertidas pra `lida=false`/`lida_em=null` de novo, pra não sujar
 dado real do escritório.
 
+**Revertido na sequência, mesmo dia**: usuário decidiu que não quer
+marcação automática nenhuma — "quero que vire concluída somente quando
+o advogado colocar como concluída". Removido o polling de dwell E o
+comportamento pré-existente de marcar `lida=true` só de abrir o modal
+de detalhe (clique na linha). O único jeito de virar "Concluído" agora
+é o botão explícito Pendente/Concluído na tabela, ou "Marcar como
+lida" dentro do modal — ambos já existiam e não foram tocados. A causa
+raiz do "1024 não lidas" documentada acima continua válida (é dado
+real, não bug de contagem) — só a forma de resolver mudou: fica a
+critério manual do advogado, não automático.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
