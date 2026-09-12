@@ -1,9 +1,9 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Timesheet } from '@/types/tarefas';
+import { TimesheetEnriquecido } from '@/types/tarefas';
 import { Badge } from '@/components/ui/badge';
 
-export function TimesheetTable({ registros, loading }: { registros: Timesheet[]; loading: boolean }) {
+export function TimesheetTable({ registros, loading }: { registros: TimesheetEnriquecido[]; loading: boolean }) {
   if (loading) return <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>;
   if (registros.length === 0) return <p className="text-center py-8 text-muted-foreground">Nenhum registro de horas</p>;
 
@@ -18,6 +18,8 @@ export function TimesheetTable({ registros, loading }: { registros: Timesheet[];
       <TableHeader>
         <TableRow>
           <TableHead>Data</TableHead>
+          <TableHead>Responsável</TableHead>
+          <TableHead>Tarefa</TableHead>
           <TableHead>Descrição</TableHead>
           <TableHead>Tipo</TableHead>
           <TableHead>Duração</TableHead>
@@ -28,6 +30,8 @@ export function TimesheetTable({ registros, loading }: { registros: Timesheet[];
         {registros.map(r => (
           <TableRow key={r.id}>
             <TableCell>{r.data_atividade}</TableCell>
+            <TableCell className="font-medium">{r.usuarioNome}</TableCell>
+            <TableCell>{r.tarefaTitulo || <span className="text-muted-foreground">Avulso</span>}</TableCell>
             <TableCell>{r.descricao}</TableCell>
             <TableCell>{r.tipo_atividade || '-'}</TableCell>
             <TableCell>{formatDuration(r.duracao_minutos)}</TableCell>

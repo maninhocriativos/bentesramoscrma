@@ -98,3 +98,8 @@ export interface Timesheet {
   created_at: string;
   updated_at: string;
 }
+
+export interface TimesheetEnriquecido extends Timesheet {
+  usuarioNome: string;
+  tarefaTitulo: string | null;
+}

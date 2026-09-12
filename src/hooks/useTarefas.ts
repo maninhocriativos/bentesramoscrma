@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Tarefa, Timesheet } from '@/types/tarefas';
+import { Tarefa, Timesheet, TimesheetEnriquecido } from '@/types/tarefas';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { fetchAllPaginated } from '@/lib/fetchAllPaginated';
@@ -141,11 +141,15 @@ export function useTarefas(processoId?: string) {
 }
 
 export function useTimesheet() {
-  const [registros, setRegistros] = useState<Timesheet[]>([]);
+  const [registros, setRegistros] = useState<TimesheetEnriquecido[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
   const { user } = useAuth();
 
+  // Enriquece com nome do responsável e título da tarefa vinculada — a
+  // tabela sozinha só tem ids, e a lista/KPI "Horas/Mês" precisa mostrar
+  // QUEM registrou e EM QUAL tarefa pra fazer sentido de verdade (pedido
+  // do usuário 2026-09-12: "quanto tempo as pessoas estão gastando").
   const fetchRegistros = async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -156,9 +160,26 @@ export function useTimesheet() {
 
     if (error) {
       toast({ title: 'Erro ao carregar registros', description: error.message, variant: 'destructive' });
-    } else {
-      setRegistros(data as Timesheet[]);
+      setLoading(false);
+      return;
     }
+
+    const rows = (data || []) as Timesheet[];
+    const usuarioIds = [...new Set(rows.map(r => r.usuario_id).filter(Boolean))];
+    const tarefaIds = [...new Set(rows.map(r => r.tarefa_id).filter((v): v is string => !!v))];
+
+    const [{ data: perfis }, { data: tarefasRel }] = await Promise.all([
+      usuarioIds.length ? supabase.from('perfis').select('id, nome, sobrenome').in('id', usuarioIds) : Promise.resolve({ data: [] as any[] }),
+      tarefaIds.length ? supabase.from('tarefas').select('id, titulo').in('id', tarefaIds) : Promise.resolve({ data: [] as any[] }),
+    ]);
+    const nomePorUsuario = new Map((perfis || []).map((p: any) => [p.id, [p.nome, p.sobrenome].filter(Boolean).join(' ') || 'Usuário']));
+    const tituloPorTarefa = new Map((tarefasRel || []).map((t: any) => [t.id, t.titulo]));
+
+    setRegistros(rows.map(r => ({
+      ...r,
+      usuarioNome: nomePorUsuario.get(r.usuario_id) || 'Usuário',
+      tarefaTitulo: r.tarefa_id ? (tituloPorTarefa.get(r.tarefa_id) || null) : null,
+    })));
     setLoading(false);
   };
 

@@ -326,10 +326,26 @@ export default function TarefasPage() {
     await updateTarefa(id, { status: col as Tarefa['status'] });
   };
 
+  // Registros do timesheet filtrados por pessoa selecionada (pílula) — antes
+  // a lista/KPI ignoravam completamente qual pessoa estava ativa, sempre
+  // somando TODO MUNDO. "Horas/Mês" também precisa ser só do mês corrente
+  // (o rótulo já dizia isso, mas somava o histórico inteiro).
+  const registrosDoUsuario = useMemo(
+    () => activeUser === 'all' ? registros : registros.filter(r => r.usuario_id === activeUser),
+    [registros, activeUser]
+  );
+  const registrosDoMes = useMemo(() => {
+    const hoje = new Date();
+    return registrosDoUsuario.filter(r => {
+      const d = new Date(r.data_atividade + 'T00:00:00');
+      return d.getMonth() === hoje.getMonth() && d.getFullYear() === hoje.getFullYear();
+    });
+  }, [registrosDoUsuario]);
+
   const kpis = useMemo(() => {
     const ativas = tarefas.filter(t => t.status !== 'Concluída' && t.status !== 'Cancelada');
     const atrasadas = ativas.filter(t => t.data_limite && isPast(new Date(t.data_limite)) && !isToday(new Date(t.data_limite)));
-    const totalHoras = registros.reduce((a, r) => a + r.duracao_minutos, 0) / 60;
+    const totalHoras = registrosDoMes.reduce((a, r) => a + r.duracao_minutos, 0) / 60;
     return {
       pendentes:   tarefas.filter(t => t.status === 'Pendente').length,
       emAndamento: tarefas.filter(t => t.status === 'Em Andamento').length,
@@ -340,7 +356,7 @@ export default function TarefasPage() {
       aguardando:  tarefas.filter(t => t.aprovacao_status === 'aguardando_aprovacao').length,
       totalHoras,
     };
-  }, [tarefas, registros]);
+  }, [tarefas, registrosDoMes]);
 
   const alertas = useMemo(() => {
     const ativas = tarefas.filter(t => t.status !== 'Concluída' && t.status !== 'Cancelada');
@@ -660,10 +676,13 @@ export default function TarefasPage() {
                 {/* Timesheet */}
                 <TabsContent value="timesheet" className="mt-4">
                   <div className="rounded-2xl overflow-hidden bg-white" style={{ border: '0.5px solid rgba(201,169,110,0.2)' }}>
-                    <div className="px-5 py-4" style={{ borderBottom: '0.5px solid rgba(201,169,110,0.12)', background: `${GOLD}06` }}>
+                    <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '0.5px solid rgba(201,169,110,0.12)', background: `${GOLD}06` }}>
                       <p style={{ fontSize: 13, fontWeight: 700, color: BROWN }}>Controle de Horas</p>
+                      <p style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af' }}>
+                        Total{activeUser !== 'all' ? ' (pessoa selecionada)' : ''}: {(registrosDoUsuario.reduce((a, r) => a + r.duracao_minutos, 0) / 60).toFixed(1)}h
+                      </p>
                     </div>
-                    <div className="p-4"><TimesheetTable registros={registros} loading={loadingTS} /></div>
+                    <div className="p-4"><TimesheetTable registros={registrosDoUsuario} loading={loadingTS} /></div>
                   </div>
                 </TabsContent>
 
@@ -878,7 +897,7 @@ export default function TarefasPage() {
         onEdit={t => { setDetailTarefa(null); setSelectedTarefa(t); setTarefaModalOpen(true); }}
         onSuccess={fetchTarefas} />
       <TarefaModal open={tarefaModalOpen} onOpenChange={setTarefaModalOpen} tarefa={selectedTarefa} onDelete={deleteTarefa} onSuccess={fetchTarefas} />
-      <TimesheetModal open={timesheetModalOpen} onOpenChange={setTimesheetModal} />
+      <TimesheetModal open={timesheetModalOpen} onOpenChange={setTimesheetModal} tarefas={tarefas} />
 
       {/* ── Preview do Relatório ── */}
       <Dialog open={!!reportPreview} onOpenChange={o => !o && setReportPreview(null)}>
