@@ -1326,6 +1326,33 @@ ao vivo que o `AgendaPDFModal` NÃO tem esse problema antes de mexer nele
    vazio/errado? erro em algum filtro específico?) antes de mexer mais,
    pra não "consertar" algo que já funciona.
 
+### 2026-09-12 (mesmo dia, sessão seguinte) — Intimação já lida "voltando" como não lida a cada sync
+
+Reportado pelo usuário com print (seta na KPI "PENDENTES DE LEITURA").
+Causa raiz real, achada consultando o banco (não achismo): **duas
+sincronizações independentes trazem a mesma comunicação do DJEN** —
+`intimacoes-oab` (por OAB do escritório) e `processo-djen-sync` (por
+CNJ de cada processo já cadastrado). Quando `intimacoes-oab` insere um
+item ANTES do processo correspondente existir em `processos`, a linha
+fica com `processo_id=null` (só é vinculada depois, hoje só quando
+alguém abre a página `/intimacoes` — vínculo é client-side). O dedup do
+`processo-djen-sync` só olhava linhas JÁ vinculadas ao processo
+(`eq("processo_id", processo.id)`), não enxergava essa órfã, e
+duplicava: nova linha com `lida=false` por cima da antiga já lida.
+Confirmado com 2 pares reais na base com exatamente essa assinatura
+(`fonte` "djen" + "djen_processo", mesmo `raw_json.id`, mesmo
+`processo_id`, dias de diferença entre as duas inserções).
+
+Corrigido casando também por `processo_cnj` entre as intimações ainda
+sem `processo_id` (fecha a lacuna sem precisar mudar o fluxo de
+vinculação client-side). De quebra, o corte de 90 dias no dedup do
+`intimacoes-oab` (mesma classe de bug do fix parcial de 2026-09-11)
+também deixava intimações lidas há mais tempo reaparecerem — removido
+(tabela pequena, ~2 mil linhas, buscar tudo é seguro). Não foi feita
+limpeza em massa das 8 duplicatas históricas achadas (todas já
+`lida=true` hoje, sem impacto visível na contagem de não lidas) — só a
+causa daqui pra frente foi fechada.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
