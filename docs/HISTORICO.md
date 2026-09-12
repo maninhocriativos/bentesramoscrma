@@ -1348,10 +1348,38 @@ sem `processo_id` (fecha a lacuna sem precisar mudar o fluxo de
 vinculação client-side). De quebra, o corte de 90 dias no dedup do
 `intimacoes-oab` (mesma classe de bug do fix parcial de 2026-09-11)
 também deixava intimações lidas há mais tempo reaparecerem — removido
-(tabela pequena, ~2 mil linhas, buscar tudo é seguro). Não foi feita
-limpeza em massa das 8 duplicatas históricas achadas (todas já
-`lida=true` hoje, sem impacto visível na contagem de não lidas) — só a
-causa daqui pra frente foi fechada.
+(tabela pequena, ~2 mil linhas, buscar tudo é seguro). Apaguei também
+as 2 duplicatas reais que sobraram (a pedido do usuário, ambas já
+`lida=true`, sem impacto na contagem — os outros 6 "grupos" que
+pareciam duplicata eram falso-positivo do meu script de auditoria: o
+`id` do Escavador é da EDIÇÃO do diário, compartilhado por várias
+intimações diferentes na mesma página, não deduplica por si só).
+
+### 2026-09-12 (mesmo dia, sessão seguinte) — "1024 não lidas quando na real só faltam 4": reconhecer quando o advogado lê
+
+O fix acima resolveu duplicatas, mas o usuário reportou que o número
+real de pendentes continuava muito maior do que o que ele considerava
+de fato pendente — ele já tinha revisado quase tudo. Confirmado no
+banco: 1024 linhas com `lida=false` de verdade (não é cache/tela
+desatualizada), a imensa maioria (1015/1024) ligada a processos "Em
+Andamento" reais, todas com `lida_em=null` (nunca passaram por nenhuma
+marcação) — ou seja, não é um caso de "marcou e voltou a ficar não
+lida", é que a marcação nunca aconteceu pra essas.
+
+Causa: `lida=true` só era setado no clique explícito pra abrir o
+detalhe da intimação — mas o resumo do conteúdo já aparece direto na
+própria linha da tabela, então dá pra ler sem nunca precisar clicar.
+Fix: cada linha não lida passa a ser observada (polling leve a cada
+400ms via `getBoundingClientRect`, não `IntersectionObserver` — este
+se mostrou pouco confiável em teste headless pra esse caso); ficando
+pelo menos 60% visível na tela por 2 segundos seguidos (não um piscar
+rápido ao rolar/navegar), marca como lida sozinho, sem precisar clicar.
+
+Testado ao vivo com captura real da chamada PATCH + conferência direta
+no banco (positivo: linha visível >2s marcada; negativo: linha visível
+por menos que isso não é marcada). Linhas tocadas só pelos meus testes
+foram revertidas pra `lida=false`/`lida_em=null` de novo, pra não sujar
+dado real do escritório.
 
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
