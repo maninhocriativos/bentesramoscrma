@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePerfil } from '@/hooks/usePerfil';
 import { useOfficeSettings } from '@/hooks/useOfficeSettings';
 import { supabase } from '@/integrations/supabase/client';
@@ -113,12 +114,72 @@ function getTypeConfig(tipo: string) {
   return { bar: '#3b82f6', avatarFrom: '#60a5fa', avatarTo: '#4f46e5', badge: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200', cardUnread: 'bg-blue-50/80 dark:bg-blue-950/15', dot: 'bg-blue-500' };
 }
 
+// Fora do componente (não depende de state/props) pra servir de queryFn do
+// useQuery sem recriar a função a cada render.
+async function fetchIntimacoesData(): Promise<Intimacao[]> {
+  // Paginado — a tabela passa de 1000 linhas e cresce por sync automático,
+  // e um select sem .range() é cortado silenciosamente nesse teto do
+  // PostgREST (mesmo bug já corrigido em várias outras telas do projeto).
+  const PAGE = 1000;
+  const all: any[] = [];
+  for (let page = 0; ; page++) {
+    const { data, error } = await supabase
+      .from('intimacoes')
+      .select('*')
+      .order('data_publicacao', { ascending: false, nullsFirst: false })
+      .order('data_disponibilizacao', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false })
+      .range(page * PAGE, (page + 1) * PAGE - 1);
+    if (error) throw error;
+    all.push(...(data || []));
+    if (!data || data.length < PAGE) break;
+  }
+
+  // Uma intimação só mostra "processo cadastrado" quando intimacoes.processo_id
+  // está preenchido — mas o vínculo nem sempre é feito no momento em que o
+  // processo é cadastrado (ou a intimação chega antes do cadastro manual).
+  // Vincula por CNJ aqui, antes de devolver os dados, pras que ainda não têm.
+  const normalize = (s: string) => (s || '').replace(/\D/g, '');
+  const pendentes = all.filter(i => !i.processo_id && normalize(i.processo_cnj));
+  if (pendentes.length) {
+    const cnjsNecessarios = Array.from(new Set(pendentes.map(i => normalize(i.processo_cnj))));
+    const { data: matches } = await supabase.from('processos').select('id, cnj_normalizado').in('cnj_normalizado', cnjsNecessarios);
+    if (matches?.length) {
+      const processoIdPorCnj = new Map(matches.map((p: any) => [p.cnj_normalizado as string, p.id as string]));
+      const paraAtualizar = pendentes
+        .map(i => ({ intimacaoId: i.id, processoId: processoIdPorCnj.get(normalize(i.processo_cnj)) }))
+        .filter((x): x is { intimacaoId: string; processoId: string } => !!x.processoId);
+      if (paraAtualizar.length) {
+        await Promise.all(paraAtualizar.map(({ intimacaoId, processoId }) =>
+          supabase.from('intimacoes').update({ processo_id: processoId }).eq('id', intimacaoId)
+        ));
+        const processoIdPorIntimacao = new Map(paraAtualizar.map(x => [x.intimacaoId, x.processoId]));
+        for (const item of all) {
+          if (processoIdPorIntimacao.has(item.id)) item.processo_id = processoIdPorIntimacao.get(item.id);
+        }
+      }
+    }
+  }
+
+  return all;
+}
+
 export default function IntimacoesPage() {
   const { perfil } = usePerfil();
   const { settings: officeSettings } = useOfficeSettings();
   const { user } = useAuth();
-  const [intimacoes, setIntimacoes] = useState<Intimacao[]>([]);
-  const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
+  // Pedido do usuário 2026-09-13: a tela ficava recarregando (spinner) toda
+  // vez que voltava pra ela, mesmo já tendo acabado de buscar os dados —
+  // useState local se perde a cada desmonte/remonte da página (troca de
+  // rota). useQuery guarda em cache entre navegações (staleTime padrão do
+  // app, 5min — ver App.tsx), então voltar pra /intimacoes mostra os dados
+  // na hora, sem tela de carregamento, e só re-busca em segundo plano.
+  const { data: intimacoes = [], isLoading: loading, refetch: refetchIntimacoes } = useQuery({
+    queryKey: ['intimacoes'],
+    queryFn: fetchIntimacoesData,
+    enabled: !!user,
+  });
   const [syncing, setSyncing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterLida, setFilterLida] = useState<'all' | 'unread' | 'read' | 'urgent' | 'today'>('all');
@@ -143,7 +204,6 @@ export default function IntimacoesPage() {
   const oabNumero = officeSettings?.oab_number || (perfil as any)?.oab_numero || '';
   const oabUf = officeSettings?.oab_state || (perfil as any)?.oab_uf || 'AM';
 
-  useEffect(() => { if (user) fetchIntimacoes(); }, [user]);
   useEffect(() => { const t = setInterval(() => setTick(n => n + 1), 60000); return () => clearInterval(t); }, []);
   // "Última sincronização" não pode depender só de localStorage (só atualizava
   // quando alguém clicava "Sincronizar" NESSE aparelho) — busca a data real do
@@ -176,56 +236,6 @@ export default function IntimacoesPage() {
     || members.find(m => m.oab_numero && m.oab_numero === intimacao.oab_numero && (m.oab_uf || 'AM') === intimacao.oab_uf)
     || null;
 
-  const fetchIntimacoes = async () => {
-    setLoading(true);
-    // Paginado — a tabela já está perto de 1000 linhas e crescendo (sync
-    // automático), e um select sem .range() é cortado silenciosamente nesse
-    // teto do PostgREST (mesmo bug já corrigido em várias outras telas hoje).
-    const PAGE = 1000;
-    const all: any[] = [];
-    let fetchError: any = null;
-    for (let page = 0; ; page++) {
-      const { data, error } = await supabase
-        .from('intimacoes')
-        .select('*')
-        .order('data_publicacao', { ascending: false, nullsFirst: false })
-        .order('data_disponibilizacao', { ascending: false, nullsFirst: false })
-        .order('created_at', { ascending: false })
-        .range(page * PAGE, (page + 1) * PAGE - 1);
-      if (error) { fetchError = error; break; }
-      all.push(...(data || []));
-      if (!data || data.length < PAGE) break;
-    }
-    if (fetchError) { console.error(fetchError); setLoading(false); return; }
-    setIntimacoes(all);
-    setLoading(false);
-    void linkIntimacoesJaCadastradas(all);
-  };
-
-  // Uma intimação só mostra "processo cadastrado" quando intimacoes.processo_id
-  // está preenchido — mas o vínculo nem sempre é feito no momento em que o
-  // processo é cadastrado (ou a intimação chega antes do cadastro manual).
-  // Isso deixava intimações de processos que já existem no sistema aparecendo
-  // como "N/A"/"cadastrar processo" na lista. Aqui, a cada carga da tela,
-  // fazemos o vínculo automático por número CNJ pras que ainda não têm.
-  const linkIntimacoesJaCadastradas = async (lista: Intimacao[]) => {
-    const normalize = (s: string) => (s || '').replace(/\D/g, '');
-    const pendentes = lista.filter(i => !i.processo_id && normalize(i.processo_cnj));
-    if (!pendentes.length) return;
-    const cnjsNecessarios = Array.from(new Set(pendentes.map(i => normalize(i.processo_cnj))));
-    const { data: matches } = await supabase.from('processos').select('id, cnj_normalizado').in('cnj_normalizado', cnjsNecessarios);
-    if (!matches?.length) return;
-    const processoIdPorCnj = new Map(matches.map((p: any) => [p.cnj_normalizado as string, p.id as string]));
-    const paraAtualizar = pendentes
-      .map(i => ({ intimacaoId: i.id, processoId: processoIdPorCnj.get(normalize(i.processo_cnj)) }))
-      .filter((x): x is { intimacaoId: string; processoId: string } => !!x.processoId);
-    if (!paraAtualizar.length) return;
-    await Promise.all(paraAtualizar.map(({ intimacaoId, processoId }) =>
-      supabase.from('intimacoes').update({ processo_id: processoId }).eq('id', intimacaoId)
-    ));
-    const processoIdPorIntimacao = new Map(paraAtualizar.map(x => [x.intimacaoId, x.processoId]));
-    setIntimacoes(prev => prev.map(i => processoIdPorIntimacao.has(i.id) ? { ...i, processo_id: processoIdPorIntimacao.get(i.id)! } : i));
-  };
 
   const handleSync = async () => {
     if (!oabNumero) { toast.error('Configure seu número da OAB no perfil'); return; }
@@ -261,7 +271,7 @@ export default function IntimacoesPage() {
               : `Nenhuma de hoje nas APIs · Total: ${totalFound}${latestInfo}${strategyStr ? ` · ${strategyStr}` : ''}`,
           });
         }
-        await fetchIntimacoes();
+        await refetchIntimacoes();
       } else {
         toast.error(data?.error || 'Erro ao sincronizar');
       }
@@ -271,7 +281,7 @@ export default function IntimacoesPage() {
 
   const handleMarkRead = async (id: string) => {
     await supabase.from('intimacoes').update({ lida: true, lida_em: new Date().toISOString() }).eq('id', id);
-    setIntimacoes(prev => prev.map(i => i.id === id ? { ...i, lida: true, lida_em: new Date().toISOString() } : i));
+    queryClient.setQueryData<Intimacao[]>(['intimacoes'], prev => (prev || []).map(i => i.id === id ? { ...i, lida: true, lida_em: new Date().toISOString() } : i));
   };
 
   const formatDate = (dateStr: string | null) => {
@@ -320,7 +330,7 @@ export default function IntimacoesPage() {
 
   const handleToggleRead = async (id: string, lida: boolean, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (lida) { await supabase.from('intimacoes').update({ lida: false, lida_em: null }).eq('id', id); setIntimacoes(p => p.map(i => i.id === id ? { ...i, lida: false, lida_em: null } : i)); }
+    if (lida) { await supabase.from('intimacoes').update({ lida: false, lida_em: null }).eq('id', id); queryClient.setQueryData<Intimacao[]>(['intimacoes'], prev => (prev || []).map(i => i.id === id ? { ...i, lida: false, lida_em: null } : i)); }
     else await handleMarkRead(id);
   };
 
