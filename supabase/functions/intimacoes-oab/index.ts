@@ -1080,14 +1080,32 @@ serve(async (req) => {
     // lida, com created_at fora da janela, deixava de entrar no `existingMap`
     // e o DJEN reenviando o MESMO item (com data_disponibilizacao ligeiramente
     // diferente) batia como "novo" e duplicava a linha (nova, não lida) por
-    // cima da antiga (já lida). Tabela é pequena (~2 mil linhas por escritório
-    // hoje), então buscar tudo é seguro; limit alto só como rede de segurança.
-    const { data: existing } = await supabase
-      .from("intimacoes")
-      .select("id, processo_cnj, tipo_intimacao, data_disponibilizacao, tribunal, data_publicacao, data_intimacao, conteudo, raw_json")
-      .eq("oab_numero", oab_numero)
-      .eq("oab_uf", oab_uf)
-      .limit(20000);
+    // cima da antiga (já lida).
+    //
+    // BUG real achado em 2026-09-13 (mesma classe já vista várias vezes nesse
+    // projeto — ZapSign, useLeads/useProcessos etc.): um único `.limit(20000)`
+    // NÃO garante 20000 linhas — o PostgREST tem um teto de linhas por
+    // requisição (max-rows do projeto, aqui 1000) que trunca silenciosamente
+    // ANTES do `.limit()` do client ter qualquer efeito. Só a OAB "7526"
+    // sozinha já tem 1886 linhas, então a busca "existing" vinha voltando só
+    // as ~1000 primeiras (ordem arbitrária) — intimações mais antigas ficavam
+    // de fora do dedup e eram duplicadas de novo a cada sync. Corrigido
+    // paginando de verdade (.range()) até esgotar os resultados.
+    const existing: any[] = [];
+    {
+      const PAGE = 1000;
+      for (let from = 0; ; from += PAGE) {
+        const { data: page } = await supabase
+          .from("intimacoes")
+          .select("id, processo_cnj, tipo_intimacao, data_disponibilizacao, tribunal, data_publicacao, data_intimacao, conteudo, raw_json")
+          .eq("oab_numero", oab_numero)
+          .eq("oab_uf", oab_uf)
+          .range(from, from + PAGE - 1);
+        if (!page || page.length === 0) break;
+        existing.push(...page);
+        if (page.length < PAGE) break;
+      }
+    }
 
     // Itens com CNJ: chave por processo+tipo+data (processo identificado com precisão)
     // Itens sem CNJ (V1/Diário): chave inclui início do conteúdo para distinguir publicações

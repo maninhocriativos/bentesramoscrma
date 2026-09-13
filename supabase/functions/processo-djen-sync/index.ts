@@ -134,10 +134,23 @@ serve(async (req) => {
     // aqui e duplicava. Busca única (fora do loop — tabela é pequena, poucas
     // dezenas de órfãs hoje) por processo_cnj normalizado das ainda sem
     // processo_id, indexada por CNJ pra consulta O(1) dentro do loop.
-    const { data: orfas } = await supabase
-      .from("intimacoes")
-      .select("processo_cnj, raw_json")
-      .is("processo_id", null);
+    // Paginado (mesmo cuidado do bug achado em 2026-09-13 no intimacoes-oab —
+    // um único select sem .range() é truncado silenciosamente pelo teto de
+    // linhas do PostgREST) mesmo essa lista sendo pequena hoje.
+    const orfas: any[] = [];
+    {
+      const PAGE = 1000;
+      for (let from = 0; ; from += PAGE) {
+        const { data: page } = await supabase
+          .from("intimacoes")
+          .select("processo_cnj, raw_json")
+          .is("processo_id", null)
+          .range(from, from + PAGE - 1);
+        if (!page || page.length === 0) break;
+        orfas.push(...page);
+        if (page.length < PAGE) break;
+      }
+    }
     const orfasPorCnj = new Map<string, Set<string>>();
     for (const o of orfas || []) {
       const cnjDigits = (o.processo_cnj || "").replace(/\D/g, "");
