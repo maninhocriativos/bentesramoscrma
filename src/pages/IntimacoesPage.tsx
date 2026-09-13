@@ -664,7 +664,7 @@ export default function IntimacoesPage() {
                     return (
                       <tr
                         key={intimacao.id}
-                        onClick={() => setSelectedIntimacao(intimacao)}
+                        onClick={() => { setSelectedIntimacao(intimacao); if (isUnread) handleMarkRead(intimacao.id); }}
                         className={`cursor-pointer border-b border-border/30 last:border-0 transition-colors ${isSelected ? 'bg-primary/[0.04]' : isUnread ? 'hover:bg-muted/30' : 'hover:bg-muted/20 opacity-80'}`}
                         style={isUnread ? { backgroundColor: tc.cardUnread } : undefined}
                       >
