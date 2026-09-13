@@ -1421,6 +1421,21 @@ conta). Usuário gerou um novo PAT fine-grained (`Contents: Read and
 write`) e colocou em `docs/SECRETS.local.md` seção 14 — usado só pra
 montar o header de autenticação de um push pontual.
 
+### 2026-09-13 (mesmo dia, sessão seguinte) — Intimações recarregando do zero a cada visita
+
+Usuário reportou que a tela de Intimações ficava em "carregando" toda
+vez que ele entrava nela, mesmo tendo acabado de sair segundos antes.
+Causa: a lista (~4 mil linhas, buscadas em blocos de 1000) vivia em
+`useState` local — cada troca de rota desmonta a página e reseta o
+estado pra vazio, forçando buscar tudo de novo (10-13s). Trocado por
+`useQuery` (React Query, já usado em outras telas, mesmo `staleTime`
+padrão de 5min do `App.tsx`): a busca + vínculo automático de
+`processo_id` por CNJ virou uma função fora do componente, e as
+atualizações otimistas de "marcar como lida" passam a usar
+`queryClient.setQueryData`. Testado ao vivo com navegação real dentro
+do app (clique no menu, não `page.goto` — que recarrega a página
+inteira e mascarava o teste): 2ª visita aparece em 124ms.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
