@@ -1392,6 +1392,35 @@ raiz do "1024 não lidas" documentada acima continua válida (é dado
 real, não bug de contagem) — só a forma de resolver mudou: fica a
 critério manual do advogado, não automático.
 
+### 2026-09-13 — Causa real do "problema ainda persiste": dedup truncado pelo teto de 1000 linhas do PostgREST
+
+Usuário reportou que o total de intimações tinha quase dobrado de um
+dia pro outro (2.205 → 4.721) e "o problema ainda está persistindo".
+Achado real: **os fixes de 2026-09-12 continuavam sofrendo da mesma
+classe de bug** que já apareceu várias vezes nesse projeto (ZapSign,
+useLeads/useProcessos) — um único `.select().limit(20000)` NÃO garante
+20000 linhas, porque o PostgREST tem um teto de linhas por requisição
+(aqui 1000) que trunca ANTES do `.limit()` do client fazer efeito. A
+OAB "7526" sozinha já tem 1886 intimações, então a busca de "o que já
+existe" (usada pra não duplicar) sempre voltava só as ~1000 primeiras
+— confirmado com 123 grupos duplicados só na última janela de 24h
+(620 linhas excedentes no total da tabela).
+
+Corrigido paginando de verdade (`.range()` em loop) tanto no
+`intimacoes-oab` quanto no `processo-djen-sync`. Apagadas as 620
+linhas duplicadas via Supabase Management API (mantendo, por grupo: a
+vinculada a uma tarefa > a já lida > a mais antiga — 0 tarefas
+afetadas, conferido antes de apagar). Total caiu de 4.721 pra 4.101,
+zero grupos duplicados restantes.
+
+**Nota operacional**: o Git Credential Manager que autenticava
+`git push` perdeu a sessão nesse meio tempo (erro `User cancelled
+dialog`/`/dev/tty`) — o token do `gh` CLI já autenticado na máquina
+NÃO serve pra push (403, escopo insuficiente mesmo com permissão de
+conta). Usuário gerou um novo PAT fine-grained (`Contents: Read and
+write`) e colocou em `docs/SECRETS.local.md` seção 14 — usado só pra
+montar o header de autenticação de um push pontual.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
