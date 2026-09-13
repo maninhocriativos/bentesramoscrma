@@ -1436,6 +1436,28 @@ atualizações otimistas de "marcar como lida" passam a usar
 do app (clique no menu, não `page.goto` — que recarrega a página
 inteira e mascarava o teste): 2ª visita aparece em 124ms.
 
+### 2026-09-13 (mesmo dia, sessão seguinte) — Backlog de 1.779 intimações antigas marcado como lido + clique volta a marcar
+
+Usuário confirmou que as 1.779 "pendentes de leitura" eram todas
+antigas (breakdown por mês mostrou a maioria em 2025-10 a 2026-04) e já
+tinham sido tratadas de verdade pelo advogado fora do sistema — a
+sincronização automática só trouxe elas pro CRM depois, e todo item
+novo nasce `lida=false` por padrão, sem jeito de saber que já foi
+resolvido na vida real antes de existir no banco.
+
+A pedido do usuário, marcado `lida=true, lida_em=now()` em massa pra
+tudo com `data_publicacao`/`data_disponibilizacao` anterior a hoje
+(13/09/2026) — 1.779 linhas, confirmado antes com contagem seca que
+batia exatamente com o total de não lidas (nenhuma futura seria
+afetada). Total de não lidas foi a 0.
+
+Na sequência, usuário pediu de volta o comportamento removido no
+09-12: "abre a intimação tem que marcar como lida" — restaurado só a
+marcação automática ao CLICAR pra abrir o detalhe (ação deliberada do
+advogado), sem reintroduzir o polling de "ficou visível na tela por
+2s" que tinha sido rejeitado antes. Testado ao vivo: linha "Pendente"
+clicada vira "Concluído" no banco na hora.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
