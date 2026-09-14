@@ -1458,6 +1458,26 @@ advogado), sem reintroduzir o polling de "ficou visível na tela por
 2s" que tinha sido rejeitado antes. Testado ao vivo: linha "Pendente"
 clicada vira "Concluído" no banco na hora.
 
+### 2026-09-14 — Backfill histórico entrando como "pendente" (não era duplicação de novo)
+
+Usuário reportou de novo: total subiu de 4.101 pra 4.819 (+718), mas
+"chegaram hoje" mostrava só 53 — achava que era duplicação voltando.
+Investigado com evidência antes de mexer: **zero grupos de comunicação
+repetida em toda a tabela** (dedup do 09-13 está funcionando). Causa
+real, diferente: `processo-djen-sync` varre processo por processo
+(80 a cada 20min) e, na primeira vez que chega a um processo nunca
+verificado antes, importa o HISTÓRICO INTEIRO de intimações dele de
+uma vez — 1.056 das 1.085 linhas criadas nas últimas 24h eram assim
+(`fonte='djen_processo'`, data antiga, item genuinamente novo no banco
+mas não um evento novo de verdade). O `intimacoes-oab` tem o mesmo
+padrão em algumas estratégias (Escavador, DataJud, DJe-TJAM).
+
+Fix definitivo (a pedido do usuário): item novo com
+`data_publicacao`/`data_disponibilizacao` anterior a hoje agora entra
+direto como `lida=true` na inserção — só data de hoje (evento
+realmente novo) fica pendente. Marcadas 782 linhas já importadas assim
+antes do fix; não lidas voltou a 0.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
