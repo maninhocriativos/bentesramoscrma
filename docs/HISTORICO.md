@@ -1547,6 +1547,40 @@ ganha o primeiro nome da pessoa (`agenda-setembro-2026-gabriel.pdf`).
 Testado ao vivo em produção: filtro reduziu de 126 pra 113
 compromissos ao selecionar Andrey Ramos, download com nome correto.
 
+### 2026-09-14 (mesmo dia, sessão seguinte) — Reformulação da Donn@: bugs corrigidos + migração pra OpenAI (Fases 0-1 de plano maior)
+
+Usuário pediu uma auditoria de código da Donn@ ("como estamos em termo
+de código com ela hoje") e depois pediu uma reformulação grande dela
+(memória própria na Cloudflare, análise de prazos críticos, "quase
+independente" — proativa + mais esperta em conversa). Plano completo
+salvo em `C:\Users\conta\.claude\plans\golden-napping-bear.md` (5
+fases). Fases 0 e 1 concluídas nesta sessão:
+
+**Fase 0 — 2 bugs reais corrigidos** em `DONNA_TOOLS`
+(`ai-chat/index.ts`): `listar_processos` buscava colunas que não
+existem (`titulo`/`numero`/`responsavel` → `titulo_acao`/
+`numero_processo`/`advogado_responsavel`); `listar_parcelas` buscava
+`descricao`, que nunca existiu em `parcelas` (trocado por embed de
+`honorarios(cliente_id,tipo)`). Confirmado com erro de SQL real antes
+e request 200 depois.
+
+**Fase 1 — `ai-chat/index.ts` migrado de Anthropic pra OpenAI.**
+Achado no meio da investigação: essa função (serve tanto a Isa interna
+do widget quanto a Donn@) nunca tinha sido migrada na leva de
+agosto/2026 que levou a Isa cliente/WhatsApp pra OpenAI — ficou presa
+em `api.anthropic.com` direto. Créditos de Anthropic E OpenAI estavam
+os dois zerados no momento (mesmo incidente que afeta a Isa hoje).
+Usuário decidiu migrar pra OpenAI em vez de recarregar Anthropic.
+Reescrito o loop agentic do formato Anthropic (`tool_use`/`tool_result`
+blocks) pro formato OpenAI (`tools`/`tool_calls`, mesmo padrão de
+`isa-auto-process/index.ts`, incluindo `fetchOpenAIWithRetry`
+duplicado). **Testado ao vivo**: request chega certo na OpenAI (erro
+limpo `insufficient_quota`, não erro de formato/parsing) — confirma
+que o código está correto, só falta crédito pra testar ponta a ponta
+de verdade. Fases 2-5 (memória Cloudflare, tools de prazo
+crítico/chat interno, automação proativa, tirar badge "Em breve")
+ainda pendentes — ver o plano salvo pro detalhe.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
