@@ -1496,6 +1496,16 @@ de verdade. Backlog de 1.082 linhas marcado no mesmo commit. Confirmado
 no banco depois do deploy: 0 pendentes no passado, 150 pendentes reais
 (todos futuros).
 
+### 2026-09-14 (mesmo dia, sessão seguinte) — Chat interno reconhece links
+
+Pedido do usuário. O `MsgText` do `ChatInterno.tsx` já tokenizava
+@menções e formatação estilo WhatsApp (`*negrito*`, `_itálico_`,
+`~riscado~`) via regex — link (`http`/`https`/`www`) virou mais uma
+alternativa no mesmo tokenizer, renderizando `<a target="_blank">`.
+Pontuação de fechamento de frase colada no fim do link (".", "),")
+é cortada e devolvida como texto solto. Testado ao vivo enviando uma
+mensagem real no Chat da Equipe (apagada do banco depois do teste).
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
