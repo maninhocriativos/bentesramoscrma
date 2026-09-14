@@ -5,14 +5,51 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const ANTHROPIC_API_KEY    = Deno.env.get('ANTHROPIC_API_KEY');
+// Migrado de Anthropic pra OpenAI em 2026-09-14 (pedido do usuário) — essa
+// função nunca tinha sido migrada na leva de agosto/2026 que levou a Isa
+// cliente/WhatsApp pra OpenAI (docs/SECRETS.local.md §3), e créditos de
+// AMBOS os provedores estavam zerados no momento do pedido. Mesmo padrão
+// de `isa-auto-process/index.ts` (fetchOpenAIWithRetry, OPENAI_MODEL env).
+const OPENAI_API_KEY      = Deno.env.get('OPENAI_API_KEY');
 const SUPABASE_URL         = Deno.env.get('SUPABASE_URL');
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
-const MODEL         = 'claude-sonnet-4-6';
-const MAX_TOKENS    = 4096;
-const MAX_HISTORY   = 20; // mensagens anteriores carregadas do banco
-const MAX_TOOL_ITER = 8;  // iterações máximas do loop de tool use
+const MODEL          = Deno.env.get('OPENAI_MODEL') || 'gpt-4o';
+const MAX_TOKENS     = 4096;
+const MAX_HISTORY    = 20; // mensagens anteriores carregadas do banco
+const MAX_TOOL_ITER  = 8;  // iterações máximas do loop de tool use
+
+// Mesmo padrão de retry de 429 já usado em isa-auto-process/index.ts —
+// duplicado aqui (16 linhas) em vez de extrair pra _shared/ pra não mexer
+// num módulo usado por várias outras funções só por causa desta migração.
+async function fetchOpenAIWithRetry(url: string, options: RequestInit, maxRetries = 2): Promise<Response> {
+  let lastResponse: Response | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const response = await fetch(url, options);
+    if (response.status !== 429) return response;
+    lastResponse = response;
+    if (attempt === maxRetries) break;
+    const body = await response.clone().text();
+    const match = body.match(/try again in ([\d.]+)s/i);
+    const suggestedMs = match ? Math.ceil(parseFloat(match[1]) * 1000) : 2000;
+    const waitMs = Math.min(Math.max(suggestedMs, 500), 8000);
+    console.warn(`⚠️ [ai-chat] OpenAI 429 (tentativa ${attempt + 1}/${maxRetries + 1}), aguardando ${waitMs}ms`);
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+  }
+  return lastResponse!;
+}
+
+// Ferramentas aqui embaixo (TOOLS/DONNA_TOOLS) continuam no formato
+// {name, description, input_schema} (o mesmo shape usado antes pro Anthropic,
+// que é JSON Schema puro — só muda o envelope externo). Essa função embrulha
+// pro formato que a Chat Completions API da OpenAI espera, sem precisar
+// reescrever cada definição de ferramenta.
+function toOpenAITools(tools: { name: string; description: string; input_schema: unknown }[]) {
+  return tools.map(t => ({
+    type: 'function' as const,
+    function: { name: t.name, description: t.description, parameters: t.input_schema },
+  }));
+}
 
 // ─── System Prompts ────────────────────────────────────────────────────────────
 
@@ -469,13 +506,13 @@ serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
-    if (!ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY não configurada');
+    if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY não configurada');
 
     const { message, threadId: clientThreadId, lead_id, phone, persona } = await req.json();
     if (!message) throw new Error('message é obrigatório');
 
     const activeSystemPrompt = persona === 'donna' ? DONNA_SYSTEM_PROMPT : SYSTEM_PROMPT;
-    const activeTools        = persona === 'donna' ? DONNA_TOOLS        : TOOLS;
+    const activeTools        = toOpenAITools(persona === 'donna' ? DONNA_TOOLS : TOOLS);
 
     // Resolve lead
     let resolvedLeadId = lead_id || null;
@@ -490,8 +527,10 @@ serve(async (req: Request) => {
     // Load previous messages from DB
     const history = await loadHistory(conversationId);
 
-    // Build Claude messages array
-    const claudeMessages: any[] = [
+    // Formato OpenAI: system prompt entra como a 1ª mensagem do array (a
+    // Anthropic separava isso num campo `system` à parte).
+    const openaiMessages: any[] = [
+      { role: 'system', content: activeSystemPrompt },
       ...history,
       { role: 'user', content: message },
     ];
@@ -505,68 +544,60 @@ serve(async (req: Request) => {
     while (iterations < MAX_TOOL_ITER) {
       iterations++;
 
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const res = await fetchOpenAIWithRetry('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
+        signal: AbortSignal.timeout(45_000),
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01',
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
         },
         body: JSON.stringify({
           model: MODEL,
           max_tokens: MAX_TOKENS,
-          system: activeSystemPrompt,
+          messages: openaiMessages,
           tools: activeTools,
-          messages: claudeMessages,
+          tool_choice: 'auto',
         }),
       });
 
       if (!res.ok) {
         const errText = await res.text();
-        throw new Error(`Anthropic API ${res.status}: ${errText}`);
+        throw new Error(`OpenAI API ${res.status}: ${errText}`);
       }
 
       const data = await res.json();
-      console.log('[ai-chat] stop_reason:', data.stop_reason, '| iter:', iterations);
+      const choice = data.choices?.[0];
+      const finishReason = choice?.finish_reason;
+      console.log('[ai-chat] finish_reason:', finishReason, '| iter:', iterations);
 
-      // Collect text from response blocks
-      const textBlocks = (data.content || []).filter((b: any) => b.type === 'text');
-      if (textBlocks.length > 0) {
-        responseText = textBlocks.map((b: any) => b.text).join('\n');
-      }
+      if (choice?.message?.content) responseText = choice.message.content;
 
-      // Done — no more tools
-      if (data.stop_reason !== 'tool_use') {
+      const toolCalls = choice?.message?.tool_calls || [];
+
+      // Done — não pediu nenhuma ferramenta
+      if (finishReason !== 'tool_calls' || toolCalls.length === 0) {
         toSave.push({ role: 'assistant', content: responseText });
         break;
       }
 
-      const toolUseBlocks = (data.content || []).filter((b: any) => b.type === 'tool_use');
-      if (toolUseBlocks.length === 0) {
-        toSave.push({ role: 'assistant', content: responseText });
-        break;
-      }
+      // Adiciona o turno do assistente (com os tool_calls) ao histórico em memória
+      openaiMessages.push(choice.message);
 
-      // Add assistant turn (with tool_use blocks) to in-memory history
-      claudeMessages.push({ role: 'assistant', content: data.content });
-
-      // Execute tools in parallel
+      // Executa as ferramentas em paralelo
       const toolResults = await Promise.all(
-        toolUseBlocks.map(async (tb: any) => {
-          console.log('[ai-chat] tool:', tb.name, JSON.stringify(tb.input).slice(0, 120));
+        toolCalls.map(async (tc: any) => {
+          const args = JSON.parse(tc.function.arguments || '{}');
+          console.log('[ai-chat] tool:', tc.function.name, JSON.stringify(args).slice(0, 120));
           const result = persona === 'donna'
-            ? await donnaExecuteAction(tb.name, tb.input)
-            : await executeAction(tb.name, tb.input);
-          return {
-            type: 'tool_result',
-            tool_use_id: tb.id,
-            content: JSON.stringify(result),
-          };
+            ? await donnaExecuteAction(tc.function.name, args)
+            : await executeAction(tc.function.name, args);
+          return { role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result) };
         })
       );
 
-      // Feed results back as user turn
-      claudeMessages.push({ role: 'user', content: toolResults });
+      // Cada tool_result vira sua própria mensagem role:'tool' (não um turno
+      // "user" único como no formato Anthropic).
+      openaiMessages.push(...toolResults);
     }
 
     if (!responseText) {
