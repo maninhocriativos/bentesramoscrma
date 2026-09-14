@@ -30,7 +30,8 @@ const STATUS_LABEL: Record<string, { text: string; color: string }> = {
 
 const ALL_TIPOS = ['Audiência', 'Reunião', 'Prazo', 'Tarefa', 'Intimação', 'Outro'];
 
-interface ProcessoInfo { numero_processo: string | null; nome_cliente: string | null; tribunal: string | null; }
+interface ProcessoInfo { numero_processo: string | null; nome_cliente: string | null; tribunal: string | null; titulo_acao: string | null; }
+interface ParteInfo { nome: string; tipo: string | null; }
 
 export function AgendaPDFModal({ onClose, compromissos }: Props) {
   const today = new Date();
@@ -41,6 +42,7 @@ export function AgendaPDFModal({ onClose, compromissos }: Props) {
   const [generating, setGenerating] = useState(false);
   const [processosMap, setProcessosMap] = useState<Record<string, ProcessoInfo>>({});
   const [leadsMap, setLeadsMap] = useState<Record<string, string>>({});
+  const [partesMap, setPartesMap] = useState<Record<string, ParteInfo[]>>({});
   const printRef = useRef<HTMLDivElement>(null);
 
   // Dados do processo/cliente vinculado a cada compromisso — pedido do
@@ -48,14 +50,19 @@ export function AgendaPDFModal({ onClose, compromissos }: Props) {
   // dizer a qual processo/cliente a audiência ou prazo pertence. Busca uma
   // vez (todos os compromissos recebidos, não só o período em exibição),
   // pra navegar entre meses sem refazer a consulta.
+  //
+  // 2026-09-14: usuário pediu pra bater com o nível de detalhe do
+  // relatório do AdvBox (sistema anterior do escritório) — partes
+  // completas (não só o cliente) e tipo de ação, junto do que já existia.
   useEffect(() => {
     const processoIds = [...new Set(compromissos.map(c => c.processo_id).filter((v): v is string => !!v))];
     const leadIds = [...new Set(compromissos.map(c => c.lead_id).filter((v): v is string => !!v))];
     if (processoIds.length === 0 && leadIds.length === 0) return;
     (async () => {
-      const [{ data: processos }, { data: leads }] = await Promise.all([
-        processoIds.length ? supabase.from('processos').select('id, numero_processo, nome_cliente, tribunal, cliente_id').in('id', processoIds) : Promise.resolve({ data: [] as any[] }),
+      const [{ data: processos }, { data: leads }, { data: partes }] = await Promise.all([
+        processoIds.length ? supabase.from('processos').select('id, numero_processo, nome_cliente, tribunal, cliente_id, titulo_acao').in('id', processoIds) : Promise.resolve({ data: [] as any[] }),
         leadIds.length ? supabase.from('leads_juridicos').select('id, nome').in('id', leadIds) : Promise.resolve({ data: [] as any[] }),
+        processoIds.length ? supabase.from('processo_partes').select('processo_id, nome, tipo').in('processo_id', processoIds) : Promise.resolve({ data: [] as any[] }),
       ]);
       const lMap: Record<string, string> = {};
       (leads || []).forEach((l: any) => { lMap[l.id] = l.nome; });
@@ -69,10 +76,16 @@ export function AgendaPDFModal({ onClose, compromissos }: Props) {
       }
       const pMap: Record<string, ProcessoInfo> = {};
       (processos || []).forEach((p: any) => {
-        pMap[p.id] = { numero_processo: p.numero_processo, nome_cliente: p.nome_cliente || (p.cliente_id ? lMap[p.cliente_id] : null) || null, tribunal: p.tribunal };
+        pMap[p.id] = { numero_processo: p.numero_processo, nome_cliente: p.nome_cliente || (p.cliente_id ? lMap[p.cliente_id] : null) || null, tribunal: p.tribunal, titulo_acao: p.titulo_acao || null };
+      });
+      const partesM: Record<string, ParteInfo[]> = {};
+      (partes || []).forEach((pt: any) => {
+        if (!partesM[pt.processo_id]) partesM[pt.processo_id] = [];
+        partesM[pt.processo_id].push({ nome: pt.nome, tipo: pt.tipo });
       });
       setProcessosMap(pMap);
       setLeadsMap(lMap);
+      setPartesMap(partesM);
     })();
   }, [compromissos]);
 
@@ -349,11 +362,13 @@ export function AgendaPDFModal({ onClose, compromissos }: Props) {
                         const horaFim   = c.data_fim ? format(new Date(c.data_fim), 'HH:mm') : null;
                         const processo  = c.processo_id ? processosMap[c.processo_id] : null;
                         const nomeCliente = processo?.nome_cliente || (c.lead_id ? leadsMap[c.lead_id] : null) || null;
+                        const partes    = c.processo_id ? (partesMap[c.processo_id] || []) : [];
                         return (
                           <div key={c.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 16px', borderBottom: ci < dayComps.length - 1 ? '1px solid rgba(232,221,208,0.6)' : 'none', background: ci % 2 === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(250,247,242,0.5)' }}>
                             <div style={{ minWidth: 48, textAlign: 'right', flexShrink: 0, paddingTop: 2 }}>
                               <div style={{ fontSize: 12, fontWeight: 800, color: '#1e1008', fontFamily: 'Arial, sans-serif' }}>{hora}</div>
                               {horaFim && <div style={{ fontSize: 9, color: '#8a7260', fontFamily: 'Arial, sans-serif' }}>{horaFim}</div>}
+                              <div style={{ fontSize: 7, color: '#b5a68f', fontFamily: 'Arial, sans-serif', marginTop: 1 }}>Manaus</div>
                             </div>
                             <div style={{ width: 3, alignSelf: 'stretch', background: tipoCfg.dot, borderRadius: 2, flexShrink: 0, minHeight: 32 }} />
                             <div style={{ flex: 1, minWidth: 0 }}>
@@ -367,6 +382,26 @@ export function AgendaPDFModal({ onClose, compromissos }: Props) {
                                     {processo?.numero_processo && <span style={{ color: '#8a7260', fontWeight: 400 }}> · {processo.numero_processo}</span>}
                                     {processo?.tribunal && <span style={{ color: '#8a7260', fontWeight: 400 }}> · {processo.tribunal}</span>}
                                   </span>
+                                </div>
+                              )}
+                              {processo?.titulo_acao && (
+                                <div style={{ fontSize: 9.5, color: '#6b3f25', marginBottom: 3, fontFamily: 'Arial, sans-serif' }}>
+                                  <span style={{ fontWeight: 700, color: '#8a7260', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Tipo de ação: </span>
+                                  {processo.titulo_acao}
+                                </div>
+                              )}
+                              {partes.length > 0 && (
+                                <div style={{ fontSize: 9.5, color: '#6b3f25', marginBottom: 3, fontFamily: 'Arial, sans-serif' }}>
+                                  <span style={{ fontWeight: 700, color: '#8a7260', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Partes: </span>
+                                  {partes.map((p, pi) => (
+                                    <span key={pi}>{pi > 0 ? '; ' : ''}{p.nome}{p.tipo ? ` (${p.tipo})` : ''}</span>
+                                  ))}
+                                </div>
+                              )}
+                              {c.link_audiencia && (
+                                <div style={{ fontSize: 9.5, color: '#2563eb', marginBottom: 5, fontFamily: 'Arial, sans-serif', wordBreak: 'break-all' }}>
+                                  <span style={{ fontWeight: 700, color: '#8a7260', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Link: </span>
+                                  {c.link_audiencia}
                                 </div>
                               )}
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
