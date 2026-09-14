@@ -1535,6 +1535,18 @@ do horário. Testado ao vivo em produção: renderização correta com
 dado real, PDF de 126 compromissos gerado com sucesso (mais lento que
 antes por causa do conteúdo extra, ~30-40s, aceitável pro volume).
 
+### 2026-09-14 (mesmo dia, sessão seguinte) — Relatório de Agenda ganha filtro por responsável
+
+Usuário pediu mais melhorias no relatório; escolheu filtro/exibição
+por responsável entre as opções oferecidas. Reaproveitado
+`responsaveisDe()` (já existia em `types/tarefas.ts`) sobre
+`compromissos.responsavel_id`/`responsaveis_ids`. Nova linha de
+filtro (pílulas com quem tem compromisso no período), nome no
+cabeçalho do PDF quando filtrado, badge por item, e nome do arquivo
+ganha o primeiro nome da pessoa (`agenda-setembro-2026-gabriel.pdf`).
+Testado ao vivo em produção: filtro reduziu de 126 pra 113
+compromissos ao selecionar Andrey Ramos, download com nome correto.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
