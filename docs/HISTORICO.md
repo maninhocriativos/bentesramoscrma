@@ -1522,6 +1522,19 @@ por `current_date`, igual já tinha sido feito certo em Intimações no
 mesmo dia. Reverteu os 7 casos de hoje pra "pendente"; confirmado no
 banco depois do deploy.
 
+### 2026-09-14 (mesmo dia, sessão seguinte) — Relatório PDF da Agenda no nível de detalhe do AdvBox
+
+Usuário mandou foto de um relatório do AdvBox (sistema anterior do
+escritório) como referência e pediu o mesmo nível de detalhe no
+nosso. `AgendaPDFModal.tsx` ganhou, por compromisso vinculado a
+processo: **TIPO DE AÇÃO** (`processos.titulo_acao`), **PARTES**
+completas (`processo_partes.nome` + `tipo` — "Autor"/"Réu"/"Juiz",
+não o código `polo` cru tipo "PA"/"AT"), **LINK** da audiência virtual
+quando existir (`compromissos.link_audiencia`) e rótulo "Manaus" junto
+do horário. Testado ao vivo em produção: renderização correta com
+dado real, PDF de 126 compromissos gerado com sucesso (mais lento que
+antes por causa do conteúdo extra, ~30-40s, aceitável pro volume).
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
