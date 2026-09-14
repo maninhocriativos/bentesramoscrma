@@ -1577,9 +1577,18 @@ blocks) pro formato OpenAI (`tools`/`tool_calls`, mesmo padrão de
 duplicado). **Testado ao vivo**: request chega certo na OpenAI (erro
 limpo `insufficient_quota`, não erro de formato/parsing) — confirma
 que o código está correto, só falta crédito pra testar ponta a ponta
-de verdade. Fases 2-5 (memória Cloudflare, tools de prazo
-crítico/chat interno, automação proativa, tirar badge "Em breve")
-ainda pendentes — ver o plano salvo pro detalhe.
+de verdade. Fases 3-5 (tools de prazo crítico/chat interno, automação proativa,
+tirar badge "Em breve") ainda pendentes — ver o plano salvo pro detalhe.
+
+**Fase 2 — Worker Cloudflare `donna-memoria` no ar.** Clonado do molde do
+`isa-memoria` (mesma estrutura: D1, `POST`/`GET`, secret por header, git
+local sem remote no GitHub). Uma tabela `memorias` (categoria/conteudo/
+criado_em/relevante_ate) — memória própria e curada da Donn@, não um
+espelho bruto de nada. Deploy em
+`https://donna-memoria.bentesramos.workers.dev`, secret documentado em
+`docs/SECRETS.local.md` §2.6. **Testado via curl**: POST grava, GET lê
+(com e sem filtro de categoria), sem secret dá 401 — tudo confirmado antes
+de qualquer tool nova apontar pra ele (isso é trabalho da Fase 3).
 
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
