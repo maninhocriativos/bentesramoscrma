@@ -28,9 +28,17 @@ function formatMsgTime(iso: string): string {
   return format(d, "dd/MM HH:mm", { locale: ptBR });
 }
 
-// Highlights @menções e formatação estilo WhatsApp (*negrito*, _itálico_,
-// ~riscado~) já embutidas no texto da mensagem.
-const FORMAT_PATTERN = /(@\S+)|\*([^*\n]+)\*|_([^_\n]+)_|~([^~\n]+)~/g;
+// Highlights @menções, formatação estilo WhatsApp (*negrito*, _itálico_,
+// ~riscado~) e links (http/https/www) já embutidos no texto da mensagem.
+const FORMAT_PATTERN = /(@\S+)|\*([^*\n]+)\*|_([^_\n]+)_|~([^~\n]+)~|((?:https?:\/\/|www\.)\S+)/g;
+
+// Pontuação de fechamento de frase colada no fim do link (".", "),", etc.)
+// normalmente não faz parte da URL — corta e devolve como texto solto.
+function splitTrailingPunctuation(url: string): { url: string; trailing: string } {
+  const m = url.match(/[.,;:!?)\]}'"]+$/);
+  if (!m) return { url, trailing: '' };
+  return { url: url.slice(0, -m[0].length), trailing: m[0] };
+}
 
 function MsgText({ content }: { content: string }) {
   const { text } = decodeMencoes(content);
@@ -54,6 +62,17 @@ function MsgText({ content }: { content: string }) {
       nodes.push(<em key={key++}>{m[3]}</em>);
     } else if (m[4] !== undefined) {
       nodes.push(<s key={key++}>{m[4]}</s>);
+    } else if (m[5] !== undefined) {
+      const { url, trailing } = splitTrailingPunctuation(m[5]);
+      const href = url.startsWith('http') ? url : `https://${url}`;
+      nodes.push(
+        <a key={key++} href={href} target="_blank" rel="noopener noreferrer"
+          className="underline break-all" style={{ color: '#c9a96e' }}
+          onClick={e => e.stopPropagation()}>
+          {url}
+        </a>
+      );
+      if (trailing) nodes.push(trailing);
     }
     lastIndex = FORMAT_PATTERN.lastIndex;
   }
