@@ -192,6 +192,14 @@ function makeItem(fields: {
   const { cnj, titulo, tribunal, tipo, conteudo, dataDisp, oab_numero, oab_uf, advogado_id, fonte, raw } = fields;
   const dataPub = dataDisp ? nextBusinessDay(dataDisp) : null;
   const dataInt = dataPub ? nextBusinessDay(dataPub) : dataDisp;
+  // Pedido do usuário 2026-09-14: várias estratégias aqui (Escavador,
+  // DataJud, DJe-TJAM) podem trazer publicação HISTÓRICA (não um evento
+  // novo de verdade) na primeira vez que encontram um processo/OAB — coisa
+  // antiga já tratada na vida real muito antes de existir no CRM. Item com
+  // data anterior a hoje entra direto como lido; só data de hoje (evento
+  // realmente novo) fica pendente de verdade. Mesmo critério do
+  // processo-djen-sync.
+  const ehHistorico = !!dataDisp && dataDisp.slice(0, 10) < new Date().toISOString().slice(0, 10);
   return {
     processo_cnj: cnj,
     processo_titulo: titulo,
@@ -206,6 +214,7 @@ function makeItem(fields: {
     advogado_id,
     fonte,
     raw_json: raw,
+    ...(ehHistorico ? { lida: true, lida_em: new Date().toISOString() } : {}),
   };
 }
 

@@ -209,6 +209,16 @@ serve(async (req) => {
 
             const conteudo = stripHtml(item.texto || "");
             const { oab_numero, oab_uf } = resolverOabDoItem(item);
+            // Pedido do usuário 2026-09-14: este sync varre processo por
+            // processo e, na primeira vez que chega a um processo nunca
+            // verificado antes, importa o HISTÓRICO inteiro de intimações
+            // dele de uma vez — coisa antiga, não um evento novo de
+            // verdade. Isso inflava "pendentes de leitura" com centenas de
+            // itens que já tinham sido tratados na vida real muito antes de
+            // existirem no CRM. Item com data anterior a hoje entra direto
+            // como lido; só o que tem data de hoje (evento realmente novo)
+            // fica pendente de verdade.
+            const ehHistorico = !!dataDisp && dataDisp.slice(0, 10) < new Date().toISOString().slice(0, 10);
             const { data: inserted, error: insertError } = await supabase
               .from("intimacoes")
               .insert({
@@ -224,6 +234,7 @@ serve(async (req) => {
                 oab_uf,
                 fonte: "djen_processo",
                 raw_json: item,
+                ...(ehHistorico ? { lida: true, lida_em: new Date().toISOString() } : {}),
               })
               .select("id, conteudo, tipo_intimacao, tribunal, processo_cnj, processo_titulo, data_publicacao")
               .single();
