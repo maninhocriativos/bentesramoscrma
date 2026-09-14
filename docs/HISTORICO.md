@@ -1478,6 +1478,24 @@ direto como `lida=true` na inserção — só data de hoje (evento
 realmente novo) fica pendente. Marcadas 782 linhas já importadas assim
 antes do fix; não lidas voltou a 0.
 
+### 2026-09-14 (mesmo dia, sessão seguinte) — Mesmo problema na Agenda: compromisso retroativo nascia "pendente"
+
+Usuário pediu pra aplicar o mesmo raciocínio do fix de Intimações na
+Agenda. Achado: o trigger `criar_compromisso_da_tarefa()` sempre
+criava `confirmacao_status='pendente'`, mesmo quando a tarefa vinha
+com `prazo_fatal` no passado (evento que já aconteceu). 1.082
+compromissos "pendentes" tinham data no passado — 858 deles de um
+import histórico do AdvBox (sistema anterior do escritório, mar-abr
+2026, não é sync ativo), o resto de tarefas criadas a partir de
+intimações/movimentações antigas.
+
+Fix (migration `20260914140000_compromisso_historico_ja_confirmado.sql`,
+ensaiada em `begin/rollback` antes de aplicar): compromisso com data no
+passado já nasce `confirmado`; só data de hoje/futuro nasce `pendente`
+de verdade. Backlog de 1.082 linhas marcado no mesmo commit. Confirmado
+no banco depois do deploy: 0 pendentes no passado, 150 pendentes reais
+(todos futuros).
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
