@@ -1,8 +1,9 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { format, startOfMonth, endOfMonth, addMonths, isToday, isPast, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { X, FileText, ChevronLeft, ChevronRight, Download, Loader2, Filter, Scale } from 'lucide-react';
+import { X, FileText, ChevronLeft, ChevronRight, Download, Loader2, Filter, Scale, User } from 'lucide-react';
 import { Compromisso } from '@/types/compromissos';
+import { responsaveisDe } from '@/types/tarefas';
 import { supabase } from '@/integrations/supabase/client';
 
 interface Props {
@@ -11,6 +12,7 @@ interface Props {
 }
 
 type RangeMode = '1' | '3' | '6' | '12';
+interface TeamMember { id: string; nome: string; }
 
 const TIPO_COLOR: Record<string, { bg: string; text: string; dot: string }> = {
   'Audiência': { bg: '#fce7f3', text: '#be185d', dot: '#db2777' },
@@ -43,7 +45,17 @@ export function AgendaPDFModal({ onClose, compromissos }: Props) {
   const [processosMap, setProcessosMap] = useState<Record<string, ProcessoInfo>>({});
   const [leadsMap, setLeadsMap] = useState<Record<string, string>>({});
   const [partesMap, setPartesMap] = useState<Record<string, ParteInfo[]>>({});
+  const [members, setMembers] = useState<TeamMember[]>([]);
+  // null = todo mundo (sem filtro); string = só o responsável selecionado.
+  // Pedido do usuário 2026-09-14: imprimir a agenda de uma pessoa específica.
+  const [selectedResponsavel, setSelectedResponsavel] = useState<string | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    supabase.from('perfis').select('id, nome, sobrenome').eq('aprovado', true).then(({ data }) => {
+      if (data) setMembers(data.map((m: any) => ({ id: m.id, nome: [m.nome, m.sobrenome].filter(Boolean).join(' ') || 'Usuário' })));
+    });
+  }, []);
 
   // Dados do processo/cliente vinculado a cada compromisso — pedido do
   // usuário 2026-09-12: o relatório só mostrava título/tipo/status, sem
@@ -110,11 +122,24 @@ export function AgendaPDFModal({ onClose, compromissos }: Props) {
     compromissos
       .filter(c => {
         const d = new Date(c.data_inicio);
-        return d >= rangeStart && d <= rangeEnd && selectedTipos.includes(c.tipo);
+        if (!(d >= rangeStart && d <= rangeEnd && selectedTipos.includes(c.tipo))) return false;
+        if (selectedResponsavel && !responsaveisDe(c).includes(selectedResponsavel)) return false;
+        return true;
       })
       .sort((a, b) => new Date(a.data_inicio).getTime() - new Date(b.data_inicio).getTime()),
-    [compromissos, rangeStart, rangeEnd, selectedTipos]
+    [compromissos, rangeStart, rangeEnd, selectedTipos, selectedResponsavel]
   );
+
+  // Só oferece no filtro quem realmente tem compromisso no período/tipos
+  // selecionados — evita uma lista de pessoas vazia clicável à toa.
+  const membrosComCompromisso = useMemo(() => {
+    const idsNoRange = new Set(
+      compromissos
+        .filter(c => { const d = new Date(c.data_inicio); return d >= rangeStart && d <= rangeEnd && selectedTipos.includes(c.tipo); })
+        .flatMap(c => responsaveisDe(c))
+    );
+    return members.filter(m => idsNoRange.has(m.id));
+  }, [compromissos, rangeStart, rangeEnd, selectedTipos, members]);
 
   const byDay: Record<string, Compromisso[]> = {};
   for (const c of rangeCompromissos) {
@@ -172,16 +197,19 @@ export function AgendaPDFModal({ onClose, compromissos }: Props) {
       }
 
       const n = parseInt(rangeMode);
+      const quemSlug = selectedResponsavel
+        ? '-' + (members.find(m => m.id === selectedResponsavel)?.nome || '').split(' ')[0].toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+        : '';
       const fileName = n === 1
-        ? `agenda-${format(rangeStart, 'MMMM-yyyy', { locale: ptBR })}.pdf`
-        : `agenda-${format(rangeStart, 'MMM-yyyy', { locale: ptBR })}-${format(rangeEnd, 'MMM-yyyy', { locale: ptBR })}.pdf`;
+        ? `agenda-${format(rangeStart, 'MMMM-yyyy', { locale: ptBR })}${quemSlug}.pdf`
+        : `agenda-${format(rangeStart, 'MMM-yyyy', { locale: ptBR })}-${format(rangeEnd, 'MMM-yyyy', { locale: ptBR })}${quemSlug}.pdf`;
       pdf.save(fileName);
     } catch (err) {
       console.error('PDF generation failed:', err);
     } finally {
       setGenerating(false);
     }
-  }, [rangeMode, rangeStart, rangeEnd]);
+  }, [rangeMode, rangeStart, rangeEnd, selectedResponsavel, members]);
 
   return (
     <div
@@ -254,6 +282,27 @@ export function AgendaPDFModal({ onClose, compromissos }: Props) {
               </button>
             )}
           </div>
+
+          {/* Row 3: filtro por responsável — pedido do usuário 2026-09-14,
+              pra imprimir a agenda de uma pessoa específica */}
+          {membrosComCompromisso.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: '#8a7260', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <User size={12} /> Responsável:
+              </span>
+              <button onClick={() => setSelectedResponsavel(null)} style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: 'pointer', border: `1.5px solid ${!selectedResponsavel ? '#c9943a' : '#e8ddd0'}`, background: !selectedResponsavel ? '#fdf3e3' : '#fff', color: !selectedResponsavel ? '#8a5a1e' : '#9ca3af' }}>
+                Todos
+              </button>
+              {membrosComCompromisso.map(m => {
+                const sel = selectedResponsavel === m.id;
+                return (
+                  <button key={m.id} onClick={() => setSelectedResponsavel(sel ? null : m.id)} style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: 'pointer', border: `1.5px solid ${sel ? '#c9943a' : '#e8ddd0'}`, background: sel ? '#fdf3e3' : '#fff', color: sel ? '#8a5a1e' : '#9ca3af' }}>
+                    {m.nome}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Printable preview */}
@@ -273,6 +322,11 @@ export function AgendaPDFModal({ onClose, compromissos }: Props) {
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 9, fontFamily: 'Arial, sans-serif', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Relatório de Agenda</div>
                   <div style={{ color: '#c9943a', fontSize: 16, fontWeight: 900, lineHeight: 1.3 }}>{rangeLabel}</div>
+                  {selectedResponsavel && (
+                    <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11, fontFamily: 'Arial, sans-serif', marginTop: 4 }}>
+                      Responsável: {members.find(m => m.id === selectedResponsavel)?.nome}
+                    </div>
+                  )}
                   <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 9, fontFamily: 'Arial, sans-serif', marginTop: 6 }}>
                     Gerado em {format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                   </div>
@@ -363,6 +417,9 @@ export function AgendaPDFModal({ onClose, compromissos }: Props) {
                         const processo  = c.processo_id ? processosMap[c.processo_id] : null;
                         const nomeCliente = processo?.nome_cliente || (c.lead_id ? leadsMap[c.lead_id] : null) || null;
                         const partes    = c.processo_id ? (partesMap[c.processo_id] || []) : [];
+                        const nomesResponsaveis = responsaveisDe(c)
+                          .map(id => members.find(m => m.id === id)?.nome)
+                          .filter((n): n is string => !!n);
                         return (
                           <div key={c.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 16px', borderBottom: ci < dayComps.length - 1 ? '1px solid rgba(232,221,208,0.6)' : 'none', background: ci % 2 === 0 ? 'rgba(255,255,255,0.6)' : 'rgba(250,247,242,0.5)' }}>
                             <div style={{ minWidth: 48, textAlign: 'right', flexShrink: 0, paddingTop: 2 }}>
@@ -407,6 +464,11 @@ export function AgendaPDFModal({ onClose, compromissos }: Props) {
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                                 <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 20, background: tipoCfg.bg, color: tipoCfg.text, fontFamily: 'Arial, sans-serif', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{c.tipo}</span>
                                 <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 20, background: `${statusCfg.color}18`, color: statusCfg.color, fontFamily: 'Arial, sans-serif' }}>● {statusCfg.text}</span>
+                                {nomesResponsaveis.length > 0 && (
+                                  <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 20, background: '#f1e9dc', color: '#6b3f25', fontFamily: 'Arial, sans-serif', display: 'flex', alignItems: 'center', gap: 3 }}>
+                                    <User size={9} /> {nomesResponsaveis.join(', ')}
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </div>
