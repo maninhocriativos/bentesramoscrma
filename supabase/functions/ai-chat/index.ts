@@ -307,7 +307,10 @@ async function donnaExecuteAction(name: string, input: any): Promise<any> {
     switch (name) {
 
       case 'listar_processos': {
-        let url = `${SUPABASE_URL}/rest/v1/processos?select=id,titulo,numero,status,responsavel,updated_at&order=updated_at.desc&limit=${input.limite || 50}`;
+        // Bug real corrigido 2026-09-14: colunas antigas (titulo/numero/responsavel)
+        // não existem em `processos` — os nomes reais são titulo_acao/numero_processo/
+        // advogado_responsavel (confirmado com erro de SQL real antes do fix).
+        let url = `${SUPABASE_URL}/rest/v1/processos?select=id,titulo_acao,numero_processo,status,advogado_responsavel,updated_at&order=updated_at.desc&limit=${input.limite || 50}`;
         if (input.status) url += `&status=eq.${encodeURIComponent(input.status)}`;
         if (input.dias_sem_atualizacao) {
           const cutoff = new Date(Date.now() - Number(input.dias_sem_atualizacao) * 86400000).toISOString();
@@ -318,7 +321,10 @@ async function donnaExecuteAction(name: string, input: any): Promise<any> {
       }
 
       case 'listar_parcelas': {
-        let url = `${SUPABASE_URL}/rest/v1/parcelas?select=id,valor,data_vencimento,status,descricao&order=data_vencimento.asc&limit=${input.limite || 100}`;
+        // Bug real corrigido 2026-09-14: `parcelas` nunca teve coluna `descricao`
+        // (confirmado no schema real) — embute honorarios(cliente_id) pra dar
+        // algum contexto de a quem a parcela pertence sem inventar campo.
+        let url = `${SUPABASE_URL}/rest/v1/parcelas?select=id,numero,valor,data_vencimento,status,honorarios(cliente_id,tipo)&order=data_vencimento.asc&limit=${input.limite || 100}`;
         if (input.status) url += `&status=eq.${encodeURIComponent(input.status)}`;
         if (input.apenas_vencidas) url += `&data_vencimento=lt.${today}`;
         const r = await fetch(url, { headers: hdrs });
