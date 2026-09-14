@@ -1506,6 +1506,22 @@ Pontuação de fechamento de frase colada no fim do link (".", "),")
 é cortada e devolvida como texto solto. Testado ao vivo enviando uma
 mensagem real no Chat da Equipe (apagada do banco depois do teste).
 
+### 2026-09-14 (mesmo dia, sessão seguinte) — Bug real no fix da Agenda: comparava timestamp, não dia
+
+Usuário mandou foto do relatório impresso da Agenda de hoje mostrando
+"Confirmado" em compromissos de HOJE às 09:00 que nunca foram
+confirmados de verdade. Causa: a migration de mais cedo hoje
+([[project_agenda_compromisso_retroativo_20260914]]) comparava
+`data_inicio < now()` — timestamp exato, não a data. Compromisso de
+hoje às 09:00 já é "passado" em relação a `now()` assim que o relógio
+passa das 9h, mesmo sendo o dia de hoje. 7 dos 8 compromissos de hoje
+foram afetados.
+
+Fix (`20260914183000_fix_compromisso_comparacao_por_dia.sql`): compara
+por `current_date`, igual já tinha sido feito certo em Intimações no
+mesmo dia. Reverteu os 7 casos de hoje pra "pendente"; confirmado no
+banco depois do deploy.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
