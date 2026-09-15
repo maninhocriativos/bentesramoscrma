@@ -20,7 +20,8 @@ import { supabase } from '@/integrations/supabase/client';
 import {
   Plus, Clock, AlertTriangle, CheckCircle2, CheckSquare,
   TrendingUp, Users, Star, Bell, Flame, Calendar,
-  ChevronRight, Circle, FileDown, ChevronLeft, Download, User, RefreshCw
+  ChevronRight, Circle, FileDown, ChevronLeft, Download, User, RefreshCw,
+  FileText, Landmark,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow, isPast, isToday, isTomorrow, format } from 'date-fns';
@@ -64,9 +65,10 @@ function getDeadlineInfo(dl: string | null) {
 }
 
 // ── TarefaCard premium ───────────────────────────────────────────────────────
-function TarefaCard({ tarefa, onClick, draggable, isDragging, onDragStart, onDragEnd }: {
+function TarefaCard({ tarefa, onClick, draggable, isDragging, onDragStart, onDragEnd, processoInfo }: {
   tarefa: Tarefa; onClick: () => void; draggable?: boolean; isDragging?: boolean;
   onDragStart?: (e: React.DragEvent) => void; onDragEnd?: (e: React.DragEvent) => void;
+  processoInfo?: { numero_processo: string | null; tribunal: string | null };
 }) {
   const prio       = PRIO_CFG[tarefa.prioridade] || PRIO_CFG.Baixa;
   const dl         = getDeadlineInfo(tarefa.data_limite);
@@ -110,6 +112,27 @@ function TarefaCard({ tarefa, onClick, draggable, isDragging, onDragStart, onDra
             {prio.label}
           </span>
         </div>
+
+        {/* Processo vinculado — número + tribunal, quando existe */}
+        {processoInfo && (processoInfo.numero_processo || processoInfo.tribunal) && (
+          <div className="flex items-center gap-1.5 flex-wrap mb-2">
+            {processoInfo.numero_processo && (
+              <span className="flex items-center gap-1" style={{ fontSize: 10.5, color: '#6b7280', fontWeight: 600 }}>
+                <FileText style={{ width: 10, height: 10, color: '#9ca3af' }} />
+                {processoInfo.numero_processo}
+              </span>
+            )}
+            {processoInfo.tribunal && (
+              <span className="flex items-center gap-1" style={{
+                fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6,
+                background: `${BROWN}08`, color: BROWN,
+              }}>
+                <Landmark style={{ width: 9, height: 9 }} />
+                {processoInfo.tribunal}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Descrição */}
         {tarefa.descricao && (
@@ -311,8 +334,29 @@ export default function TarefasPage() {
   const [colPage, setColPage] = useState<Record<string, number>>({});
   const [alertaPage, setAlertaPage] = useState(0);
   const [reportPreview, setReportPreview] = useState<{ url: string; filename: string } | null>(null);
+  const [processoMap, setProcessoMap] = useState<Record<string, { numero_processo: string | null; tribunal: string | null }>>({});
   const KANBAN_PAGE_SIZE = 6;
   const ALERTAS_PAGE_SIZE = 5;
+
+  // Número do processo + tribunal pros cards do quadro — uma busca batelada
+  // (não uma por card) toda vez que a lista de tarefas muda. Mesmo padrão já
+  // usado no gerador de relatório (processoMap ali embaixo), só que pra tela
+  // inteira em vez de só na hora de gerar o PDF.
+  useEffect(() => {
+    const ids = Array.from(new Set(tarefas.map(t => t.processo_id).filter((id): id is string => !!id)));
+    if (ids.length === 0) { setProcessoMap({}); return; }
+    let cancelled = false;
+    (async () => {
+      const map: Record<string, { numero_processo: string | null; tribunal: string | null }> = {};
+      for (let i = 0; i < ids.length; i += 150) {
+        const chunk = ids.slice(i, i + 150);
+        const { data } = await supabase.from('processos').select('id, numero_processo, tribunal').in('id', chunk);
+        (data || []).forEach(p => { map[p.id] = { numero_processo: p.numero_processo, tribunal: p.tribunal }; });
+      }
+      if (!cancelled) setProcessoMap(map);
+    })();
+    return () => { cancelled = true; };
+  }, [tarefas]);
 
   const handleNew = () => { setSelectedTarefa(null); setTarefaModalOpen(true); };
 
@@ -597,6 +641,7 @@ export default function TarefasPage() {
                                   isDragging={draggedId === t.id}
                                   onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', t.id); setDraggedId(t.id); }}
                                   onDragEnd={() => { setDraggedId(null); setDragOverCol(null); }}
+                                  processoInfo={t.processo_id ? processoMap[t.processo_id] : undefined}
                                 />
                               ))
                             )}
@@ -658,7 +703,7 @@ export default function TarefasPage() {
                           {mTarefas.length === 0
                             ? <div className="py-8 text-center" style={{ color: '#d1d5db', fontSize: 12 }}>Sem tarefas atribuídas</div>
                             : <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                                {mTarefas.slice(0, 6).map(t => <TarefaCard key={t.id} tarefa={t} onClick={() => setDetailTarefa(t)} />)}
+                                {mTarefas.slice(0, 6).map(t => <TarefaCard key={t.id} tarefa={t} onClick={() => setDetailTarefa(t)} processoInfo={t.processo_id ? processoMap[t.processo_id] : undefined} />)}
                                 {mTarefas.length > 6 && (
                                   <div className="flex items-center justify-center rounded-2xl cursor-pointer hover:bg-stone-50 transition-colors"
                                     style={{ border: `1px dashed ${GOLD}40`, minHeight: 60 }}>

@@ -3,12 +3,13 @@ import { Tarefa, responsaveisDe, ehResponsavel, TIPOS_TAREFA } from '@/types/tar
 import { useAuth } from '@/hooks/useAuth';
 import { usePerfil } from '@/hooks/usePerfil';
 import { useTarefas } from '@/hooks/useTarefas';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Calendar, User, Clock, CheckCircle2, RotateCcw,
   Star, Send, Play, Pencil, X, AlertTriangle, Video, Tag,
-  FileText, Landmark,
+  FileText, Landmark, Search, Link2,
 } from 'lucide-react';
+import { buildProcessoSearchOr } from '@/lib/processoSearch';
 import { EntregarTarefaModal } from './EntregarTarefaModal';
 import { AprovarTarefaModal } from './AprovarTarefaModal';
 import { supabase } from '@/integrations/supabase/client';
@@ -78,6 +79,47 @@ export function TarefaDetailModal({ open, onOpenChange, tarefa, onEdit, onSucces
       .maybeSingle()
       .then(({ data }) => setProcessoInfo(data || null));
   }, [tarefa?.processo_id]);
+
+  // Vincular processo depois, quando a tarefa nasceu sem um (criada direto,
+  // sem passar por intimação) — sem isso essas tarefas nunca ganham número/
+  // tribunal/cliente porque não existe texto nenhum pra extrair.
+  interface ProcessoLite { id: string; numero_processo: string | null; tribunal: string | null; titulo_acao: string | null; nome_cliente: string | null; }
+  const [linkOpen,    setLinkOpen]    = useState(false);
+  const [linkQuery,   setLinkQuery]   = useState('');
+  const [linkResults, setLinkResults] = useState<ProcessoLite[]>([]);
+  const [linking,     setLinking]     = useState(false);
+  const linkTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => { setLinkOpen(false); setLinkQuery(''); setLinkResults([]); }, [tarefa?.id]);
+
+  const buscarProcessoParaVincular = (q: string) => {
+    setLinkQuery(q);
+    if (linkTimer.current) clearTimeout(linkTimer.current);
+    if (q.trim().length < 2) { setLinkResults([]); return; }
+    linkTimer.current = setTimeout(async () => {
+      const filtro = buildProcessoSearchOr(q, ['nome_cliente']);
+      if (!filtro) { setLinkResults([]); return; }
+      const { data } = await supabase.from('processos')
+        .select('id, numero_processo, tribunal, titulo_acao, nome_cliente')
+        .or(filtro)
+        .limit(8);
+      setLinkResults((data as ProcessoLite[]) || []);
+    }, 250);
+  };
+
+  const vincularProcesso = async (p: ProcessoLite) => {
+    if (!tarefa) return;
+    setLinking(true);
+    const ok = await updateTarefa(tarefa.id, { processo_id: p.id });
+    setLinking(false);
+    if (ok !== false) {
+      setProcessoInfo({ numero_processo: p.numero_processo, tribunal: p.tribunal, titulo_acao: p.titulo_acao, nome_cliente: p.nome_cliente });
+      setLinkOpen(false);
+      setLinkQuery('');
+      setLinkResults([]);
+      onSuccess?.();
+    }
+  };
 
   // Todos os responsáveis (não só o principal) — "Ana, Bruno".
   const responsaveisChave = tarefa ? responsaveisDe(tarefa).join(',') : '';
@@ -215,6 +257,61 @@ export function TarefaDetailModal({ open, onOpenChange, tarefa, onEdit, onSucces
                     <InfoRow icon={Tag} label="Tipo de Ação" value={processoInfo.titulo_acao} />
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* Tarefa sem processo — não veio de intimação nem foi criada a
+                partir de um processo, então não existe número/tribunal/cliente
+                em lugar nenhum pra puxar automaticamente. Deixa vincular na
+                mão (só quem é responsável ou gestor). */}
+            {!processoInfo && !tarefa.processo_id && (isMyTask || isManager) && (
+              <div className="rounded-xl p-3" style={{ background: `${BROWN}05`, border: `0.5px dashed ${GOLD}35` }}>
+                {linkOpen ? (
+                  <div className="relative">
+                    <p style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+                      Vincular processo
+                    </p>
+                    <div className="relative">
+                      <Search style={{ width: 13, height: 13, position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} />
+                      <input
+                        autoFocus
+                        value={linkQuery}
+                        onChange={e => buscarProcessoParaVincular(e.target.value)}
+                        placeholder="Buscar por cliente ou nº do processo..."
+                        disabled={linking}
+                        style={{
+                          width: '100%', height: 34, borderRadius: 10, border: `1px solid ${GOLD}35`,
+                          padding: '0 10px 0 30px', fontSize: 12, outline: 'none', background: 'white', color: '#1c1917',
+                        }}
+                      />
+                    </div>
+                    {linkResults.length > 0 && (
+                      <div className="mt-1.5 rounded-xl overflow-hidden" style={{ border: `0.5px solid ${GOLD}30`, maxHeight: 176, overflowY: 'auto' }}>
+                        {linkResults.map(p => (
+                          <button key={p.id} type="button" onClick={() => vincularProcesso(p)} disabled={linking}
+                            className="w-full text-left px-3 py-2 transition-all hover:opacity-80 disabled:opacity-50"
+                            style={{ background: 'white', borderBottom: `0.5px solid ${GOLD}15` }}>
+                            <p style={{ fontSize: 12, fontWeight: 700, color: '#1c1917' }} className="truncate">{p.nome_cliente || 'Sem nome'}</p>
+                            <p style={{ fontSize: 10.5, color: '#9ca3af' }}>{p.numero_processo || 'sem número'}{p.tribunal ? ` · ${p.tribunal}` : ''}</p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <button
+                      onClick={() => { setLinkOpen(false); setLinkQuery(''); setLinkResults([]); }}
+                      className="mt-2 text-[11px] font-semibold transition-all hover:opacity-70"
+                      style={{ color: '#9ca3af' }}>
+                      Cancelar
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setLinkOpen(true)}
+                    className="flex items-center gap-2 w-full transition-all hover:opacity-80">
+                    <Link2 style={{ width: 13, height: 13, color: GOLD_D }} />
+                    <span style={{ fontSize: 12, fontWeight: 700, color: GOLD_D }}>Vincular a um processo</span>
+                  </button>
+                )}
               </div>
             )}
 
