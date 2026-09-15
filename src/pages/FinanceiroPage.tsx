@@ -15,6 +15,8 @@ import { DespesasTable } from '@/components/financeiro/DespesasTable';
 import { CategoriasFinanceirasManager } from '@/components/financeiro/CategoriasFinanceirasManager';
 import { ContasBancariasManager } from '@/components/financeiro/ContasBancariasManager';
 import { InadimplenciaPanel } from '@/components/financeiro/InadimplenciaPanel';
+import { RelatorioDREPanel } from '@/components/financeiro/RelatorioDREPanel';
+import { BarChart3 } from 'lucide-react';
 
 const fmt = (v: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(v);
@@ -164,6 +166,9 @@ export default function FinanceiroPage() {
             <TabsTrigger value="inadimplencia" className="rounded-lg gap-1.5">
               <AlertTriangle className="h-3.5 w-3.5" /> Inadimplência
             </TabsTrigger>
+            <TabsTrigger value="dre" className="rounded-lg gap-1.5">
+              <BarChart3 className="h-3.5 w-3.5" /> DRE / Fluxo de Caixa
+            </TabsTrigger>
             <TabsTrigger value="contas" className="rounded-lg gap-1.5">
               <Landmark className="h-3.5 w-3.5" /> Contas & Categorias
             </TabsTrigger>
@@ -286,6 +291,10 @@ export default function FinanceiroPage() {
 
           <TabsContent value="inadimplencia">
             <InadimplenciaPanel />
+          </TabsContent>
+
+          <TabsContent value="dre">
+            <RelatorioDREPanel />
           </TabsContent>
 
           <TabsContent value="contas" className="space-y-4">
