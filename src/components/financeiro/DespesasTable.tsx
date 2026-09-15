@@ -2,8 +2,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Despesa } from '@/types/financeiro';
 import { Badge } from '@/components/ui/badge';
+import { MarcarPagamentoPopover } from './MarcarPagamentoPopover';
 
-export function DespesasTable({ despesas, loading }: { despesas: Despesa[]; loading: boolean }) {
+interface DespesasTableProps {
+  despesas: Despesa[];
+  loading: boolean;
+  onUpdateDespesa?: (id: string, updates: Partial<Despesa>) => Promise<boolean>;
+}
+
+export function DespesasTable({ despesas, loading, onUpdateDespesa }: DespesasTableProps) {
   if (loading) return <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>;
   if (despesas.length === 0) return <p className="text-center py-8 text-muted-foreground">Nenhuma despesa cadastrada</p>;
 
@@ -15,6 +22,7 @@ export function DespesasTable({ despesas, loading }: { despesas: Despesa[]; load
           <TableHead>Descrição</TableHead>
           <TableHead>Valor</TableHead>
           <TableHead>Status</TableHead>
+          {onUpdateDespesa && <TableHead>Ações</TableHead>}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -24,6 +32,17 @@ export function DespesasTable({ despesas, loading }: { despesas: Despesa[]; load
             <TableCell>{d.descricao}</TableCell>
             <TableCell>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(d.valor)}</TableCell>
             <TableCell><Badge variant={d.status === 'Pago' ? 'default' : 'secondary'}>{d.status}</Badge></TableCell>
+            {onUpdateDespesa && (
+              <TableCell>
+                {d.status === 'Pendente' && (
+                  <MarcarPagamentoPopover
+                    onConfirm={async (dataPagamento, contaBancariaId) => {
+                      await onUpdateDespesa(d.id, { status: 'Pago', data_pagamento: dataPagamento, conta_bancaria_id: contaBancariaId });
+                    }}
+                  />
+                )}
+              </TableCell>
+            )}
           </TableRow>
         ))}
       </TableBody>

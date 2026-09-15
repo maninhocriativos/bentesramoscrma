@@ -27,7 +27,7 @@ const probConfig: Record<string, { cls: string }> = {
 export default function FinanceiroPage() {
   const { honorarios, loading: loadingHonorarios } = useHonorarios();
   const { parcelas, loading: loadingParcelas, updateParcela, fetchParcelas } = useParcelas();
-  const { despesas, loading: loadingDespesas } = useDespesas();
+  const { despesas, loading: loadingDespesas, updateDespesa } = useDespesas();
   const { processos: processosFinanceiros, loading: loadingProcessos, totalEmCausa, totalProvisionado } = useProcessosFinanceiro();
 
   const [honorarioModalOpen, setHonorarioModalOpen] = useState(false);
@@ -270,7 +270,7 @@ export default function FinanceiroPage() {
             <Card className="border-border/60 shadow-sm">
               <CardHeader><CardTitle>Despesas Processuais</CardTitle></CardHeader>
               <CardContent>
-                <DespesasTable despesas={despesas} loading={loadingDespesas} />
+                <DespesasTable despesas={despesas} loading={loadingDespesas} onUpdateDespesa={updateDespesa} />
               </CardContent>
             </Card>
           </TabsContent>

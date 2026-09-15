@@ -2,8 +2,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Parcela } from '@/types/financeiro';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Check } from 'lucide-react';
+import { MarcarPagamentoPopover } from './MarcarPagamentoPopover';
 
 export function ParcelasTable({ parcelas, loading, onUpdateParcela }: { parcelas: Parcela[]; loading: boolean; onUpdateParcela: (id: string, updates: Partial<Parcela>) => Promise<boolean> }) {
   if (loading) return <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>;
@@ -35,9 +34,11 @@ export function ParcelasTable({ parcelas, loading, onUpdateParcela }: { parcelas
             <TableCell><Badge className={statusColor(p.status)}>{p.status}</Badge></TableCell>
             <TableCell>
               {p.status === 'Pendente' && (
-                <Button size="sm" variant="outline" onClick={() => onUpdateParcela(p.id, { status: 'Pago', data_pagamento: new Date().toISOString().split('T')[0] })}>
-                  <Check className="h-4 w-4 mr-1" /> Pagar
-                </Button>
+                <MarcarPagamentoPopover
+                  onConfirm={async (dataPagamento, contaBancariaId) => {
+                    await onUpdateParcela(p.id, { status: 'Pago', data_pagamento: dataPagamento, conta_bancaria_id: contaBancariaId });
+                  }}
+                />
               )}
             </TableCell>
           </TableRow>
