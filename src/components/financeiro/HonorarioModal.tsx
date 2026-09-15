@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useState, useEffect, useRef } from 'react';
 import { useHonorarios } from '@/hooks/useFinanceiro';
+import { useCategoriasFinanceiras } from '@/hooks/useCategoriasFinanceiras';
 import { supabase } from '@/integrations/supabase/client';
 import { buildProcessoSearchOr } from '@/lib/processoSearch';
 import { DollarSign, Loader2, Search, Scale, X } from 'lucide-react';
@@ -27,6 +28,8 @@ type FormaPag = 'À Vista' | 'Parcelado';
 
 export function HonorarioModal({ open, onOpenChange, clienteId, processoId, onSuccess }: HonorarioModalProps) {
   const { createHonorario } = useHonorarios();
+  const { categoriasAtivas } = useCategoriasFinanceiras();
+  const categoriasReceita = categoriasAtivas('receita');
   const [saving, setSaving] = useState(false);
 
   // ── Vínculo com processo + valor da causa ──────────────────────────────────
@@ -41,6 +44,7 @@ export function HonorarioModal({ open, onOpenChange, clienteId, processoId, onSu
   const today = new Date().toISOString().split('T')[0];
 
   const [form, setForm] = useState({
+    categoria_id: '',
     tipo: 'Fixo' as Tipo,
     valor_total: '',
     valor_entrada: '',
@@ -105,6 +109,7 @@ export function HonorarioModal({ open, onOpenChange, clienteId, processoId, onSu
     if (!form.valor_total) return;
     setSaving(true);
     await createHonorario({
+      categoria_id: form.categoria_id || null,
       tipo: form.tipo,
       valor_total: Number(form.valor_total),
       valor_entrada: form.valor_entrada ? Number(form.valor_entrada) : null,
@@ -119,7 +124,7 @@ export function HonorarioModal({ open, onOpenChange, clienteId, processoId, onSu
     });
     setSaving(false);
     onOpenChange(false);
-    setForm({ tipo: 'Fixo', valor_total: '', valor_entrada: '', percentual_exito: '', forma_pagamento: 'À Vista', num_parcelas: '1', data_contrato: today, observacoes: '' });
+    setForm({ categoria_id: '', tipo: 'Fixo', valor_total: '', valor_entrada: '', percentual_exito: '', forma_pagamento: 'À Vista', num_parcelas: '1', data_contrato: today, observacoes: '' });
     limparProc();
     onSuccess?.();
   };
@@ -171,6 +176,21 @@ export function HonorarioModal({ open, onOpenChange, clienteId, processoId, onSu
             {procId && procValor == null && (
               <p className="text-[10px] text-amber-600">Este processo não tem valor da causa cadastrado — preencha o Valor Total manualmente.</p>
             )}
+          </div>
+
+          {/* Categoria */}
+          <div className="space-y-1.5">
+            <Label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Categoria (opcional)</Label>
+            <Select value={form.categoria_id} onValueChange={v => set('categoria_id', v)}>
+              <SelectTrigger className="rounded-xl h-9 text-sm">
+                <SelectValue placeholder="Selecione a categoria..." />
+              </SelectTrigger>
+              <SelectContent>
+                {categoriasReceita.map(c => (
+                  <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Tipo + Data */}

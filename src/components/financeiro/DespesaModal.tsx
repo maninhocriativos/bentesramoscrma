@@ -6,6 +6,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useState } from 'react';
 import { useDespesas } from '@/hooks/useFinanceiro';
+import { useCategoriasFinanceiras } from '@/hooks/useCategoriasFinanceiras';
+import { useContasBancarias } from '@/hooks/useContasBancarias';
 import { TrendingDown, Loader2 } from 'lucide-react';
 
 interface DespesaModalProps {
@@ -16,31 +18,23 @@ interface DespesaModalProps {
   onSuccess?: () => void;
 }
 
-const TIPOS_DESPESA = [
-  'Custas Processuais',
-  'Diligências',
-  'Honorários de Perito',
-  'Honorários de Assistente Técnico',
-  'Despesas de Correio',
-  'Certidões e Documentos',
-  'Despesas de Viagem',
-  'Publicações',
-  'Outros',
-];
-
 export function DespesaModal({ open, onOpenChange, clienteId, processoId, onSuccess }: DespesaModalProps) {
   const { createDespesa } = useDespesas();
+  const { categoriasAtivas } = useCategoriasFinanceiras();
+  const { contasAtivas } = useContasBancarias();
   const [saving, setSaving] = useState(false);
 
   const today = new Date().toISOString().split('T')[0];
+  const categoriasDespesa = categoriasAtivas('despesa');
 
   const [form, setForm] = useState({
-    tipo: '',
+    categoria_id: '',
     descricao: '',
     valor: '',
     data_despesa: today,
     status: 'Pendente' as 'Pendente' | 'Pago' | 'Reembolsado',
     responsavel_pagamento: 'Escritório' as 'Escritório' | 'Cliente',
+    conta_bancaria_id: '',
   });
 
   const set = (key: keyof typeof form, value: string) =>
@@ -48,23 +42,28 @@ export function DespesaModal({ open, onOpenChange, clienteId, processoId, onSucc
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.tipo || !form.descricao || !form.valor) return;
+    const categoria = categoriasDespesa.find(c => c.id === form.categoria_id);
+    if (!categoria || !form.descricao || !form.valor) return;
     setSaving(true);
     await createDespesa({
-      tipo: form.tipo,
+      // `tipo` continua populado (nome da categoria) por compatibilidade com
+      // quem ainda lê esse campo — categoria_id é a referência de verdade agora.
+      tipo: categoria.nome,
+      categoria_id: categoria.id,
       descricao: form.descricao,
       valor: Number(form.valor),
       data_despesa: form.data_despesa || today,
       data_pagamento: form.status === 'Pago' ? today : null,
       status: form.status,
       responsavel_pagamento: form.responsavel_pagamento,
+      conta_bancaria_id: form.status === 'Pago' ? (form.conta_bancaria_id || null) : null,
       comprovante_url: null,
       processo_id: processoId || null,
       cliente_id: clienteId || null,
     });
     setSaving(false);
     onOpenChange(false);
-    setForm({ tipo: '', descricao: '', valor: '', data_despesa: today, status: 'Pendente', responsavel_pagamento: 'Escritório' });
+    setForm({ categoria_id: '', descricao: '', valor: '', data_despesa: today, status: 'Pendente', responsavel_pagamento: 'Escritório', conta_bancaria_id: '' });
     onSuccess?.();
   };
 
@@ -84,19 +83,22 @@ export function DespesaModal({ open, onOpenChange, clienteId, processoId, onSucc
         </div>
 
         <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
-          {/* Tipo */}
+          {/* Categoria */}
           <div className="space-y-1.5">
-            <Label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Tipo de Despesa</Label>
-            <Select value={form.tipo} onValueChange={v => set('tipo', v)} required>
+            <Label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Categoria</Label>
+            <Select value={form.categoria_id} onValueChange={v => set('categoria_id', v)} required>
               <SelectTrigger className="rounded-xl h-9 text-sm">
-                <SelectValue placeholder="Selecione o tipo..." />
+                <SelectValue placeholder="Selecione a categoria..." />
               </SelectTrigger>
               <SelectContent>
-                {TIPOS_DESPESA.map(t => (
-                  <SelectItem key={t} value={t}>{t}</SelectItem>
+                {categoriasDespesa.map(c => (
+                  <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {categoriasDespesa.length === 0 && (
+              <p className="text-[10px] text-amber-600">Nenhuma categoria de despesa cadastrada — crie uma na aba "Contas & Categorias".</p>
+            )}
           </div>
 
           {/* Descrição */}
@@ -166,6 +168,23 @@ export function DespesaModal({ open, onOpenChange, clienteId, processoId, onSucc
             </div>
           </div>
 
+          {/* Conta bancária — só faz sentido escolher se já está paga */}
+          {form.status === 'Pago' && (
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Conta Bancária (opcional)</Label>
+              <Select value={form.conta_bancaria_id} onValueChange={v => set('conta_bancaria_id', v)}>
+                <SelectTrigger className="rounded-xl h-9 text-sm">
+                  <SelectValue placeholder="De qual conta saiu..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {contasAtivas.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           {/* Botões */}
           <div className="flex gap-2 pt-2">
             <Button
@@ -179,7 +198,7 @@ export function DespesaModal({ open, onOpenChange, clienteId, processoId, onSucc
             </Button>
             <Button
               type="submit"
-              disabled={saving || !form.tipo || !form.descricao || !form.valor}
+              disabled={saving || !form.categoria_id || !form.descricao || !form.valor}
               className="flex-1 rounded-xl h-9 bg-[#3d2b1f] hover:bg-[#3d2b1f]/90 text-white"
             >
               {saving ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Salvando...</> : 'Salvar Despesa'}

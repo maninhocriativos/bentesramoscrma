@@ -2,6 +2,7 @@ export interface Honorario {
   id: string;
   cliente_id: string | null;
   processo_id: string | null;
+  categoria_id: string | null;
   tipo: 'Fixo' | 'Por Êxito' | 'Misto';
   valor_total: number;
   valor_entrada: number | null;
@@ -18,6 +19,7 @@ export interface Honorario {
 export interface Parcela {
   id: string;
   honorario_id: string | null;
+  conta_bancaria_id: string | null;
   numero: number;
   valor: number;
   data_vencimento: string;
@@ -33,6 +35,8 @@ export interface Despesa {
   id: string;
   processo_id: string | null;
   cliente_id: string | null;
+  categoria_id: string | null;
+  conta_bancaria_id: string | null;
   tipo: string;
   descricao: string;
   valor: number;
@@ -41,6 +45,29 @@ export interface Despesa {
   status: 'Pendente' | 'Pago' | 'Reembolsado';
   responsavel_pagamento: 'Escritório' | 'Cliente';
   comprovante_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CategoriaFinanceira {
+  id: string;
+  nome: string;
+  tipo: 'receita' | 'despesa';
+  cor: string | null;
+  ordem: number;
+  ativa: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ContaBancaria {
+  id: string;
+  nome: string;
+  banco: string | null;
+  tipo: 'Corrente' | 'Poupança' | 'Caixa' | 'Outra';
+  saldo_inicial: number;
+  ativa: boolean;
+  observacoes: string | null;
   created_at: string;
   updated_at: string;
 }

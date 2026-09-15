@@ -199,7 +199,7 @@ export function useChatInterno() {
     if (!user) return;
     const { error } = await supabase
       .from('chat_mensagens')
-      .update({ conteudo: novoConteudo, edited_at: new Date().toISOString() })
+      .update({ conteudo: novoConteudo, edited_at: new Date().toISOString() } as any)
       .eq('id', id)
       .eq('sender_id', user.id);
     if (!error) {

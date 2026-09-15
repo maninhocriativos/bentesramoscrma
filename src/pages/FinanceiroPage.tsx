@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
   Plus, DollarSign, TrendingUp, TrendingDown, Clock,
-  Scale, AlertTriangle, Loader2,
+  Scale, AlertTriangle, Loader2, Landmark,
 } from 'lucide-react';
 import { useHonorarios, useParcelas, useDespesas, useProcessosFinanceiro } from '@/hooks/useFinanceiro';
 import { HonorarioModal } from '@/components/financeiro/HonorarioModal';
@@ -12,6 +12,8 @@ import { DespesaModal } from '@/components/financeiro/DespesaModal';
 import { HonorariosTable } from '@/components/financeiro/HonorariosTable';
 import { ParcelasTable } from '@/components/financeiro/ParcelasTable';
 import { DespesasTable } from '@/components/financeiro/DespesasTable';
+import { CategoriasFinanceirasManager } from '@/components/financeiro/CategoriasFinanceirasManager';
+import { ContasBancariasManager } from '@/components/financeiro/ContasBancariasManager';
 
 const fmt = (v: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(v);
@@ -24,7 +26,7 @@ const probConfig: Record<string, { cls: string }> = {
 
 export default function FinanceiroPage() {
   const { honorarios, loading: loadingHonorarios } = useHonorarios();
-  const { parcelas, loading: loadingParcelas, updateParcela } = useParcelas();
+  const { parcelas, loading: loadingParcelas, updateParcela, fetchParcelas } = useParcelas();
   const { despesas, loading: loadingDespesas } = useDespesas();
   const { processos: processosFinanceiros, loading: loadingProcessos, totalEmCausa, totalProvisionado } = useProcessosFinanceiro();
 
@@ -146,13 +148,16 @@ export default function FinanceiroPage() {
 
         {/* Tabs */}
         <Tabs defaultValue="processos" className="space-y-4">
-          <TabsList className="rounded-xl">
+          <TabsList className="rounded-xl flex-wrap h-auto">
             <TabsTrigger value="processos" className="rounded-lg gap-1.5">
               <Scale className="h-3.5 w-3.5" /> Processos
             </TabsTrigger>
             <TabsTrigger value="honorarios" className="rounded-lg">Honorários</TabsTrigger>
             <TabsTrigger value="parcelas" className="rounded-lg">Parcelas</TabsTrigger>
             <TabsTrigger value="despesas" className="rounded-lg">Despesas</TabsTrigger>
+            <TabsTrigger value="contas" className="rounded-lg gap-1.5">
+              <Landmark className="h-3.5 w-3.5" /> Contas & Categorias
+            </TabsTrigger>
           </TabsList>
 
           {/* ── Aba Processos ── */}
@@ -269,9 +274,14 @@ export default function FinanceiroPage() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          <TabsContent value="contas" className="space-y-4">
+            <ContasBancariasManager />
+            <CategoriasFinanceirasManager />
+          </TabsContent>
         </Tabs>
 
-        <HonorarioModal open={honorarioModalOpen} onOpenChange={setHonorarioModalOpen} />
+        <HonorarioModal open={honorarioModalOpen} onOpenChange={setHonorarioModalOpen} onSuccess={fetchParcelas} />
         <DespesaModal open={despesaModalOpen} onOpenChange={setDespesaModalOpen} />
       </div>
     </>

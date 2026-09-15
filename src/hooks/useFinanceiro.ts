@@ -60,7 +60,7 @@ export function useHonorarios() {
   const createHonorario = async (honorario: Omit<Honorario, 'id' | 'created_at' | 'updated_at'>) => {
     const { data, error } = await supabase
       .from('honorarios')
-      .insert(honorario)
+      .insert(honorario as any)
       .select()
       .single();
 
@@ -77,7 +77,7 @@ export function useHonorarios() {
   const updateHonorario = async (id: string, updates: Partial<Honorario>) => {
     const { error } = await supabase
       .from('honorarios')
-      .update(updates)
+      .update(updates as any)
       .eq('id', id);
 
     if (error) {
@@ -142,7 +142,7 @@ export function useParcelas(honorarioId?: string) {
   const updateParcela = async (id: string, updates: Partial<Parcela>) => {
     const { error } = await supabase
       .from('parcelas')
-      .update(updates)
+      .update(updates as any)
       .eq('id', id);
 
     if (error) {
@@ -185,7 +185,7 @@ export function useDespesas() {
   const createDespesa = async (despesa: Omit<Despesa, 'id' | 'created_at' | 'updated_at'>) => {
     const { data, error } = await supabase
       .from('despesas')
-      .insert(despesa)
+      .insert(despesa as any)
       .select()
       .single();
 
@@ -202,7 +202,7 @@ export function useDespesas() {
   const updateDespesa = async (id: string, updates: Partial<Despesa>) => {
     const { error } = await supabase
       .from('despesas')
-      .update(updates)
+      .update(updates as any)
       .eq('id', id);
 
     if (error) {
