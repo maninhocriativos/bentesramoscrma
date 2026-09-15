@@ -7,6 +7,7 @@ export interface ChatMensagem {
   sender_id: string;
   conteudo: string;
   created_at: string;
+  edited_at: string | null;
   perfis: { nome: string; sobrenome: string | null } | null;
 }
 
@@ -165,6 +166,14 @@ export function useChatInterno() {
           if (!chatOpenRef.current) setUnread(n => n + 1);
         }
       )
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chat_mensagens' },
+        (payload) => {
+          const updated = payload.new as ChatMensagem;
+          setMensagens(prev => prev.map(m => m.id === updated.id
+            ? { ...m, conteudo: updated.conteudo, edited_at: updated.edited_at }
+            : m));
+        }
+      )
       .subscribe();
 
     return () => { supabase.removeChannel(ch); };
@@ -186,6 +195,21 @@ export function useChatInterno() {
     }
   };
 
+  const editar = async (id: string, novoConteudo: string) => {
+    if (!user) return;
+    const { error } = await supabase
+      .from('chat_mensagens')
+      .update({ conteudo: novoConteudo, edited_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('sender_id', user.id);
+    if (!error) {
+      setMensagens(prev => prev.map(m => m.id === id
+        ? { ...m, conteudo: novoConteudo, edited_at: new Date().toISOString() }
+        : m));
+    }
+    return { error };
+  };
+
   const marcarLido = () => {
     const now = new Date().toISOString();
     lastSeenRef.current = now;
@@ -196,5 +220,5 @@ export function useChatInterno() {
   const setChatOpenState = (open: boolean) => { chatOpenRef.current = open; };
   const dismissMencao    = () => setMencaoNotif(null);
 
-  return { mensagens, loading, unread, enviar, marcarLido, mencaoNotif, dismissMencao, setChatOpenState };
+  return { mensagens, loading, unread, enviar, editar, marcarLido, mencaoNotif, dismissMencao, setChatOpenState };
 }

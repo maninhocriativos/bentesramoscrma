@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { MessageSquare, X, Send, ChevronDown, AtSign, Bell, Paperclip, FileText, Search } from 'lucide-react';
-import { useChatInterno, decodeMencoes, decodeAnexo, type ChatAnexo } from '@/hooks/useChatInterno';
+import { MessageSquare, X, Send, ChevronDown, AtSign, Bell, Paperclip, FileText, Search, Pencil, Check } from 'lucide-react';
+import { useChatInterno, decodeMencoes, decodeAnexo, encodeMencoes, type ChatAnexo } from '@/hooks/useChatInterno';
 import { useAuth } from '@/hooks/useAuth';
 import { usePerfil } from '@/hooks/usePerfil';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -80,6 +80,69 @@ function MsgText({ content }: { content: string }) {
   return <>{nodes}</>;
 }
 
+// Anexo de imagem ganha miniatura de verdade (busca signed URL sob demanda,
+// já que o bucket "documentos" é privado); outros tipos seguem como cartão
+// de arquivo (nome + tamanho), igual já era antes.
+function AnexoPreview({ anexo, isMe }: { anexo: ChatAnexo; isMe: boolean }) {
+  const isImage = anexo.mime?.startsWith('image/');
+  const [signedUrl, setSignedUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isImage) return;
+    let cancelled = false;
+    supabase.storage.from('documentos').createSignedUrl(anexo.path, 3600).then(({ data }) => {
+      if (!cancelled && data?.signedUrl) setSignedUrl(data.signedUrl);
+    });
+    return () => { cancelled = true; };
+  }, [isImage, anexo.path]);
+
+  const abrirOriginal = async () => {
+    const { data } = await supabase.storage.from('documentos').createSignedUrl(anexo.path, 300);
+    if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+  };
+
+  if (isImage) {
+    return (
+      <button
+        onClick={abrirOriginal}
+        className="block mt-1.5 rounded-xl overflow-hidden transition-all hover:opacity-90"
+        style={{ border: `1px solid ${GOLD}35`, maxWidth: 200 }}
+      >
+        {signedUrl ? (
+          <img src={signedUrl} alt={anexo.name} style={{ display: 'block', maxWidth: '100%', maxHeight: 200, objectFit: 'cover' }} />
+        ) : (
+          <div className="flex items-center justify-center" style={{ width: 200, height: 120, background: isMe ? 'rgba(255,255,255,0.08)' : `${BROWN}0d` }}>
+            <div className="w-4 h-4 border-2 rounded-full animate-spin" style={{ borderColor: `${GOLD}30`, borderTopColor: GOLD }} />
+          </div>
+        )}
+      </button>
+    );
+  }
+
+  return (
+    <button
+      onClick={abrirOriginal}
+      className="flex items-center gap-2 mt-1.5 rounded-xl px-2.5 py-2 w-full text-left transition-all hover:opacity-80"
+      style={{
+        background: isMe ? 'rgba(255,255,255,0.1)' : `${BROWN}0d`,
+        border: `1px solid ${GOLD}35`,
+      }}
+    >
+      <FileText style={{ width: 14, height: 14, color: GOLD, flexShrink: 0 }} />
+      <div className="min-w-0">
+        <p style={{ fontSize: 11, fontWeight: 600, color: isMe ? GOLD : BROWN }} className="truncate">
+          {anexo.name}
+        </p>
+        <p style={{ fontSize: 9, opacity: 0.5 }}>
+          {anexo.size < 1048576
+            ? `${(anexo.size / 1024).toFixed(0)} KB`
+            : `${(anexo.size / 1048576).toFixed(1)} MB`}
+        </p>
+      </div>
+    </button>
+  );
+}
+
 export function ChatInterno() {
   const isMobile = useIsMobile();
   const location = useLocation();
@@ -136,7 +199,11 @@ export function ChatInterno() {
   const [filterSender, setFilterSender] = useState('all');
   const [filterQuery,  setFilterQuery]  = useState('');
 
-  const { mensagens, loading, unread, enviar, marcarLido, mencaoNotif, dismissMencao, setChatOpenState } =
+  const [editingId,   setEditingId]   = useState<string | null>(null);
+  const [editText,    setEditText]    = useState('');
+  const editInputRef = useRef<HTMLTextAreaElement>(null);
+
+  const { mensagens, loading, unread, enviar, editar, marcarLido, mencaoNotif, dismissMencao, setChatOpenState } =
     useChatInterno();
   const { user }    = useAuth();
   const { perfil }  = usePerfil();
@@ -251,6 +318,26 @@ export function ChatInterno() {
     setShowAt(false);
     resetTextareaHeight();
     await enviar(t, mencoes.map(m => m.id), anexo);
+  };
+
+  const startEdit = (m: (typeof mensagens)[number]) => {
+    const { text } = decodeMencoes(m.conteudo);
+    setEditingId(m.id);
+    setEditText(text);
+    setTimeout(() => editInputRef.current?.focus(), 0);
+  };
+
+  const cancelEdit = () => { setEditingId(null); setEditText(''); };
+
+  const saveEdit = async (m: (typeof mensagens)[number]) => {
+    const novoTexto = editText.trim();
+    if (!novoTexto) { cancelEdit(); return; }
+    const { ids } = decodeMencoes(m.conteudo);
+    const anexo = decodeAnexo(m.conteudo);
+    const raw = encodeMencoes(novoTexto, ids, anexo);
+    setEditingId(null);
+    setEditText('');
+    await editar(m.id, raw);
   };
 
   const adjustTextareaHeight = () => {
@@ -506,9 +593,11 @@ export function ChatInterno() {
                       const msgAnexo = decodeAnexo(m.conteudo);
                       const { text: msgText } = decodeMencoes(m.conteudo);
 
+                      const isEditing = editingId === m.id;
+
                       return (
                         <div key={m.id}
-                          className={`flex gap-2 ${isMe ? 'flex-row-reverse' : ''} ${sameAsPrev ? 'mt-0.5' : 'mt-2'}`}>
+                          className={`group flex gap-2 ${isMe ? 'flex-row-reverse' : ''} ${sameAsPrev ? 'mt-0.5' : 'mt-2'}`}>
                           {!isMe && (
                             <div
                               className={`h-7 w-7 rounded-full shrink-0 flex items-center justify-center text-[10px] font-black self-end ${sameAsPrev ? 'invisible' : ''}`}
@@ -516,66 +605,91 @@ export function ChatInterno() {
                               {getInitials(nome, sobrenome)}
                             </div>
                           )}
-                          <div className={`max-w-[230px] ${isMe ? 'items-end' : 'items-start'} flex flex-col`}>
+                          <div className={`max-w-[230px] ${isMe ? 'items-end' : 'items-start'} flex flex-col relative`}>
                             {!sameAsPrev && !isMe && (
                               <p style={{ fontSize: 10, fontWeight: 700, color: BROWN, marginBottom: 2, marginLeft: 4 }}>
                                 {nome}{sobrenome ? ` ${sobrenome.split(' ')[0]}` : ''}
                               </p>
                             )}
-                            <div className="px-3 py-2 rounded-2xl"
-                              style={{
-                                background: mentionsMe
-                                  ? `${GOLD}22`
-                                  : isMe ? BROWN : 'white',
-                                color: isMe ? GOLD : '#1c1917',
-                                fontSize: 13,
-                                lineHeight: 1.45,
-                                border: mentionsMe
-                                  ? `1.5px solid ${GOLD}60`
-                                  : isMe ? 'none' : `0.5px solid ${GOLD}25`,
-                                borderBottomRightRadius: isMe ? 4 : 16,
-                                borderBottomLeftRadius:  isMe ? 16 : 4,
-                                wordBreak: 'break-word',
-                                whiteSpace: 'pre-wrap',
-                              }}>
-                              {msgText && <MsgText content={m.conteudo} />}
-                              {mentionsMe && !isMe && (
-                                <span style={{ fontSize: 9, color: GOLD, marginLeft: 4, fontWeight: 700 }}>
-                                  • você
-                                </span>
-                              )}
-                              {msgAnexo && (
-                                <button
-                                  onClick={async () => {
-                                    const { data } = await supabase.storage.from('documentos').createSignedUrl(msgAnexo.path, 300);
-                                    if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+
+                            {isMe && !isEditing && (
+                              <button
+                                onClick={() => startEdit(m)}
+                                title="Editar mensagem"
+                                className="absolute top-0 opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 rounded-lg flex items-center justify-center"
+                                style={{ right: '100%', marginRight: 4, background: `${BROWN}12`, border: `1px solid ${GOLD}30` }}>
+                                <Pencil style={{ width: 11, height: 11, color: BROWN }} />
+                              </button>
+                            )}
+
+                            {isEditing ? (
+                              <div className="rounded-2xl px-2 py-2 flex flex-col gap-1.5"
+                                style={{ background: 'white', border: `1.5px solid ${GOLD}60`, minWidth: 180 }}>
+                                <textarea
+                                  ref={editInputRef}
+                                  value={editText}
+                                  rows={1}
+                                  onChange={e => {
+                                    setEditText(e.target.value);
+                                    e.target.style.height = 'auto';
+                                    e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
                                   }}
-                                  className="flex items-center gap-2 mt-1.5 rounded-xl px-2.5 py-2 w-full text-left transition-all hover:opacity-80"
+                                  onKeyDown={e => {
+                                    if (e.key === 'Escape') { cancelEdit(); return; }
+                                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit(m); }
+                                  }}
                                   style={{
-                                    background: isMe ? 'rgba(255,255,255,0.1)' : `${BROWN}0d`,
-                                    border: `1px solid ${GOLD}35`,
+                                    fontSize: 13, lineHeight: 1.45, color: '#1c1917', resize: 'none',
+                                    outline: 'none', border: 'none', fontFamily: 'inherit', minHeight: 20,
                                   }}
-                                >
-                                  <FileText style={{ width: 14, height: 14, color: GOLD, flexShrink: 0 }} />
-                                  <div className="min-w-0">
-                                    <p style={{ fontSize: 11, fontWeight: 600, color: isMe ? GOLD : BROWN }} className="truncate">
-                                      {msgAnexo.name}
-                                    </p>
-                                    <p style={{ fontSize: 9, opacity: 0.5 }}>
-                                      {msgAnexo.size < 1048576
-                                        ? `${(msgAnexo.size / 1024).toFixed(0)} KB`
-                                        : `${(msgAnexo.size / 1048576).toFixed(1)} MB`}
-                                    </p>
-                                  </div>
-                                </button>
-                              )}
-                            </div>
+                                />
+                                <div className="flex justify-end gap-1.5">
+                                  <button onClick={cancelEdit}
+                                    className="h-6 px-2 rounded-lg flex items-center justify-center text-[10px] font-semibold transition-all hover:opacity-70"
+                                    style={{ background: `${BROWN}10`, color: BROWN }}>
+                                    Cancelar
+                                  </button>
+                                  <button onClick={() => saveEdit(m)}
+                                    className="h-6 px-2 rounded-lg flex items-center gap-1 justify-center text-[10px] font-semibold transition-all hover:opacity-90"
+                                    style={{ background: BROWN, color: GOLD }}>
+                                    <Check style={{ width: 10, height: 10 }} />
+                                    Salvar
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="px-3 py-2 rounded-2xl"
+                                style={{
+                                  background: mentionsMe
+                                    ? `${GOLD}22`
+                                    : isMe ? BROWN : 'white',
+                                  color: isMe ? GOLD : '#1c1917',
+                                  fontSize: 13,
+                                  lineHeight: 1.45,
+                                  border: mentionsMe
+                                    ? `1.5px solid ${GOLD}60`
+                                    : isMe ? 'none' : `0.5px solid ${GOLD}25`,
+                                  borderBottomRightRadius: isMe ? 4 : 16,
+                                  borderBottomLeftRadius:  isMe ? 16 : 4,
+                                  wordBreak: 'break-word',
+                                  whiteSpace: 'pre-wrap',
+                                }}>
+                                {msgText && <MsgText content={m.conteudo} />}
+                                {mentionsMe && !isMe && (
+                                  <span style={{ fontSize: 9, color: GOLD, marginLeft: 4, fontWeight: 700 }}>
+                                    • você
+                                  </span>
+                                )}
+                                {msgAnexo && <AnexoPreview anexo={msgAnexo} isMe={isMe} />}
+                              </div>
+                            )}
+
                             <p style={{
                               fontSize: 9, color: '#9ca3af', marginTop: 2,
                               paddingLeft: isMe ? 0 : 4, paddingRight: isMe ? 4 : 0,
                               textAlign: isMe ? 'right' : 'left',
                             }}>
-                              {formatMsgTime(m.created_at)}
+                              {formatMsgTime(m.created_at)}{m.edited_at ? ' · editado' : ''}
                             </p>
                           </div>
                         </div>
