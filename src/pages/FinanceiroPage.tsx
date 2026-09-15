@@ -14,6 +14,7 @@ import { ParcelasTable } from '@/components/financeiro/ParcelasTable';
 import { DespesasTable } from '@/components/financeiro/DespesasTable';
 import { CategoriasFinanceirasManager } from '@/components/financeiro/CategoriasFinanceirasManager';
 import { ContasBancariasManager } from '@/components/financeiro/ContasBancariasManager';
+import { InadimplenciaPanel } from '@/components/financeiro/InadimplenciaPanel';
 
 const fmt = (v: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(v);
@@ -37,7 +38,12 @@ export default function FinanceiroPage() {
   const totalRecebido      = parcelas.filter(p => p.status === 'Pago').reduce((acc, p) => acc + Number(p.valor), 0);
   const totalPendente      = parcelas.filter(p => p.status === 'Pendente').reduce((acc, p) => acc + Number(p.valor), 0);
   const totalDespesas      = despesas.reduce((acc, d) => acc + Number(d.valor), 0);
-  const parcelasAtrasadas  = parcelas.filter(p => p.status === 'Pendente' && new Date(p.data_vencimento) < new Date());
+  // Comparação por DIA (string ISO), nunca por timestamp — senão uma
+  // parcela vencendo HOJE já contava como atrasada assim que passava da
+  // meia-noite, mesmo sendo do dia corrente (mesma classe de bug já
+  // corrigida em Intimações/Agenda).
+  const hojeISO = new Date().toISOString().slice(0, 10);
+  const parcelasAtrasadas  = parcelas.filter(p => p.status === 'Pendente' && p.data_vencimento < hojeISO);
 
   return (
     <>
@@ -155,6 +161,9 @@ export default function FinanceiroPage() {
             <TabsTrigger value="honorarios" className="rounded-lg">Honorários</TabsTrigger>
             <TabsTrigger value="parcelas" className="rounded-lg">Parcelas</TabsTrigger>
             <TabsTrigger value="despesas" className="rounded-lg">Despesas</TabsTrigger>
+            <TabsTrigger value="inadimplencia" className="rounded-lg gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5" /> Inadimplência
+            </TabsTrigger>
             <TabsTrigger value="contas" className="rounded-lg gap-1.5">
               <Landmark className="h-3.5 w-3.5" /> Contas & Categorias
             </TabsTrigger>
@@ -273,6 +282,10 @@ export default function FinanceiroPage() {
                 <DespesasTable despesas={despesas} loading={loadingDespesas} onUpdateDespesa={updateDespesa} />
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="inadimplencia">
+            <InadimplenciaPanel />
           </TabsContent>
 
           <TabsContent value="contas" className="space-y-4">
