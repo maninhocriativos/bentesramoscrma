@@ -28,9 +28,13 @@ type FormaPag = 'À Vista' | 'Parcelado';
 
 export function HonorarioModal({ open, onOpenChange, clienteId, processoId, onSuccess }: HonorarioModalProps) {
   const { createHonorario } = useHonorarios();
-  const { categoriasAtivas } = useCategoriasFinanceiras();
+  const { categoriasAtivas, fetchCategorias } = useCategoriasFinanceiras();
   const categoriasReceita = categoriasAtivas('receita');
   const [saving, setSaving] = useState(false);
+
+  // Mesmo motivo do DespesaModal: o modal fica sempre montado, então uma
+  // categoria criada depois no gerenciador nunca aparecia aqui sem F5.
+  useEffect(() => { if (open) fetchCategorias(); }, [open, fetchCategorias]);
 
   // ── Vínculo com processo + valor da causa ──────────────────────────────────
   const [procId, setProcId]       = useState(processoId || '');

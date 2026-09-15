@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useDespesas } from '@/hooks/useFinanceiro';
 import { useCategoriasFinanceiras } from '@/hooks/useCategoriasFinanceiras';
 import { useContasBancarias } from '@/hooks/useContasBancarias';
@@ -20,9 +20,15 @@ interface DespesaModalProps {
 
 export function DespesaModal({ open, onOpenChange, clienteId, processoId, onSuccess }: DespesaModalProps) {
   const { createDespesa } = useDespesas();
-  const { categoriasAtivas } = useCategoriasFinanceiras();
-  const { contasAtivas } = useContasBancarias();
+  const { categoriasAtivas, fetchCategorias } = useCategoriasFinanceiras();
+  const { contasAtivas, fetchContas } = useContasBancarias();
   const [saving, setSaving] = useState(false);
+
+  // O modal fica sempre montado (Dialog só esconde via CSS) — o fetch inicial
+  // do hook roda uma vez no mount da PÁGINA, então uma categoria/conta criada
+  // depois no gerenciador nunca aparecia aqui sem recarregar. Reconsulta toda
+  // vez que o modal abre.
+  useEffect(() => { if (open) { fetchCategorias(); fetchContas(); } }, [open, fetchCategorias, fetchContas]);
 
   const today = new Date().toISOString().split('T')[0];
   const categoriasDespesa = categoriasAtivas('despesa');
