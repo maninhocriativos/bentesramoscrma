@@ -1590,6 +1590,45 @@ espelho bruto de nada. Deploy em
 (com e sem filtro de categoria), sem secret dá 401 — tudo confirmado antes
 de qualquer tool nova apontar pra ele (isso é trabalho da Fase 3).
 
+### 2026-09-15 — Chat interno: preview de imagem nos anexos + edição de mensagem
+
+Usuário pediu duas coisas no Chat da Equipe: prints coladas no chat
+deveriam ter prévia de visualização (antes só apareciam como um cartão
+de arquivo genérico, nome + tamanho), e precisava dar pra editar mensagem
+errada depois de enviada.
+
+**Preview de imagem**: novo componente `AnexoPreview` em `ChatInterno.tsx`
+— quando `anexo.mime` começa com `image/`, busca uma signed URL sob
+demanda (bucket `documentos` é privado) e renderiza `<img>` de verdade
+dentro da bolha; qualquer outro tipo de anexo continua como cartão de
+arquivo, igual já era.
+
+**Edição de mensagem**: botão de lápis aparece ao passar o mouse na
+própria mensagem (mensagem de terceiro não pode ser editada — mesma regra
+de quem pode inserir). Nova coluna `chat_mensagens.edited_at` + policy de
+UPDATE restrita a `auth.uid() = sender_id` (só existia policy de INSERT e
+SELECT antes). Edição preserva menções e anexo originais, só troca o
+texto. Mostra "· editado" no rodapé da mensagem quando aplicável.
+Realtime existente ganhou um listener de `UPDATE` (só tinha `INSERT`) pra
+sincronizar a edição pros outros usuários com o chat aberto.
+
+Testado ao vivo com Playwright (login real): colou imagem, confirmou
+`<img>` renderizando; editou mensagem própria, confirmou texto novo +
+label "editado" aparecendo. Mensagens/imagem de teste foram apagadas
+depois (chat real da equipe, mesmo cuidado de sempre).
+
+**Erro cometido e corrigido no processo**: apliquei a migration
+(`edited_at` + policy) direto via Management API pra testar mais rápido,
+sem lembrar que isso pula a etapa que o workflow "Deploy Database
+Migrations" (CI) também ia tentar rodar no push — o `supabase db push`
+do CI não sabia que a coluna já existia e falhou com "column already
+exists". Corrigido inserindo manualmente a linha correspondente em
+`supabase_migrations.schema_migrations` (mesma tabela que o CLI usa pra
+saber o que já rodou), sem reaplicar o DDL. **Lição**: pra migration
+DDL-sensível, só REHEARSAL em `begin;...;rollback;` antes do push — nunca
+aplicar de vez via Management API antes do CI rodar de verdade, senão os
+dois tentam aplicar a mesma coisa.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
