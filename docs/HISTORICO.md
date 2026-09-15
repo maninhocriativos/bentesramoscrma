@@ -1629,6 +1629,36 @@ DDL-sensível, só REHEARSAL em `begin;...;rollback;` antes do push — nunca
 aplicar de vez via Management API antes do CI rodar de verdade, senão os
 dois tentam aplicar a mesma coisa.
 
+### 2026-09-15 — Tarefas: processo vinculado visível no modal e nos cards + vincular na mão quando falta
+
+Usuário mandou print do modal de uma tarefa do Gabriel ("Emenda à
+Inicial") sem número de processo, cliente nem tribunal aparecendo. A
+`tarefa.processo_id` já existia no banco na maioria dos casos (146 de
+156 tarefas pendentes/em andamento) — só não era mostrado em lugar
+nenhum da UI, era puro dado morto.
+
+**Modal (`TarefaDetailModal.tsx`)**: novo bloco "Processo Vinculado"
+busca em `processos` (numero_processo/tribunal/nome_cliente/titulo_acao,
+igual já fazia `AgendaPDFModal`) e mostra quando `processo_id` existe.
+
+**Cards do quadro (`TarefasPage.tsx`)**: mesmo dado, versão compacta
+(número + badge de tribunal) direto no card, sem precisar abrir — busca
+batelada (`.in()` em lotes de 150) uma vez por lista de tarefas, não uma
+query por card.
+
+**"tem que resolver para todos"** — usuário apontou que 10 tarefas
+pendentes não tinham `processo_id` nenhum (criadas direto, tipo
+"Audiência Lorran Henrique", sem intimação nem descrição estruturada —
+não tem de onde puxar automaticamente). Resposta: modal ganhou uma busca
+inline (por cliente ou nº do processo, mesmo padrão/helper
+`buildProcessoSearchOr` do `CompromissoModal`) que aparece só quando a
+tarefa não tem processo, pra vincular na hora sem precisar recriar a
+tarefa. Só aparece pra responsável da tarefa ou gestor.
+
+Testado ao vivo com Playwright: vinculou de verdade uma tarefa real sem
+processo, confirmou aparecendo no modal E no card atrás dele, revertido
+(`processo_id = null`) depois pra não deixar dado de teste em produção.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
