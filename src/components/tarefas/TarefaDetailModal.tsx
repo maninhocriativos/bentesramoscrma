@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react';
 import {
   Calendar, User, Clock, CheckCircle2, RotateCcw,
   Star, Send, Play, Pencil, X, AlertTriangle, Video, Tag,
+  FileText, Landmark,
 } from 'lucide-react';
 import { EntregarTarefaModal } from './EntregarTarefaModal';
 import { AprovarTarefaModal } from './AprovarTarefaModal';
@@ -60,6 +61,23 @@ export function TarefaDetailModal({ open, onOpenChange, tarefa, onEdit, onSucces
   const [aprovarModal, setAprovarModal]   = useState<Tarefa | null>(null);
   const [responsavelNome, setResponsavelNome] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const [processoInfo, setProcessoInfo] = useState<{
+    numero_processo: string | null; tribunal: string | null;
+    titulo_acao: string | null; nome_cliente: string | null;
+  } | null>(null);
+
+  // Processo/cliente/tribunal da tarefa — já vem vinculado (processo_id) na
+  // maioria dos casos (criada a partir de intimação ou do processo), só não
+  // aparecia na UI. Busca direto em `processos`, que já tem nome_cliente
+  // (dado pessoal do cliente mora lá, não em leads_juridicos).
+  useEffect(() => {
+    if (!tarefa?.processo_id) { setProcessoInfo(null); return; }
+    supabase.from('processos')
+      .select('numero_processo, tribunal, titulo_acao, nome_cliente')
+      .eq('id', tarefa.processo_id)
+      .maybeSingle()
+      .then(({ data }) => setProcessoInfo(data || null));
+  }, [tarefa?.processo_id]);
 
   // Todos os responsáveis (não só o principal) — "Ana, Bruno".
   const responsaveisChave = tarefa ? responsaveisDe(tarefa).join(',') : '';
@@ -176,6 +194,29 @@ export function TarefaDetailModal({ open, onOpenChange, tarefa, onEdit, onSucces
                   value={fmtDate(tarefa.data_conclusao)} accent="#16a34a" />
               )}
             </div>
+
+            {/* Processo vinculado — número, tribunal, cliente e tipo de ação */}
+            {processoInfo && (processoInfo.numero_processo || processoInfo.tribunal || processoInfo.nome_cliente) && (
+              <div className="rounded-xl p-3" style={{ background: `${BROWN}05`, border: `0.5px solid ${GOLD}25` }}>
+                <p style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+                  Processo vinculado
+                </p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                  {processoInfo.numero_processo && (
+                    <InfoRow icon={FileText} label="Nº do Processo" value={processoInfo.numero_processo} />
+                  )}
+                  {processoInfo.tribunal && (
+                    <InfoRow icon={Landmark} label="Tribunal" value={processoInfo.tribunal} />
+                  )}
+                  {processoInfo.nome_cliente && (
+                    <InfoRow icon={User} label="Cliente" value={processoInfo.nome_cliente} />
+                  )}
+                  {processoInfo.titulo_acao && (
+                    <InfoRow icon={Tag} label="Tipo de Ação" value={processoInfo.titulo_acao} />
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Link da audiência virtual / reunião online */}
             {tarefa.link_audiencia && (
