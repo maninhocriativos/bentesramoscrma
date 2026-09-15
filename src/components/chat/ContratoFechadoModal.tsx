@@ -345,7 +345,8 @@ export function ContratoFechadoModal({ open, onClose, leadId, leadNome }: Contra
             .eq('cliente_id', formData.leadId)
             .limit(1);
           if (!honorariosExistentes || honorariosExistentes.length === 0) {
-            await supabase.from('honorarios').insert({
+            const dataContrato = now.split('T')[0];
+            const { data: honorarioNovo, error: honorarioError } = await supabase.from('honorarios').insert({
               cliente_id:        formData.leadId,
               tipo:              'Fixo',
               valor_total:       valorParaHonorario,
@@ -353,14 +354,32 @@ export function ContratoFechadoModal({ open, onClose, leadId, leadNome }: Contra
               percentual_exito:  null,
               forma_pagamento:   'À Vista',
               num_parcelas:      1,
-              data_contrato:     now.split('T')[0],
+              data_contrato:     dataContrato,
               status:            'Ativo',
               observacoes:       `Gerado automaticamente — Contrato: ${formData.tipoContrato}`,
-            });
+            } as any).select('id').single();
+            // Gera a parcela única (à vista) — antes esse insert nem
+            // capturava o id de volta, então não tinha como vincular parcela
+            // nenhuma a esse honorário.
+            if (honorarioError) {
+              console.error('[ContratoFechadoModal] Erro ao criar honorário automático:', honorarioError);
+            } else if (honorarioNovo) {
+              const { error: parcelaError } = await supabase.from('parcelas').insert({
+                honorario_id: (honorarioNovo as any).id,
+                numero: 1,
+                valor: valorParaHonorario,
+                data_vencimento: dataContrato,
+                status: 'Pendente',
+              } as any);
+              if (parcelaError) console.error('[ContratoFechadoModal] Erro ao gerar parcela do honorário automático:', parcelaError);
+            }
           }
         }
-      } catch {
-        // Não bloquear o fluxo por erro no honorário
+      } catch (err) {
+        // Não bloquear o fluxo por erro no honorário — mas logar, senão o
+        // problema fica invisível (era exatamente isso que escondia o bug
+        // do id nunca sendo capturado).
+        console.error('[ContratoFechadoModal] Falha no honorário automático:', err);
       }
 
       // 7. Log de interação

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Honorario, Parcela, Despesa } from '@/types/financeiro';
 import { useToast } from '@/hooks/use-toast';
+import { gerarParcelasHonorario } from '@/lib/gerarParcelasHonorario';
 
 export interface ProcessoFinanceiro {
   id: string;
@@ -68,8 +69,23 @@ export function useHonorarios() {
       toast({ title: 'Erro ao criar honorário', description: error.message, variant: 'destructive' });
       return null;
     }
-    
-    toast({ title: 'Honorário criado com sucesso!' });
+
+    // Gera as parcelas de verdade (entrada + parcelas mensais, ou 1 parcela
+    // à vista) — antes só o número ficava salvo no honorário, sem nada pra
+    // cobrar/marcar como pago de verdade.
+    const parcelasNovas = gerarParcelasHonorario({
+      valor_total: honorario.valor_total,
+      valor_entrada: honorario.valor_entrada,
+      forma_pagamento: honorario.forma_pagamento,
+      num_parcelas: honorario.num_parcelas,
+      data_contrato: honorario.data_contrato || new Date().toISOString().slice(0, 10),
+    }, (data as any).id);
+    const { error: parcelasError } = await supabase.from('parcelas').insert(parcelasNovas as any);
+    if (parcelasError) {
+      toast({ title: 'Honorário criado, mas falhou ao gerar parcelas', description: parcelasError.message, variant: 'destructive' });
+    } else {
+      toast({ title: 'Honorário criado com sucesso!' });
+    }
     await fetchHonorarios();
     return data;
   };
