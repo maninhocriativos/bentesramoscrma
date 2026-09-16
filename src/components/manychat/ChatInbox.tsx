@@ -1713,7 +1713,7 @@ const ManyChatInboxContent = () => {
       const filePath = `manychat/${subscriberSnapshot.subscriber_id}/${fileName}`;
       const { error: uploadErr } = await supabase.storage.from("documentos").upload(filePath, fileToUpload);
       if (uploadErr) throw uploadErr;
-      const { data: signed, error: signError } = await supabase.storage.from("documentos").createSignedUrl(filePath, 60 * 60 * 24 * 30);
+      const { data: signed, error: signError } = await supabase.storage.from("documentos").createSignedUrl(filePath, 60 * 60 * 24 * 365 * 10);
       if (signError || !signed?.signedUrl) throw signError;
       // Instagram: envia via Graph API (instagram-send registra no banco; o
       // realtime substitui a mensagem otimista). image/video/audio/document
@@ -1854,7 +1854,7 @@ const ManyChatInboxContent = () => {
       if ((subscriberSnapshot as any).canal === "instagram") {
         const { error: uploadError } = await supabase.storage.from("documentos").upload(filePath, audioFile);
         if (uploadError) throw uploadError;
-        const signResult = await supabase.storage.from("documentos").createSignedUrl(filePath, 60 * 60 * 24 * 30);
+        const signResult = await supabase.storage.from("documentos").createSignedUrl(filePath, 60 * 60 * 24 * 365 * 10);
         if (signResult.error || !signResult.data?.signedUrl) throw signResult.error;
         const { data: igResult, error: igError } = await supabase.functions.invoke("instagram-send", {
           body: { subscriber_id: subscriberSnapshot.subscriber_id, type: "audio", media_url: signResult.data.signedUrl },
@@ -1877,7 +1877,7 @@ const ManyChatInboxContent = () => {
       (async () => {
         try {
           const { error: uploadError } = await supabase.storage.from("documentos").upload(filePath, audioFile);
-          const signResult = uploadError ? null : await supabase.storage.from("documentos").createSignedUrl(filePath, 60 * 60 * 24 * 30);
+          const signResult = uploadError ? null : await supabase.storage.from("documentos").createSignedUrl(filePath, 60 * 60 * 24 * 365 * 10);
           const signedUrl = signResult?.data?.signedUrl || "";
           // Sem signedUrl (upload ou sign falhou): NÃO salva a mensagem -- um registro
           // com conteúdo vazio ficava pra sempre sem player, mesmo o áudio já tendo
