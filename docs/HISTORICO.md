@@ -1712,6 +1712,49 @@ não checava nada de verdade. O comando certo é `tsc -p tsconfig.app.json`.
 Isso revelou um bug real e não percebido da sessão anterior (`edited_at`
 do Chat Interno quebrava o type-check), corrigido de passagem.
 
+### 2026-09-16 — Investigação de lentidão geral (principalmente o Chat)
+
+Usuário reportou o sistema "bastante lento hoje, principalmente o chat".
+Diagnóstico via `pg_stat_statements` do banco (não achismo — números reais):
+
+1. **Causa principal, achada e corrigida**: `zapi-webhook` fazia
+   `.eq('metadata->>message_id', ...)` (Seq Scan, sem índice de verdade
+   aproveitável) em TODA mensagem de WhatsApp que entra ou sai —
+   **503 mil chamadas, ~13,2 horas de tempo total de banco**, de longe o
+   maior consumidor de tempo de execução do banco inteiro. Já existia a
+   coluna indexada certa (`message_id_key` + trigger de sincronização)
+   desde 25/08 (fix documentado como "pela metade" na memória), mas o
+   código nunca foi atualizado pra usá-la. Corrigido em 3 pontos:
+   `zapi-webhook/index.ts` (2x) e o fallback de dedupe em `ChatInbox.tsx`.
+   Confirmado via `EXPLAIN ANALYZE`: Seq Scan (~94ms) → Index Scan (~5,5ms).
+2. **Investigação secundária** (`leads_juridicos`, ~85min acumulados no
+   relatório): a query em si já era rápida (4-11ms direto no banco) — a
+   variância enorme (mín 8ms / média 369ms / máx 5,7s) era assinatura de
+   **contenção**, não de query ruim, provavelmente efeito colateral do
+   item 1. Adicionado índice em `created_at` mesmo assim (barato, faltava
+   de verdade, evita que fique mais caro conforme a tabela cresce).
+3. **Verificação de acesso dos usuários** (pedido à parte, mesmo dia):
+   nenhum usuário bloqueado — 5 de 6 com sessão ativa/renovando na hora
+   (não confiar só em `last_sign_in_at`, que só atualiza em login novo,
+   não em refresh de token — `auth.sessions.updated_at` é o sinal
+   confiável). Único caso parado (Andrezza Mara, 2 dias sem acessar) tem
+   conta normal, sem bloqueio — não é bug, só não tentou entrar.
+4. **Achado testando o carregamento real do /chat ao vivo** (Playwright
+   logado em produção, 2 rodadas): consultas individuais sempre rápidas
+   no banco, mas variação de 300ms a 4s+ no round-trip real — sinal de
+   fila/contenção de conexão, confirmado: banco com **limite de 60
+   conexões simultâneas**, já visto 38 em uso num único teste. Usuário
+   escolheu reduzir requisições no código E checar o painel do Supabase
+   por conta própria (gráfico de conexão não dá pra ver por SQL).
+5. **Fix de código aplicado**: o widget do Chat Interno (`ChatInterno.tsx`)
+   fica montado em TODA página do sistema (não só /chat) e mantinha sua
+   própria cópia de `perfis` + seu próprio canal Realtime de presença
+   (`chat-presence-global`), duplicando exatamente o que `PresenceContext`
+   (montado uma vez, no topo do app) já mantém — 1 requisição REST + 1
+   canal websocket a mais em TODA navegação de TODA tela. Unificado pra
+   usar `usePresence().getTeamWithStatus()`. Testado ao vivo: contador
+   "online agora" e dropdown de menção (@) continuam corretos.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
