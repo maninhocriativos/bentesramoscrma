@@ -1273,6 +1273,11 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
   const StatusIcon = statusCfg.icon;
   const clienteName = clienteSelecionado?.nome
     || partes.find(p => p.tipo === 'Autor' || p.polo?.toUpperCase() === 'AT')?.nome;
+  // Mesma prioridade usada ao salvar (linha ~953: manual > lead do CRM >
+  // polo ativo) — o relatório usava só lead/parte e ignorava o campo de
+  // texto livre "nome_cliente", que é a fonte real na maioria dos processos
+  // importados sem vínculo formal a um lead.
+  const clienteNomeRelatorio = formData.nome_cliente?.trim() || clienteName || null;
 
   const infoStripVisible = !isNew && !!(
     clienteName || formData.advogado_responsavel || formData.data_distribuicao ||
@@ -2325,8 +2330,17 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
       {showRelatorio && processo && (
         <ProcessoRelatorioModal
           onClose={() => setShowRelatorio(false)}
-          processo={processo}
-          clienteNome={clienteName || null}
+          processo={{
+            ...processo,
+            numero_processo: formData.numero_processo || processo.numero_processo,
+            tribunal: formData.tribunal || processo.tribunal,
+            vara_comarca: formData.vara_comarca || processo.vara_comarca,
+            advogado_responsavel: formData.advogado_responsavel || processo.advogado_responsavel,
+            valor_causa: parseMoney(formData.valor_causa) ?? processo.valor_causa,
+            data_distribuicao: formData.data_distribuicao || processo.data_distribuicao,
+            descricao: formData.descricao || processo.descricao,
+          }}
+          clienteNome={clienteNomeRelatorio}
           statusAtual={formData.status || processo.status || ''}
           tituloAcaoAtual={formData.titulo_acao || processo.titulo_acao || ''}
           partes={partes}

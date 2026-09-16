@@ -1855,6 +1855,41 @@ confirmado por texto), troca de aba confirmando KPI certo aparecendo/sumindo
 tsconfig.app.json` sem nenhum erro novo nos arquivos tocados (erros
 pré-existentes em `usePeticoes.ts`/`ChatInbox.tsx`/etc. não relacionados).
 
+### 2026-09-16 (mesmo dia, sessão seguinte) — Relatório do Processo mostrando Cliente/Vara/Advogado vazios
+
+Usuário mandou print do "Relatório do Processo — PDF" com Cliente, Vara/Comarca
+e Advogado Responsável em branco pra um processo específico. Pediu pra
+verificar se era problema geral (não só daquele processo).
+
+**Bug real confirmado em `ProcessoModalExpanded.tsx`**: o nome do cliente
+mostrado no relatório (`clienteName`, usado por `ProcessoRelatorioModal`) só
+olhava `cliente_id` vinculado a um lead do CRM ou uma parte com tipo
+"Autor"/polo "AT" — **ignorava completamente `nome_cliente`**, o campo de
+texto livre que é a fonte real do cliente na maioria dos processos (sem
+vínculo formal a um lead). A própria função de salvar (linha ~953) já usa a
+prioridade certa (manual > lead do CRM > polo ativo) — o relatório usava a
+prioridade errada. Além disso, o relatório lia `vara_comarca`/
+`advogado_responsavel`/`valor_causa`/`tribunal`/`data_distribuicao`/
+`descricao` direto do prop `processo` (snapshot de quando o modal abriu) em
+vez do `formData` atual — só `status` e `titulo_acao` já tinham esse
+cuidado, os outros 6 campos não.
+
+**Corrigido**: `clienteNomeRelatorio` com a prioridade certa
+(`formData.nome_cliente` > lead vinculado > parte Autor), e o `processo`
+passado pro relatório agora mescla os campos do `formData` por cima do
+snapshot original.
+
+**Verificado no banco (Management API) pra medir o alcance real**: de 1.104
+processos ativos, **3 processos afetados pelo bug de verdade** (tinham
+`nome_cliente` preenchido mas ficavam com "Cliente —" no relatório — todos
+da mesma cliente, Andreia da Silva Figueiredo) e **44 processos genuinamente
+sem nenhum dado de cliente cadastrado** (incluindo o do print do usuário,
+0622854-50.2020.8.04.0001 — conferido direto no formulário: campo "Nome do
+Cliente" e "Vara/Comarca" realmente vazios, não é bug, é lacuna de
+cadastro). Testado ao vivo com Playwright usando um dos 3 processos
+afetados: relatório passou a mostrar "ANDREIA DA SILVA FIGUEIREDO" +
+Vara/Comarca + Advogado corretamente.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
