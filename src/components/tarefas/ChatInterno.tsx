@@ -1,9 +1,9 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { MessageSquare, X, Send, ChevronDown, AtSign, Bell, Paperclip, FileText, Search, Pencil, Check } from 'lucide-react';
 import { useChatInterno, decodeMencoes, decodeAnexo, encodeMencoes, type ChatAnexo } from '@/hooks/useChatInterno';
 import { useAuth } from '@/hooks/useAuth';
-import { usePerfil } from '@/hooks/usePerfil';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { usePresence } from '@/contexts/PresenceContext';
 import { useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { format, isToday, isYesterday } from 'date-fns';
@@ -189,8 +189,6 @@ export function ChatInterno() {
   const desktopBottomOffset = isChatPage ? `calc(5.5rem + ${composeExtraHeight}px)` : '1.25rem';
   const [open,         setOpen]        = useState(false);
   const [texto,        setTexto]       = useState('');
-  const [onlineUsers,  setOnlineUsers] = useState<OnlineUser[]>([]);
-  const [perfis,       setPerfis]      = useState<PerfilItem[]>([]);
   const [mencoes,      setMencoes]     = useState<MencaoInfo[]>([]);
   const [showAt,       setShowAt]      = useState(false);
   const [atQuery,      setAtQuery]     = useState('');
@@ -206,21 +204,27 @@ export function ChatInterno() {
   const { mensagens, loading, unread, enviar, editar, marcarLido, mencaoNotif, dismissMencao, setChatOpenState } =
     useChatInterno();
   const { user }    = useAuth();
-  const { perfil }  = usePerfil();
   const bottomRef   = useRef<HTMLDivElement>(null);
   const inputRef    = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch all perfis including current user — needed to resolve names when RLS blocks the join
-  const fetchPerfis = useCallback(async () => {
-    const { data } = await supabase
-      .from('perfis')
-      .select('id, nome, sobrenome')
-      .order('nome');
-    if (data) setPerfis(data as PerfilItem[]);
-  }, []);
-
-  useEffect(() => { fetchPerfis(); }, [fetchPerfis]);
+  // Time/presença já vêm do PresenceContext (montado uma vez no topo do app) —
+  // antes esse widget buscava a própria lista de perfis E mantinha seu próprio
+  // canal de presença Realtime ("chat-presence-global"), duplicando trabalho
+  // que já rodava em todo lugar já que esse widget fica montado em TODA
+  // página do sistema. Achado investigando lentidão geral relatada pelo
+  // usuário — reduz uma requisição + um canal websocket a menos por navegação
+  // em qualquer tela do CRM, não só no /chat.
+  const { getTeamWithStatus } = usePresence();
+  const team = getTeamWithStatus();
+  const perfis = useMemo<PerfilItem[]>(
+    () => team.map(m => ({ id: m.id, nome: m.nome || '', sobrenome: m.sobrenome })),
+    [team]
+  );
+  const onlineUsers = useMemo<OnlineUser[]>(
+    () => team.filter(m => m.online && m.id !== user?.id).map(m => ({ id: m.id, nome: m.fullName })),
+    [team, user?.id]
+  );
 
   // Map id → PerfilItem for O(1) name lookup when join is blocked by RLS
   const perfilById = useMemo(() => {
@@ -253,28 +257,6 @@ export function ChatInterno() {
 
     return result;
   }, [perfis, mensagens, onlineUsers, user?.id]);
-
-  // Presence channel
-  useEffect(() => {
-    if (!user?.id) return;
-    const nome = [perfil?.nome, perfil?.sobrenome].filter(Boolean).join(' ') || user.email || 'Usuário';
-    const ch = supabase.channel('chat-presence-global', { config: { presence: { key: user.id } } });
-    const syncOnline = () => {
-      const state = ch.presenceState();
-      const online: OnlineUser[] = Object.entries(state)
-        .filter(([key]) => key !== user.id)
-        .map(([, pArr]) => ({ id: (pArr[0] as any)?.userId || '', nome: (pArr[0] as any)?.nome || 'Usuário' }))
-        .filter(u => u.id);
-      setOnlineUsers(online);
-    };
-    ch.on('presence', { event: 'sync' }, syncOnline)
-      .on('presence', { event: 'join' }, syncOnline)
-      .on('presence', { event: 'leave' }, syncOnline)
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') await ch.track({ userId: user.id, nome });
-      });
-    return () => { supabase.removeChannel(ch); };
-  }, [user?.id, perfil?.nome, perfil?.sobrenome]);
 
   useEffect(() => {
     setChatOpenState(open);
