@@ -1754,6 +1754,65 @@ Diagnóstico via `pg_stat_statements` do banco (não achismo — números reais)
    canal websocket a mais em TODA navegação de TODA tela. Unificado pra
    usar `usePresence().getTeamWithStatus()`. Testado ao vivo: contador
    "online agora" e dropdown de menção (@) continuam corretos.
+6. **Upgrade de compute do Supabase**: usuário conferiu o painel (Reports →
+   Database) e confirmou RAM sustentada em 73% a semana inteira, com swap
+   ativo — subiu de `Micro` (1GB) pra `Small` (2GB) por conta própria.
+   Confirmado no banco: `max_connections` foi de 60 pra 90. Custo extra
+   líquido ~$5/mês (já coberto pelo crédito de compute do Pro Plan em
+   grande parte).
+
+### 2026-09-16 (mesmo dia, sessão seguinte) — Armazenamento secundário dos anexos do chat (R2)
+
+Respondendo pergunta do usuário ("os documentos ficam disponíveis por quanto
+tempo?"), achei um segundo bug real: anexos que A EQUIPE envia usavam link
+assinado do Supabase Storage com **30 dias** de validade (corrigido pra 10
+anos, mesmo padrão já usado no Instagram). Usuário então pediu pra manter
+esses anexos também num **armazenamento secundário**, fora do Supabase, por
+redundância — sem quebrar nada do que já funciona. Plano completo em
+`C:\Users\conta\.claude\plans\golden-napping-bear.md`.
+
+**Achado que simplificou o trabalho**: o padrão de "baixar mídia de URL
+temporária e re-hospedar" **já existia no código**, usado pro Instagram
+(`persistirMidia()` em `instagram-webhook/index.ts`) e pro checklist de
+documentos da Isa (`persistirDocumentoWhatsapp()` em `isa-auto-process`) — só
+nunca tinha sido aplicado ao chat principal do WhatsApp. O comentário do
+próprio código já registrava o gap.
+
+**Fase A — causa raiz corrigida** (usa infra que já existia, zero serviço
+novo): nova `persistirMidiaWhatsapp()` em `zapi-webhook/index.ts`, chamada
+uma única vez logo após `normalizeZapiEvent()` — documento/foto/áudio/vídeo
+recebido de cliente agora é baixado e re-hospedado no Supabase Storage
+(bucket `documentos`, prefixo `whatsapp-inbound/`), URL assinada de 10 anos,
+em vez de depender da URL temporária do Z-API/Backblaze pra sempre. Mecanismo
+testado ponta a ponta com arquivo real antes do deploy.
+
+**Fase B — Worker `chat-storage` (R2)**: novo, clonado do molde de
+upload/download do `peticoes-cloudflare` (que já usa R2 em produção). Bucket
+`chat-anexos`, rota `POST /upload`, auth por `X-Chat-Storage-Secret`. Deploy
+em `https://chat-storage.bentesramos.workers.dev`, testado ponta a ponta
+(upload, download via `wrangler r2 object get` confirmando os bytes
+batendo, 401 sem secret) — arquivo de teste apagado depois.
+
+**Fase C — job de backup em background, nunca toca no caminho ao vivo**:
+coluna `manychat_mensagens.r2_backup_key` + índice parcial pra achar rápido
+o que falta copiar; nova Edge Function `chat-anexos-backup` (molde de
+`isa-scheduler`), disparada por `pg_cron` a cada 15min, processa lotes de 50
+mensagens de mídia por vez. 16.767 mensagens de mídia represadas no
+histórico — sem pressa, zera aos poucos. **Testado disparando manualmente**:
+50 processadas, 46 com sucesso, 4 falharam (registros bem antigos, de
+janeiro/2026, formato de URL legado de antes da migração pro Z-API,
+`[https://manybot-files...]` entre colchetes — não é bug do código novo,
+só 4 casos isolados que ficam represados pra sempre, sem impacto). Baixei um
+dos áudios já copiados direto do R2 e confirmei: arquivo Opus válido, íntegro.
+
+**Decisão de arquitetura importante**: o R2 é só cópia de segurança — o chat
+continua lendo/exibindo tudo do Supabase Storage exatamente como sempre fez,
+nada mudou em `ChatInbox.tsx`. Migrar a LEITURA pro R2 de verdade (pra
+reduzir custo/latência) fica como decisão futura separada, só depois de
+validar esse backup rodando de forma confiável por um tempo. Nota honesta
+registrada no plano: o egress alto do Supabase (15TB/mês) quase certamente
+vem de tráfego de API/Realtime, não de anexo — mover anexo pro R2 não deve
+reduzir esse número de forma visível.
 
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
