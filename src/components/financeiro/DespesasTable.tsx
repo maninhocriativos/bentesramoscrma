@@ -2,7 +2,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Despesa } from '@/types/financeiro';
 import { Badge } from '@/components/ui/badge';
+import { TrendingDown } from 'lucide-react';
 import { MarcarPagamentoPopover } from './MarcarPagamentoPopover';
+import { FinanceiroEmptyState } from './FinanceiroEmptyState';
 
 interface DespesasTableProps {
   despesas: Despesa[];
@@ -12,7 +14,7 @@ interface DespesasTableProps {
 
 export function DespesasTable({ despesas, loading, onUpdateDespesa }: DespesasTableProps) {
   if (loading) return <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>;
-  if (despesas.length === 0) return <p className="text-center py-8 text-muted-foreground">Nenhuma despesa cadastrada</p>;
+  if (despesas.length === 0) return <FinanceiroEmptyState icon={TrendingDown} title="Nenhuma despesa cadastrada" subtitle='Clique em "Nova Despesa" para começar' />;
 
   return (
     <Table>

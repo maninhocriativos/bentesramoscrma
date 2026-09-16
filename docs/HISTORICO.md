@@ -1814,6 +1814,47 @@ registrada no plano: o egress alto do Supabase (15TB/mês) quase certamente
 vem de tráfego de API/Realtime, não de anexo — mover anexo pro R2 não deve
 reduzir esse número de forma visível.
 
+### 2026-09-16 (mesmo dia, sessão seguinte) — Redesign do layout do Financeiro
+
+Usuário pediu pra melhorar o layout do Financeiro. Auditoria visual (Playwright,
+7 abas + mobile) achou 5 problemas reais, usuário escolheu escopo "redesign
+completo":
+
+1. **Aba Processos sem paginação**: tabela HTML crua com todos os ~122
+   processos de uma vez, renderizando **8155px de altura**. Corrigido com
+   paginação client-side (30/página), mesmo padrão já usado em
+   `ContratosTable.tsx`/`ProcessosTable.tsx` (rodapé com Anterior/Próxima +
+   números + elipse). Página caiu pra ~2400px.
+2. **KPIs fixos duplicados em toda aba**: os mesmos 6 cards ("Carteira de
+   Processos" + "Honorários & Caixa") apareciam em TODAS as 7 abas — na aba
+   DRE isso empilhava mais 3 cards de resumo próprio, 9 cards antes de
+   qualquer conteúdo. Corrigido tornando os KPIs contextuais por aba (Tabs
+   virou controlado via `activeTab`): Carteira só na aba Processos,
+   Honorários&Caixa só em Honorários/Parcelas/Despesas, nenhum em
+   Inadimplência/DRE/Contas (cada uma já tem o resumo próprio).
+3. **Mobile quebrado**: tabela de Processos virava texto ilegível espremido a
+   400px. Adicionado fallback de cards (`md:hidden`, um card por processo com
+   borda esquerda colorida por status), modelo de `ProcessosTable.tsx`.
+   Página mobile caiu de 9609px pra 4359px.
+4. **Estilo genérico sem identidade do sistema**: cores de ícone soltas
+   (roxo/laranja/vermelho sem critério), nenhuma relação com o padrão
+   BROWN/GOLD já usado em Tarefas/Chat/Petições. Criados 2 componentes novos
+   escopados ao módulo — `FinanceiroKpiCard.tsx` (extraído do `KpiCard` de
+   `TarefasPage.tsx`: barra de 3px + chip de ícone) e `FinanceiroEmptyState.tsx`
+   (ícone + título + subtítulo, modelo do empty-state de `PeticoesPage.tsx`) —
+   e aplicados em `FinanceiroPage`, `RelatorioDREPanel`, `InadimplenciaPanel`,
+   `HonorariosTable`, `ParcelasTable`, `DespesasTable`.
+5. **Estados vazios só texto** ("Nenhuma parcela cadastrada" solto) — trocados
+   pelo `FinanceiroEmptyState` em todos os pontos acima.
+
+Puramente visual/estrutural — nenhuma migration, nenhum hook novo. Testado ao
+vivo com Playwright: paginação clicando (30→60→volta pra 1, cliente diferente
+confirmado por texto), troca de aba confirmando KPI certo aparecendo/sumindo
+(`HONORARIOS_TAB_temCarteira=0 temHonorariosCaixa=1`,
+`CONTAS_TAB_temCarteira=0 temHonorariosCaixa=0`). `npx tsc --noEmit -p
+tsconfig.app.json` sem nenhum erro novo nos arquivos tocados (erros
+pré-existentes em `usePeticoes.ts`/`ChatInbox.tsx`/etc. não relacionados).
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.

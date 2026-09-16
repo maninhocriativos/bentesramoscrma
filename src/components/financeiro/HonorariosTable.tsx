@@ -3,8 +3,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Honorario } from '@/types/financeiro';
 import { Badge } from '@/components/ui/badge';
-import { ChevronRight, ChevronDown, Loader2 } from 'lucide-react';
+import { ChevronRight, ChevronDown, Loader2, Receipt } from 'lucide-react';
 import { useParcelas } from '@/hooks/useFinanceiro';
+import { FinanceiroEmptyState } from './FinanceiroEmptyState';
 
 const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
@@ -42,7 +43,7 @@ export function HonorariosTable({ honorarios, loading }: { honorarios: Honorario
   const [expandido, setExpandido] = useState<string | null>(null);
 
   if (loading) return <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>;
-  if (honorarios.length === 0) return <p className="text-center py-8 text-muted-foreground">Nenhum honorário cadastrado</p>;
+  if (honorarios.length === 0) return <FinanceiroEmptyState icon={Receipt} title="Nenhum honorário cadastrado" subtitle='Clique em "Novo Honorário" para começar' />;
 
   return (
     <Table>

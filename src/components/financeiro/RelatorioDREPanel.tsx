@@ -9,6 +9,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { DateRangePicker, DateRange, defaultDateRange } from '@/components/shared/DateRangePicker';
+import { FinanceiroKpiCard } from './FinanceiroKpiCard';
+import { FinanceiroEmptyState } from './FinanceiroEmptyState';
 
 const BROWN  = '#3d2b1f';
 const GOLD   = '#c9a96e';
@@ -115,31 +117,26 @@ export function RelatorioDREPanel() {
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Card className="border-border/60 shadow-sm">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Receita Realizada</CardTitle>
-                <TrendingUp className="h-4 w-4 text-emerald-500" />
-              </CardHeader>
-              <CardContent><div className="text-2xl font-bold text-emerald-600">{fmt(receitaTotal)}</div></CardContent>
-            </Card>
-            <Card className="border-border/60 shadow-sm">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Despesa Realizada</CardTitle>
-                <TrendingDown className="h-4 w-4 text-red-500" />
-              </CardHeader>
-              <CardContent><div className="text-2xl font-bold text-red-600">{fmt(despesaTotal)}</div></CardContent>
-            </Card>
-            <Card className="border-border/60 shadow-sm">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Resultado</CardTitle>
-                <Scale className="h-4 w-4" style={{ color: resultado >= 0 ? '#16a34a' : '#dc2626' }} />
-              </CardHeader>
-              <CardContent><div className="text-2xl font-bold" style={{ color: resultado >= 0 ? '#16a34a' : '#dc2626' }}>{fmt(resultado)}</div></CardContent>
-            </Card>
+            <FinanceiroKpiCard label="Receita Realizada" value={fmt(receitaTotal)} icon={TrendingUp} accent="#16a34a" />
+            <FinanceiroKpiCard label="Despesa Realizada" value={fmt(despesaTotal)} icon={TrendingDown} accent="#dc2626" />
+            <FinanceiroKpiCard
+              label="Resultado"
+              value={fmt(resultado)}
+              icon={Scale}
+              accent={resultado >= 0 ? '#16a34a' : '#dc2626'}
+            />
           </div>
 
           {porMes.length === 0 ? (
-            <Card className="border-border/60 shadow-sm"><CardContent className="py-12 text-center text-muted-foreground">Nenhuma receita ou despesa paga nesse período.</CardContent></Card>
+            <Card className="border-border/60 shadow-sm">
+              <CardContent>
+                <FinanceiroEmptyState
+                  icon={Scale}
+                  title="Nenhuma receita ou despesa paga nesse período"
+                  subtitle="Ajuste o intervalo de datas acima para ver outro período"
+                />
+              </CardContent>
+            </Card>
           ) : (
             <>
               <Card className="border-border/60 shadow-sm">

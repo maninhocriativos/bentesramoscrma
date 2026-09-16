@@ -2,11 +2,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Parcela } from '@/types/financeiro';
 import { Badge } from '@/components/ui/badge';
+import { CalendarClock } from 'lucide-react';
 import { MarcarPagamentoPopover } from './MarcarPagamentoPopover';
+import { FinanceiroEmptyState } from './FinanceiroEmptyState';
 
 export function ParcelasTable({ parcelas, loading, onUpdateParcela }: { parcelas: Parcela[]; loading: boolean; onUpdateParcela: (id: string, updates: Partial<Parcela>) => Promise<boolean> }) {
   if (loading) return <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>;
-  if (parcelas.length === 0) return <p className="text-center py-8 text-muted-foreground">Nenhuma parcela cadastrada</p>;
+  if (parcelas.length === 0) return <FinanceiroEmptyState icon={CalendarClock} title="Nenhuma parcela cadastrada" subtitle="Parcelas são geradas automaticamente ao criar um honorário" />;
 
   const statusColor = (status: string) => {
     if (status === 'Pago') return 'bg-green-100 text-green-800';

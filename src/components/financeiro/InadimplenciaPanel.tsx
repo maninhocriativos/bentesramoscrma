@@ -1,10 +1,14 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { AlertTriangle, Users, Clock, DollarSign, Loader2 } from 'lucide-react';
+import { AlertTriangle, Users, Clock, DollarSign, Loader2, CheckCircle2 } from 'lucide-react';
 import { useInadimplencia, faixaAtraso } from '@/hooks/useInadimplencia';
 import { useParcelas } from '@/hooks/useFinanceiro';
 import { MarcarPagamentoPopover } from './MarcarPagamentoPopover';
+import { FinanceiroKpiCard } from './FinanceiroKpiCard';
+import { FinanceiroEmptyState } from './FinanceiroEmptyState';
+
+const BROWN = '#3d2b1f';
 
 const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
@@ -26,41 +30,17 @@ export function InadimplenciaPanel() {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="border-red-200 shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total em Atraso</CardTitle>
-            <DollarSign className="h-4 w-4 text-red-500" />
-          </CardHeader>
-          <CardContent><div className="text-2xl font-bold text-red-600">{fmt(totalEmAtraso)}</div></CardContent>
-        </Card>
-        <Card className="border-border/60 shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Parcelas Atrasadas</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-amber-500" />
-          </CardHeader>
-          <CardContent><div className="text-2xl font-bold">{parcelas.length}</div></CardContent>
-        </Card>
-        <Card className="border-border/60 shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Clientes Inadimplentes</CardTitle>
-            <Users className="h-4 w-4 text-foreground" />
-          </CardHeader>
-          <CardContent><div className="text-2xl font-bold">{clientesDistintos}</div></CardContent>
-        </Card>
-        <Card className="border-border/60 shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Atraso Médio</CardTitle>
-            <Clock className="h-4 w-4 text-foreground" />
-          </CardHeader>
-          <CardContent><div className="text-2xl font-bold">{atrasoMedio} dias</div></CardContent>
-        </Card>
+        <FinanceiroKpiCard label="Total em Atraso" value={fmt(totalEmAtraso)} icon={DollarSign} accent="#dc2626" />
+        <FinanceiroKpiCard label="Parcelas Atrasadas" value={String(parcelas.length)} icon={AlertTriangle} accent="#d97706" />
+        <FinanceiroKpiCard label="Clientes Inadimplentes" value={String(clientesDistintos)} icon={Users} accent={BROWN} />
+        <FinanceiroKpiCard label="Atraso Médio" value={`${atrasoMedio} dias`} icon={Clock} accent={BROWN} />
       </div>
 
       <Card className="border-border/60 shadow-sm">
         <CardHeader><CardTitle>Parcelas em Atraso</CardTitle></CardHeader>
         <CardContent>
           {parcelas.length === 0 ? (
-            <p className="text-center py-8 text-muted-foreground">Nenhuma parcela em atraso — tudo em dia.</p>
+            <FinanceiroEmptyState icon={CheckCircle2} title="Tudo em dia" subtitle="Nenhuma parcela em atraso no momento" />
           ) : (
             <Table>
               <TableHeader>
