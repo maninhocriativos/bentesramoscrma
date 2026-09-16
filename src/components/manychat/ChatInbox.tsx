@@ -1627,7 +1627,7 @@ const ManyChatInboxContent = () => {
         const { data: savedMsg, error: insertErr } = await supabase.from("manychat_mensagens" as any).insert({ subscriber_id: subscriberSnapshot.subscriber_id, subscriber_nome: subscriberSnapshot.nome, canal: "whatsapp", conteudo: content, tipo: mediaType || "text", direcao: "saida", lead_id: subscriberSnapshot.lead_id, metadata: { sent_via: "chat_interface", zapi_status: zapiResult?.success ? "success" : "error", ...(msgId && { message_id: msgId }), ...(fileName && { file_name: fileName }), sent_by_id: user?.id || null, sent_by_nome: fullName || null } } as any).select().single();
         if (insertErr) {
           if (insertErr.code === "23505" && msgId) {
-            const { data: existingMsg } = await supabase.from("manychat_mensagens" as any).select("*").eq("metadata->>message_id", msgId).maybeSingle();
+            const { data: existingMsg } = await supabase.from("manychat_mensagens" as any).select("*").eq("message_id_key", msgId).maybeSingle();
             if (existingMsg) {
               const realMsg = existingMsg as Message;
               dedupKeysRef.current.add(getMessageDedupeKey(realMsg));

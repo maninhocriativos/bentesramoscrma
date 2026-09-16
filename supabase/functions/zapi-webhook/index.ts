@@ -847,7 +847,7 @@ serve(async (req: Request) => {
         const { data: existingOutbound } = await supabase
           .from('manychat_mensagens')
           .select('id')
-          .eq('metadata->>message_id', normalized.messageId)
+          .eq('message_id_key', normalized.messageId)
           .maybeSingle();
         
         if (existingOutbound) {
@@ -878,7 +878,7 @@ serve(async (req: Request) => {
         const { data: existingMsg } = await supabase
           .from('manychat_mensagens')
           .select('id')
-          .eq('metadata->>message_id', normalized.messageId)
+          .eq('message_id_key', normalized.messageId)
           .maybeSingle();
         
         if (existingMsg) {
