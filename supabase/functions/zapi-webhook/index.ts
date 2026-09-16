@@ -447,7 +447,22 @@ serve(async (req: Request) => {
     // Normalizar evento Z-API para formato interno PRIMEIRO
     // (precisamos da mensagem para detectar tráfego pelo conteúdo)
     const normalized = normalizeZapiEvent(body);
-    
+
+    // Mídia recebida (documento/imagem/áudio/vídeo): baixa da URL temporária
+    // do Z-API e re-hospeda no nosso Storage ANTES de qualquer uso —
+    // normalized.mediaUrl/message ficam permanentes daqui pra frente pro
+    // resto da função inteira (os dois blocos de insert, a análise da Isa
+    // etc.), sem precisar repetir a chamada em cada lugar que usa a URL.
+    if (
+      normalized.mediaUrl &&
+      (normalized.messageType === 'audio' || normalized.messageType === 'image' ||
+       normalized.messageType === 'document' || normalized.messageType === 'video')
+    ) {
+      const urlPermanente = await persistirMidiaWhatsapp(supabase, normalized.mediaUrl, normalized.messageType, normalized.messageId);
+      normalized.mediaUrl = urlPermanente;
+      normalized.message = urlPermanente;
+    }
+
     // ============================================
     // DETECTAR TRÁFEGO PAGO (instância, metadados OU mensagem do anúncio)
     // ============================================
@@ -1916,5 +1931,58 @@ async function logIntegration(
     });
   } catch (e) {
     console.error('[Log] Error logging integration:', e);
+  }
+}
+
+// Baixa a mídia recebida via WhatsApp (URL temporária do Z-API, hospedada no
+// Backblaze deles) e guarda permanentemente no nosso Storage, devolvendo a
+// URL assinada de longa duração. Mesmo padrão já usado em persistirMidia()
+// (instagram-webhook/index.ts) — só o Instagram fazia isso até agora; achado
+// investigando reclamação de "documento sumiu" no chat (2026-09-16), sem
+// isso a mensagem depende de a URL do provedor continuar válida pra sempre,
+// o que não é garantido. Falha aqui não deve travar o webhook — devolve a
+// URL original em caso de erro (melhor que nada).
+async function persistirMidiaWhatsapp(supabase: any, rawUrl: string, tipo: string, messageId: string | null): Promise<string> {
+  try {
+    const resp = await fetch(rawUrl, { signal: AbortSignal.timeout(20000) });
+    if (!resp.ok) return rawUrl;
+    const ct = (resp.headers.get('content-type') || '').toLowerCase();
+    const buf = new Uint8Array(await resp.arrayBuffer());
+    let ext = ({ image: 'jpg', video: 'mp4', audio: 'ogg', document: 'bin' } as Record<string, string>)[tipo] || 'bin';
+    if (ct.includes('png')) ext = 'png';
+    else if (ct.includes('jpeg') || ct.includes('jpg')) ext = 'jpg';
+    else if (ct.includes('webp')) ext = 'webp';
+    else if (ct.includes('gif')) ext = 'gif';
+    else if (ct.includes('mp4')) ext = 'mp4';
+    else if (ct.includes('ogg') || ct.includes('opus')) ext = 'ogg';
+    else if (ct.includes('mpeg') || ct.includes('mp3')) ext = 'mp3';
+    else if (ct.includes('pdf')) ext = 'pdf';
+    else if (ct.includes('wordprocessingml') || ct.includes('msword')) ext = 'docx';
+    else if (ct.includes('spreadsheetml') || ct.includes('ms-excel')) ext = 'xlsx';
+    else if (ct.includes('presentationml') || ct.includes('ms-powerpoint')) ext = 'pptx';
+    else if (ct.includes('csv')) ext = 'csv';
+    else if (ct.includes('plain')) ext = 'txt';
+    else if (ct.includes('zip')) ext = 'zip';
+    else if (ct.includes('aac')) ext = 'aac';
+    else if (ct.includes('m4a') || ct.includes('x-m4a')) ext = 'm4a';
+    const safe = (messageId || crypto.randomUUID()).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const path = `whatsapp-inbound/${safe}.${ext}`;
+    const { error } = await supabase.storage.from('documentos').upload(path, buf, {
+      contentType: ct || 'application/octet-stream',
+      upsert: true,
+    });
+    if (error) {
+      console.error('[Z-API Webhook] persistirMidiaWhatsapp: upload falhou:', error.message);
+      return rawUrl;
+    }
+    // URL assinada de longa duração (10 anos) — bucket 'documentos' é
+    // privado, a pública dá 400. Mesma duração já usada nos outros anexos
+    // do chat (ChatInbox.tsx) e no Instagram, depois do fix de 2026-09-16.
+    const { data: signed } = await supabase.storage.from('documentos')
+      .createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
+    return signed?.signedUrl || rawUrl;
+  } catch (e) {
+    console.error('[Z-API Webhook] persistirMidiaWhatsapp erro:', e);
+    return rawUrl;
   }
 }
