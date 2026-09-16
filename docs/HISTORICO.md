@@ -1659,6 +1659,59 @@ Testado ao vivo com Playwright: vinculou de verdade uma tarefa real sem
 processo, confirmou aparecendo no modal E no card atrás dele, revertido
 (`processo_id = null`) depois pra não deixar dado de teste em produção.
 
+### 2026-09-15 — Financeiro: contas bancárias, categorias, inadimplência, DRE/DFC
+
+Usuário pediu pra pesquisar o financeiro do AdvBox (concorrente/sistema
+anterior) como referência de melhoria; escolheu implementar as 4 coisas
+que faltavam aqui: contas bancárias, categorias, inadimplência, DRE/DFC.
+Plano completo em `C:\Users\conta\.claude\plans\golden-napping-bear.md`
+(substituiu o plano anterior da Donn@, já concluído/documentado à parte).
+
+**Achado real que motivou um 5º item** (aprovado pelo usuário): honorário
+parcelado nunca gerava as parcelas de verdade — só o número ficava salvo
+no contrato, sem nenhuma linha em `parcelas` pra cobrar/marcar como paga.
+Sem isso, inadimplência e DRE nasceriam sem dado nenhum. Corrigido com
+`gerarParcelasHonorario()` (entrada vence na data do contrato, saldo
+dividido mensalmente) plugado nos 2 pontos que criam honorário
+(`HonorarioModal.tsx` e `ContratoFechadoModal.tsx` — esse último nem
+capturava o `id` do insert, corrigido junto).
+
+**9 fases, cada uma testada ao vivo e commitada em separado:**
+1. Migration `contas_bancarias` + `categorias_financeiras` (seed dos 9
+   tipos hoje hardcoded em `TIPOS_DESPESA` + 5 categorias de receita,
+   backfill retroativo de despesas existentes por nome).
+2. Hooks `useCategoriasFinanceiras`/`useContasBancarias` (CRUD + saldo por
+   conta calculado em memória).
+3. Aba nova "Contas & Categorias" em `FinanceiroPage.tsx` (2 gerenciadores
+   CRUD, molde `ZApiInstancesManager.tsx`; excluir vira "Desativar" pra
+   não desclassificar histórico do DRE).
+4. `HonorarioModal`/`DespesaModal` ganham Select de categoria real —
+   **bug achado testando ao vivo**: categoria criada no gerenciador não
+   aparecia nos modais sem F5 (cada um tinha sua própria instância do
+   hook, sem revalidar ao abrir) — corrigido refazendo o fetch toda vez
+   que o modal abre.
+5. Geração automática de parcelas (acima).
+6. Conta bancária no fluxo de pagamento — `MarcarPagamentoPopover` novo
+   (data + conta) substitui o botão "Pagar" de 1 clique em
+   `ParcelasTable`; `DespesasTable` ganha ação de pagar do zero (não
+   existia nenhuma antes).
+7. Painel de Inadimplência — `useInadimplencia` compara por DIA
+   (`.lt('data_vencimento', hojeISO)`), nunca por `status` (nunca escrito
+   em lugar nenhum) nem por `new Date() < new Date()` (mesma classe de
+   bug já corrigida em Intimações/Agenda). Fix embutido: o KPI "A Receber"
+   principal tinha esse mesmo bug de timestamp, corrigido junto.
+8. Relatório DRE/Fluxo de Caixa — `DateRangePicker` novo (extraído do
+   padrão duplicado em `GerarRelatorioLeadsModal`/`ExportTrafegoModal`),
+   gráficos recharts na paleta do resto do sistema.
+9. `HonorariosTable` ganha linha expansível mostrando as parcelas de cada
+   contrato (`useParcelas(honorarioId)` já existia, nunca era usado).
+
+**Also fixed**: `tsc -p tsconfig.json` é um no-op nesse projeto (`files:
+[]`, só `references`) — todo typecheck rodado assim na sessão anterior
+não checava nada de verdade. O comando certo é `tsc -p tsconfig.app.json`.
+Isso revelou um bug real e não percebido da sessão anterior (`edited_at`
+do Chat Interno quebrava o type-check), corrigido de passagem.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
