@@ -2174,6 +2174,60 @@ mudança em funções críticas de negócio (WhatsApp, assinatura
 eletrônica, agenda), contrariando o pedido explícito de "sem quebrar
 nada"; decisão de prioridade/escopo fica com o usuário.
 
+### 2026-09-17 (mesmo dia, sessão seguinte) — Autenticando as edge functions críticas, sem quebrar nada (Fases 1-2 de 4)
+
+Usuário pediu explicitamente pra corrigir mais, "pois o sistema está em
+pleno funcionamento operacional" — plano em modo Plan, aprovado. Antes de
+escrever qualquer linha, rodei 3 agentes em paralelo pra mapear
+EXATAMENTE quem chama cada função hoje (frontend logado, outra edge
+function, cron, ou serviço externo) — sem isso, "proteger" uma função
+podia quebrar quem já a usa legitimamente.
+
+**Achado que definiu o desenho**: `supabase.functions.invoke()` do
+navegador já anexa o JWT do usuário logado sozinho; chamado de outra
+edge function com client criado com a service-role key, já anexa a
+service-role key. Ou seja, quase toda chamada legítima já manda algo
+válido — só faltava checar do lado de quem recebe. E `verify_jwt=true`
+(a flag do Supabase) sozinha NÃO resolve: valida "é um JWT assinado",
+o que inclui a **anon key**, pública, no bundle do site — não distingue
+usuário logado de qualquer um com F12 aberto.
+
+**Padrão aplicado**: novo `_shared/auth-guard.ts`
+(`requireStaffOrInternal`) — aceita a service-role key (outra edge
+function), um secret interno dedicado opcional (pra cron), ou
+`supabaseAdmin.auth.getUser(jwt)` confirmando usuário real logado
+(mesmo padrão já usado em `admin-delete-user`/`admin-approve-invite`).
+`verify_jwt` do `config.toml` não foi tocado — fica `false`, proteção
+100% em código, igual `zapi-webhook`/`push-send` já fazem.
+
+**Fase 1 (piloto)**: `send-invite-email`. Testado com curl: sem auth →
+401; com a anon key pública → 401 também (não bastava só "ter algum
+token"); com JWT real de usuário logado → passou, chegou na Resend de
+verdade (erro 400 foi da Resend rejeitando `example.com` como domínio
+de teste, não da nossa checagem).
+
+**Fase 2 (8 funções, nenhum caller precisou mudar)**: `instagram-send`,
+`ai-chat`, `isa-system-data`, `isa-actions`, `isa-escritorio-reply`,
+`zapi-send`, `consulta-processos` — todas já tinham 100% dos callers
+reais mandando JWT de usuário ou service-role key. Testado: as 7 sem
+auth → 401; com a service-role key (simulando as outras edge functions
+que já chamam assim) → `consulta-processos`/`isa-actions`/`zapi-send`
+passaram; com JWT real de usuário → `ai-chat` chegou até a OpenAI de
+verdade (deu erro de crédito esgotado da OpenAI — problema operacional
+separado, não da nossa checagem).
+
+**Descoberta lateral útil**: esse projeto Supabase já migrou pro novo
+formato de chave (`sb_secret_...`/`sb_publishable_...`), não é mais só
+a chave legada em JWT (`eyJ...`). `Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')`
+hoje resolve pro formato novo — testei primeiro com a chave legada por
+engano e levei um 401 que não era bug, era eu testando com a chave
+errada. Código de produção não foi afetado (todo mundo já lê via
+`Deno.env.get()`, nunca hardcoded).
+
+Faltam Fase 3 (calendar-sync/drive-sync/campaign-optin-dispatch — cron
+usa a anon key hoje, precisa de secret dedicado + migration nova) e
+Fase 4 (zapsign split action/webhook + facebook-leadads branch sync).
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
