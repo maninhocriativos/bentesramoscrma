@@ -2003,6 +2003,44 @@ funciona, Esc agora fecha o modal (não fechava antes, bônus), e o modal de
 edição por trás fica corretamente bloqueado enquanto o relatório está
 aberto (antes ficava "furado").
 
+### 2026-09-17 (mesmo dia, sessão seguinte) — Movimentações travadas no passado + loop infinito nos Contatos
+
+Usuário testou de novo e reportou 2 problemas novos: "atualizações não
+estão sendo puxadas... nem o valor da ação" e "os contatos não aparecem"
+(print mostrando "Carregando..." preso).
+
+**Bug real #1 — movimentações nunca alcançavam as mais recentes**: em
+`normalizarEscavador()`/`normalizarDataJud()` (`consulta-processos/index.ts`),
+o array de movimentações era **cortado nos primeiros 100 ANTES de ordenar
+por data**. A fonte (DataJud, hoje quase exclusiva — 1100 dos 1106
+processos ativos, Escavador abandonado) devolve do mais antigo pro mais
+novo; cortar direto travava qualquer processo com mais de 100
+movimentações históricas numa data antiga pra sempre, não importa quantas
+vezes ressincronizasse (confirmado: processo ativo desde 2022 com
+`sync_error_count=0` e `ultima_consulta_api_at` de HOJE, mas parado em
+31/12/2025). Corrigido ordenando por data desc ANTES do corte, nas duas
+funções de normalização.
+
+`valor_causa` vazio nesse mesmo processo: DataJud genuinamente não retorna
+esse campo pra esse caso (2º processo diferente confirmado com o mesmo
+gap) — não achei evidência de bug de código aqui, parece limitação real
+da fonte gratuita.
+
+**Bug real #2 — "Contatos com o Cliente" em loop infinito de requisição**:
+`ProcessoRelatorioModal.tsx` tinha `contatosLoading` na lista de
+dependências do `useEffect` que busca os contatos. Como ninguém no
+sistema nunca registrou um "Contato Processo" (confirmado: 62.455 linhas
+na tabela `interacoes`, 10 tipos distintos, nenhum é esse), a resposta
+vem sempre vazia — `setContatosLoading(false)` ao final do fetch mudava
+uma dependência, o efeito rodava de novo, a guarda (`contatos.length > 0`)
+não travava porque o array continuava vazio, e disparava outro fetch —
+sem parar, várias vezes por segundo (confirmado via rede: 8+ requisições
+idênticas em 4 segundos). Isso provavelmente também explica o "design
+estranho, sem espaçamento" reportado — o componente rerenderizando sem
+parar dá exatamente essa impressão de instabilidade visual. Corrigido
+trocando a guarda por uma flag `contatosFetched` dedicada (busca uma vez,
+marca como feito, nunca mais dispara de novo pro mesmo processo/modal).
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.

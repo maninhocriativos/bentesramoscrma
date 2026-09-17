@@ -177,11 +177,15 @@ function normalizarEscavador(data: any, cnj: string): any {
     return { nome: p.nome || p.pessoa?.nome || 'Desconhecido', tipo: tipoNorm, polo: poloNorm, tipoPessoa: p.tipo_pessoa || 'FISICA', documento: p.cpf || p.cnpj || null, advogados: (p.advogados || []).map((adv: any) => ({ nome: adv.nome, oab: adv.oabs?.[0] ? `OAB/${adv.oabs[0].uf || ''} ${adv.oabs[0].numero || ''}`.trim() : adv.oab || null })) };
   });
   const rawMovs = data._movimentacoes || fonteTribunal?.movimentacoes || data?.movimentacoes || [];
-  const movimentos = rawMovs.slice(0, 100).map((m: any) => {
+  // Ordena por data ANTES de cortar em 100 — a fonte costuma devolver do
+  // mais antigo pro mais novo, então cortar direto ficava sempre com as
+  // movimentações mais VELHAS em processos com histórico longo, nunca
+  // alcançando as mais recentes por mais vezes que ressincronizasse.
+  const movimentos = rawMovs.map((m: any) => {
     let rawDate = m.data || m.data_hora || new Date().toISOString();
     if (typeof rawDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawDate.trim())) rawDate = rawDate.trim() + 'T00:00:00Z';
     return { dataHora: formatarData(rawDate), dataHoraRaw: rawDate, nome: m.classificacao_predita?.nome || m.titulo || m.tipo_movimento || m.conteudo || m.descricao || 'Movimentação', complemento: m.conteudo || m.complemento || m.descricao_complementar || null, codigo: m.codigo || null };
-  });
+  }).sort((a, b) => new Date(b.dataHoraRaw).getTime() - new Date(a.dataHoraRaw).getTime()).slice(0, 100);
   let status = 'Em Andamento';
   const statusPredito = fonteTribunal?.status_predito || data?.status_predito;
   if (statusPredito === 'INATIVO' || statusPredito === 'BAIXADO') status = 'Arquivado';
@@ -215,7 +219,11 @@ function normalizarDataJud(data: any, cnj: string): any {
   if (data?.polo && typeof data.polo === 'object') { const poloObj = data.polo as Record<string, unknown>; rawPartes.push(...asArray<any>(poloObj.ativo).map((p) => ({ ...p, __polo: 'AT', __tipo: 'Autor' }))); rawPartes.push(...asArray<any>(poloObj.passivo).map((p) => ({ ...p, __polo: 'PA', __tipo: 'Réu' }))); rawPartes.push(...asArray<any>(poloObj.outros).map((p) => ({ ...p, __polo: 'OUTRO' }))); }
   const partes = rawPartes.map((p: any) => { if (!p) return null; const nome = typeof p === 'string' ? p : p.nome || p.nomeCompleto || p.pessoa?.nome || 'Desconhecido'; const documento = typeof p === 'object' ? p.cpf || p.cnpj || p.cpfCnpj || p.documento || null : null; const polo = normalizePolo(p.polo ?? p.__polo ?? p.poloParte ?? p.poloProcessual); let tipo = (typeof p === 'object' ? (p.tipo || p.tipoParte || p.qualificacao || p.__tipo) : null) || 'Parte'; if (tipo === 'Parte') { if (polo === 'AT') tipo = 'Autor'; else if (polo === 'PA') tipo = 'Réu'; } const tipoPessoa = p.tipoPessoa || p.tipo_pessoa || (documento ? String(documento).replace(/\D/g, '').length > 11 ? 'JURIDICA' : 'FISICA' : 'FISICA'); return { nome, tipo, polo, tipoPessoa, documento, advogados: normalizeAdvogados(p) }; }).filter(Boolean);
   const rawMovimentos = asArray<any>(data?.movimentos).length ? asArray<any>(data.movimentos) : asArray<any>(data?.movimentacoes);
-  const movimentos = rawMovimentos.slice(0, 100).map((m: any) => { const dataHoraRaw = toIsoIfPossible(m?.dataHora ?? m?.data ?? m?.data_movimento); const comp = m?.complemento || (() => { const comps = asArray<any>(m?.complementosTabelados); if (comps.length === 0) return null; return comps.map((c) => c?.nome || c?.descricao || c?.valor).filter(Boolean).join('; ') || null; })(); return { dataHora: formatarData(dataHoraRaw), dataHoraRaw, nome: m?.nome || m?.movimentoNome || m?.descricao || 'Movimentação', complemento: comp, codigo: m?.codigo || m?.codigoMovimento || m?.codigoNacional || null }; });
+  // Ordena por data ANTES de cortar em 100 — mesmo motivo do normalizarEscavador
+  // acima: o DataJud costuma devolver do mais antigo pro mais novo, então
+  // cortar direto travava processos de histórico longo numa data antiga
+  // pra sempre, mesmo ressincronizando.
+  const movimentos = rawMovimentos.map((m: any) => { const dataHoraRaw = toIsoIfPossible(m?.dataHora ?? m?.data ?? m?.data_movimento); const comp = m?.complemento || (() => { const comps = asArray<any>(m?.complementosTabelados); if (comps.length === 0) return null; return comps.map((c) => c?.nome || c?.descricao || c?.valor).filter(Boolean).join('; ') || null; })(); return { dataHora: formatarData(dataHoraRaw), dataHoraRaw, nome: m?.nome || m?.movimentoNome || m?.descricao || 'Movimentação', complemento: comp, codigo: m?.codigo || m?.codigoMovimento || m?.codigoNacional || null }; }).sort((a, b) => new Date(b.dataHoraRaw).getTime() - new Date(a.dataHoraRaw).getTime()).slice(0, 100);
   const classeNome = data.classe?.nome || data.classeProcessual?.nome || data.classeProcessual || 'Processo';
   const classeCodigo = data.classe?.codigo || data.classeProcessual?.codigo;
   const assuntos = asArray<any>(data.assuntos).map((a: any) => ({ nome: typeof a === 'string' ? a : a?.nome || a?.descricao || String(a), codigo: a?.codigo ? String(a.codigo) : undefined }));

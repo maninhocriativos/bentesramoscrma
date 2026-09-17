@@ -52,6 +52,7 @@ export function ProcessoRelatorioModal({ onClose, processo, clienteNome, statusA
   const [generating, setGenerating] = useState(false);
   const [contatos, setContatos] = useState<ContatoRegistro[]>([]);
   const [contatosLoading, setContatosLoading] = useState(false);
+  const [contatosFetched, setContatosFetched] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
   const toggleSecao = (k: SecaoKey) => setSecoesAtivas(prev => {
@@ -62,14 +63,22 @@ export function ProcessoRelatorioModal({ onClose, processo, clienteNome, statusA
 
   // Busca os contatos só quando a seção é marcada (evita 1 query a mais
   // sempre que o modal abre, se ninguém for usar essa seção).
+  //
+  // contatosFetched (não contatos.length) é a guarda certa aqui: usar
+  // `contatosLoading` na lista de dependências virava loop infinito — ao
+  // terminar o fetch, `setContatosLoading(false)` mudava uma dependência,
+  // o efeito rodava de novo, e como a resposta vem sempre vazia (ninguém
+  // nunca cadastrou um "Contato Processo" no banco), `contatos.length`
+  // continuava 0 e a guarda deixava passar de novo — buscando sem parar,
+  // em rajada, e a UI nunca saía de "Carregando...".
   useEffect(() => {
-    if (!secoesAtivas.has('contatos') || contatos.length > 0 || contatosLoading) return;
+    if (!secoesAtivas.has('contatos') || contatosFetched) return;
     setContatosLoading(true);
     supabase.from('interacoes').select('id, resumo, data_interacao')
       .eq('processo_id', processo.id).eq('tipo', 'Contato Processo')
       .order('data_interacao', { ascending: false })
-      .then(({ data }) => { setContatos((data || []) as ContatoRegistro[]); setContatosLoading(false); });
-  }, [secoesAtivas, processo.id, contatos.length, contatosLoading]);
+      .then(({ data }) => { setContatos((data || []) as ContatoRegistro[]); setContatosLoading(false); setContatosFetched(true); });
+  }, [secoesAtivas, processo.id, contatosFetched]);
 
   const totalHonorarios = useMemo(() => honorarios.reduce((acc, h) => acc + (h.valor_total || 0), 0), [honorarios]);
   const totalDespesas = useMemo(() => despesas.reduce((acc, d) => acc + (d.valor || 0), 0), [despesas]);
