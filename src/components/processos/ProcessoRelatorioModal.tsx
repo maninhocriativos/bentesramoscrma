@@ -125,10 +125,15 @@ export function ProcessoRelatorioModal({ onClose, processo, clienteNome, statusA
       onClick={onClose}
     >
       <div
-        style={{ background: '#faf7f2', borderRadius: 20, width: '100%', maxWidth: 860, boxShadow: '0 40px 100px rgba(20,10,0,0.45)', overflow: 'hidden' }}
+        style={{ background: '#faf7f2', borderRadius: 20, width: '100%', maxWidth: 860, boxShadow: '0 40px 100px rgba(20,10,0,0.45)' }}
         onClick={e => e.stopPropagation()}
       >
-        <div style={{ background: 'linear-gradient(135deg, #1e1008, #3d2010)', padding: '16px 22px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        {/* Sem overflow:hidden no card: quando um ancestral com border-radius +
+            overflow:hidden envolve um filho com overflow-y:auto, o Chromium
+            recorta/quebra o hit-test da barra de rolagem nativa do filho —
+            dá pra ver a barra, mas arrastar não move nada. Em vez disso, cada
+            seção que toca uma borda arredonda só a própria ponta. */}
+        <div style={{ background: 'linear-gradient(135deg, #1e1008, #3d2010)', padding: '16px 22px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTopLeftRadius: 20, borderTopRightRadius: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <FileText size={18} style={{ color: '#c9943a' }} />
             <span style={{ color: '#fff', fontWeight: 800, fontSize: 15 }}>Relatório do Processo — PDF</span>
@@ -164,7 +169,7 @@ export function ProcessoRelatorioModal({ onClose, processo, clienteNome, statusA
         </div>
 
         {/* Preview / conteúdo imprimível */}
-        <div style={{ maxHeight: '60vh', overflowY: 'auto', padding: '16px' }}>
+        <div style={{ maxHeight: '60vh', overflowY: 'auto', padding: '16px', borderBottomLeftRadius: 20, borderBottomRightRadius: 20 }}>
           <div ref={printRef} style={{ background: '#ffffff', fontFamily: "'Georgia', 'Times New Roman', serif", width: '100%' }}>
 
             {/* Header */}

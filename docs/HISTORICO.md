@@ -1921,6 +1921,44 @@ não sofrem esse bug agora. **Se algum dia passarem a ser abertos de dentro
 de um Dialog, vão ter o mesmo problema** — aplicar o mesmo
 `pointerEvents: 'auto'` nesse momento.
 
+### 2026-09-17 — Barra de rolagem do relatório não arrastava (mesmo dia do fix acima, sessão seguinte)
+
+Usuário confirmou, depois de perguntado: o problema era especificamente
+**arrastar a barra de rolagem com o mouse** (não a rodinha) — a barrinha
+aparecia normal mas não se movia.
+
+**Investigação**: testei via `document.elementFromPoint` de novo (mesma
+técnica do bug anterior) e confirmei que `pointer-events` estava OK em toda
+a cadeia. Rastreei o algoritmo do `react-remove-scroll` (dependência do
+Radix `Dialog` que trava o scroll do body) direto no código-fonte
+(`node_modules/react-remove-scroll/dist/es2015/handleScroll.js`) e
+confirmei que ele NÃO deveria bloquear esse caso (a área tem bastante
+espaço pra rolar). **Tentei reproduzir arrastar/rodinha via Playwright e
+não consegui confiar no resultado** — o `mouse.wheel()` do Playwright não
+moveu `scrollTop` nem numa área de rolagem qualquer do app SEM nenhum modal
+aberto (baseline também travado em 0), ou seja, a ferramenta de simulação
+não funciona nesse ambiente pra esse tipo de interação — não dava pra
+confirmar nem descartar o bug só com isso.
+
+**Hipótese aplicada (não 100% confirmada por teste automatizado, mas de
+baixo risco)**: o card do relatório tinha `overflow: 'hidden'` +
+`borderRadius: 20` no elemento PAI, com a área rolável (`overflowY:'auto'`)
+encostada exatamente na borda inferior dele. Essa combinação é uma causa
+conhecida do Chromium pra "barra de rolagem aparece mas arrastar não
+funciona" — o recorte do cantos arredondados do ancestral quebra o
+hit-test nativo da barra do filho. **Corrigido restruturando pra cada
+seção arredondar só a própria ponta** (header com
+`borderTopLeftRadius/TopRightRadius`, área de preview com
+`borderBottomLeftRadius/BottomRightRadius`) em vez do card inteiro cortar
+com `overflow:hidden`. Visual conferido idêntico (cantos ainda arredondados
+nos 4 lados), typecheck limpo.
+
+**Honestidade sobre o nível de confiança**: diferente dos outros 2 bugs
+achados nessa mesma tela (que foram provados com evidência direta —
+`elementFromPoint`, contagem no banco), esse aqui foi corrigido por
+raciocínio de causa provável + baixo risco da mudança, não por reprodução
+confirmada. Avisar o usuário pra testar de novo depois do deploy.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
