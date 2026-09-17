@@ -2085,6 +2085,44 @@ aqui, igual ao resto do app. Testado ao vivo: PDF agora mostra título +
 complemento certos ("Decurso de Prazo", "Redistribuição — prevenção;
 remessa de execução cível...", etc.) em vez de linha em branco.
 
+### 2026-09-17 (mesmo dia, sessão seguinte) — Auditoria geral: mensagens do Instagram duplicando em massa (bug de dado real, não só performance)
+
+Usuário pediu uma verificação completa no sistema, "buscando erros e áreas
+para otimizar sem quebrar nada". Comecei pelo `pg_stat_statements`
+(maior consumidor de tempo de banco nas últimas 24h) e achei que a
+checagem de duplicidade do Instagram (`metadata->>mid` no
+`instagram-webhook`) virou o novo topo do ranking (20.466 chamadas, ~33
+minutos acumulados, 96ms de média) — exatamente o "achado secundário"
+já registrado em memória como pendente desde a investigação de lentidão
+do WhatsApp (16/09), nunca corrigido.
+
+**Investigando mais fundo, achei que não era só lentidão — era perda de
+integridade de dado**: medido direto no banco, `manychat_mensagens` tem
+13.514 linhas com `mid` do Instagram, mas só **632 valores distintos** —
+**12.882 linhas duplicadas** (95%!). Um caso extremo: a mesma mensagem
+("Perfeito, no aguardo") repetida ~1.900 vezes, todas com o mesmo
+conteúdo, mesmo remetente, mesmo segundo exato. Causa: o dedup fazia um
+SELECT antes do INSERT, sem nenhuma garantia atômica no banco — quando a
+Meta reenvia o mesmo evento de webhook (comportamento normal dela quando
+a resposta demora, e essa própria query lenta contribuía pra isso),
+execuções concorrentes do webhook passavam pelo "não existe ainda" ao
+mesmo tempo e ambas inseriam. **O chat já dedup visualmente por `mid`**
+no front (`getMessageDedupeKey`), por isso ninguém percebeu isso na
+tela — mas o banco crescia sem parar.
+
+**Fix definitivo** (não só mais rápido, atômico de verdade): migration
+nova (`20260917150000_instagram_mid_dedupe_key.sql`) — coluna
+`instagram_mid_key` sincronizada por trigger (`mid + índice do anexo`,
+pra não quebrar mensagens com várias partes que legitimamente
+compartilham o mesmo `mid`) + índice único. `instagram-webhook` e
+`instagram-backfill` trocaram o padrão select-então-insert por
+`upsert(..., { onConflict: 'instagram_mid_key', ignoreDuplicates: true })`
+— agora a garantia é do Postgres, não da aplicação. Migration testada em
+`begin/rollback` antes do commit. **Não fiz backfill nem limpeza das
+12.882 linhas antigas** — ficam intocadas, de propósito (rodar UPDATE
+agora bateria de frente com as duplicatas já existentes); limpeza é
+decisão separada, à parte, perguntar ao usuário antes.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.

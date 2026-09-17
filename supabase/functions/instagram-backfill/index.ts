@@ -179,13 +179,6 @@ Deno.serve(async (req) => {
               mensagensEncontradas++;
 
               const mid = m.id;
-              const { data: existing } = await supabase
-                .from("manychat_mensagens")
-                .select("id")
-                .eq("metadata->>mid", mid)
-                .maybeSingle();
-              if (existing) { mensagensDuplicadas++; continue; }
-
               const fromId = m.from?.id;
               const isEcho = fromId === businessId;
               const contatoIgsid = isEcho ? m.to?.data?.[0]?.id : fromId;
@@ -205,9 +198,14 @@ Deno.serve(async (req) => {
 
               const anexos = (m.attachments?.data || []).map(extrairAnexo).filter(Boolean) as { tipo: string; url: string }[];
 
+              // upsert com onConflict na coluna sincronizada por trigger
+              // (instagram_mid_key) em vez de select-então-insert — mesmo
+              // fix do instagram-webhook, elimina a corrida de verdade.
+              // .select() vazio de volta = ignorado por já existir (conta
+              // como duplicada em vez de salva).
               if (anexos.length === 0) {
                 const conteudo = m.message || "[mensagem não suportada]";
-                const { error: msgErr } = await supabase.from("manychat_mensagens").insert({
+                const { data: inserted, error: msgErr } = await supabase.from("manychat_mensagens").upsert({
                   subscriber_id: subscriberId,
                   subscriber_nome: isEcho ? "Atendente" : nomeContato,
                   conteudo,
@@ -216,13 +214,15 @@ Deno.serve(async (req) => {
                   direcao: isEcho ? "saida" : "entrada",
                   created_at: m.created_time,
                   metadata: { mid, igsid: contatoIgsid, source: "instagram_backfill", is_echo: isEcho },
-                });
-                if (msgErr) erros.push(`msg ${mid}: ${msgErr.message}`); else mensagensSalvas++;
+                }, { onConflict: "instagram_mid_key", ignoreDuplicates: true }).select("id");
+                if (msgErr) erros.push(`msg ${mid}: ${msgErr.message}`);
+                else if (inserted && inserted.length > 0) mensagensSalvas++;
+                else mensagensDuplicadas++;
               } else {
                 for (let ai = 0; ai < anexos.length; ai++) {
                   const { tipo, url } = anexos[ai];
                   const mediaPublica = await persistirMidia(url, tipo, `${mid}_${ai}`);
-                  const { error: msgErr } = await supabase.from("manychat_mensagens").insert({
+                  const { data: inserted, error: msgErr } = await supabase.from("manychat_mensagens").upsert({
                     subscriber_id: subscriberId,
                     subscriber_nome: isEcho ? "Atendente" : nomeContato,
                     conteudo: mediaPublica,
@@ -235,8 +235,10 @@ Deno.serve(async (req) => {
                       ...(anexos.length > 1 ? { attachment_index: ai } : {}),
                       media_url: mediaPublica,
                     },
-                  });
-                  if (msgErr) erros.push(`msg ${mid}: ${msgErr.message}`); else mensagensSalvas++;
+                  }, { onConflict: "instagram_mid_key", ignoreDuplicates: true }).select("id");
+                  if (msgErr) erros.push(`msg ${mid}: ${msgErr.message}`);
+                  else if (inserted && inserted.length > 0) mensagensSalvas++;
+                  else mensagensDuplicadas++;
                 }
               }
             }

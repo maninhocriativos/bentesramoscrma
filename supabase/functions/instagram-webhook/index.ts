@@ -162,19 +162,6 @@ Deno.serve(async (req) => {
           const isEcho = !!message.is_echo;
           const mid = message.mid;
 
-          // Deduplicação por mid (Meta pode reenviar)
-          if (mid) {
-            const { data: existing } = await supabase
-              .from("manychat_mensagens")
-              .select("id")
-              .eq("metadata->>mid", mid)
-              .maybeSingle();
-            if (existing) {
-              console.log("[IG Webhook] Mensagem duplicada, ignorando:", mid);
-              continue;
-            }
-          }
-
           // O contato é sempre o usuário do Instagram (não a conta do escritório)
           const contatoIgsid = isEcho ? recipientId : senderId;
           const subscriberId = `ig_${contatoIgsid}`;
@@ -208,7 +195,15 @@ Deno.serve(async (req) => {
               }
             }
 
-            const { error: msgErr } = await supabase.from("manychat_mensagens").insert({
+            // upsert com onConflict na coluna sincronizada por trigger
+            // (instagram_mid_key = mid + índice do anexo) em vez de
+            // select-então-insert: a Meta reenvia o mesmo evento quando a
+            // resposta demora, e duas execuções concorrentes do webhook
+            // passavam pelo dedup check "não existe ainda" ao mesmo tempo,
+            // duplicando a mensagem (medido: até ~1.900 cópias da mesma
+            // linha). onConflict + ignoreDuplicates torna isso atômico de
+            // verdade no banco, não só mais rápido.
+            const { data: msgInserted, error: msgErr } = await supabase.from("manychat_mensagens").upsert({
               subscriber_id: subscriberId,
               subscriber_nome: isEcho ? "Atendente" : nome,
               conteudo: conteudoFinal,
@@ -225,14 +220,16 @@ Deno.serve(async (req) => {
                 ...(partes.length > 1 ? { attachment_index: pi } : {}),
                 ...(mediaPublica ? { media_url: mediaPublica } : {}),
               },
-            });
+            }, { onConflict: "instagram_mid_key", ignoreDuplicates: true }).select("id");
 
             if (msgErr) {
               erros.push(`mensagem: ${msgErr.message}`);
               console.error("[IG Webhook] Erro ao salvar mensagem:", msgErr);
-            } else {
+            } else if (msgInserted && msgInserted.length > 0) {
               salvas++;
               console.log(`[IG Webhook] ✅ ${isEcho ? "saída" : "entrada"} salva de ${nome}: ${conteudoFinal.slice(0, 60)}`);
+            } else {
+              console.log("[IG Webhook] Mensagem duplicada, ignorada:", mid);
             }
           }
         }
