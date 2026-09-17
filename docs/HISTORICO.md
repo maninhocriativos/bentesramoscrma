@@ -2041,6 +2041,34 @@ parar dá exatamente essa impressão de instabilidade visual. Corrigido
 trocando a guarda por uma flag `contatosFetched` dedicada (busca uma vez,
 marca como feito, nunca mais dispara de novo pro mesmo processo/modal).
 
+### 2026-09-17 (mesmo dia, sessão seguinte) — Movimentações com código CNJ desconhecido mostravam título genérico errado
+
+Usuário mostrou print de uma movimentação "Movimentação CNJ 1051" com
+descrição "Decurso de Prazo" — pediu pra tratar melhor os dados de TODAS
+as movimentações, não só essa. Confirmou que acontece em todos os
+processos (esperado — é um bug na função compartilhada de enriquecimento,
+não específico de 1 processo).
+
+**Causa**: `cnjMovimentosMap.ts` tem um dicionário curado à mão com só
+~35 dos milhares de códigos oficiais das Tabelas Processuais Unificadas
+do CNJ. Pra código fora dessa lista, o fallback **descartava o nome real
+que a fonte (DataJud) já manda certo** em `mov.nome` (confirmado direto no
+banco: `{"nome":"Decurso de Prazo","codigo":1051}`, `{"nome":"Recebimento",
+"codigo":132}`) e inventava um título genérico "Movimentação CNJ
+{código}" — o nome de verdade ficava escondido na descrição, ou pior,
+sumia (viraba `mov.complemento` vazio).
+
+**Corrigido**: fallback agora usa `mov.nome` como título quando o código
+não está no dicionário, e a descrição ganhou um texto explicativo
+decente (menciona que é um código das Tabelas Processuais Unificadas sem
+descrição detalhada cadastrada) em vez de ficar vazia. Testado ao vivo:
+"CNJ 1051" agora mostra "Decurso de Prazo", "CNJ 132" mostra "Recebimento"
+— ambos corretos, batendo com o dado real do banco. Não expandi o
+dicionário curado (~35 códigos) pra cobrir mais casos com categoria/ícone
+específico — o fix já resolve a informação estar certa pra TODOS os
+códigos, só a categorização visual fina (cor do badge, ícone) fica
+genérica ("outros") pros códigos fora da lista curada.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.

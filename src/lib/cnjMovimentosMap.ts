@@ -346,15 +346,21 @@ export function enrichMovements(movements: Array<{
         }
       }
     } else {
-      // Fallback quando não há tradução
-      titulo_humano = mov.codigo 
-        ? `Movimentação CNJ ${mov.codigo}` 
-        : (mov.nome || 'Movimentação');
-      
-      descricao_humana = mov.tipo 
+      // Fallback quando o código não está no dicionário curado: a fonte
+      // (DataJud/Escavador) já manda o nome real da movimentação em
+      // `mov.nome` (ex: "Decurso de Prazo", "Recebimento") — usar isso
+      // como título em vez de inventar "Movimentação CNJ {código}", que
+      // escondia a informação de verdade dentro da descrição.
+      titulo_humano = mov.nome && mov.nome !== 'Movimentação'
+        ? mov.nome
+        : (mov.codigo ? `Movimentação CNJ ${mov.codigo}` : 'Movimentação');
+
+      descricao_humana = mov.tipo
         ? humanizarTipo(mov.tipo)
-        : (mov.complemento || mov.nome || '');
-      
+        : (mov.complemento || (mov.codigo
+            ? `Movimentação processual identificada pelo código CNJ ${mov.codigo} nas Tabelas Processuais Unificadas do CNJ — descrição detalhada ainda não cadastrada neste sistema para esse código específico.`
+            : ''));
+
       badge = mov.codigo ? `CNJ ${mov.codigo}` : 'CNJ';
       categoria = 'outros';
     }
