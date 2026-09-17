@@ -22,12 +22,27 @@ jobs:
 
       - name: Deploy all Edge Functions
         run: |
+          # Sem "set -e" no loop: uma função que falhar no bundle (já
+          # aconteceu por crash transitório do bundler, exit 135, numa
+          # função nem tocada no push) não pode travar o deploy de todas
+          # as outras que vêm depois dela em ordem alfabética — isso já
+          # bloqueou um fix crítico de perda de dado (2026-09-17). Cada
+          # função deploya independente; falhas são coletadas e reportadas
+          # no fim, e o job só falha se alguma delas falhou de verdade.
+          failed=()
           for dir in supabase/functions/*/; do
             func=$(basename "$dir")
             # Skip shared helpers — not deployable functions
             if [[ "$func" == "_shared" ]]; then continue; fi
             echo "▶ Deploying $func..."
-            supabase functions deploy "$func" --project-ref qgenaltkjtlvwfgykpxq
+            if ! supabase functions deploy "$func" --project-ref qgenaltkjtlvwfgykpxq; then
+              echo "❌ Falha ao deployar $func — seguindo para as próximas"
+              failed+=("$func")
+            fi
           done
+          if [ ${#failed[@]} -gt 0 ]; then
+            echo "##[error]Funções que falharam: ${failed[*]}"
+            exit 1
+          fi
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
