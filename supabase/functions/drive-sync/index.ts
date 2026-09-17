@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { requireStaffOrInternal } from "../_shared/auth-guard.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -779,6 +780,21 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Sem isso, qualquer um com a URL adultera a config da integração
+    // Drive do escritório ou dispara sync/import real (achado da
+    // auditoria de 2026-09-17) — callers reais são o frontend logado e
+    // o cron de 15min (drive-auto-sync-polling, que manda X-Cron-Secret).
+    const { authorized } = await requireStaffOrInternal(req, {
+      internalSecretEnvVar: 'CRON_INTERNAL_SECRET',
+      internalSecretHeader: 'X-Cron-Secret',
+    });
+    if (!authorized) {
+      return new Response(JSON.stringify({ error: 'Não autorizado' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const body = await req.json();
     const { action, user_id, document_id, drive_file_id, cliente_id, job_id, auto_sync_enabled, interval_minutes } = body;
 

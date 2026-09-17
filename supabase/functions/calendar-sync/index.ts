@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { requireStaffOrInternal } from "../_shared/auth-guard.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -91,6 +92,21 @@ serve(async (req) => {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
   try {
+    // Sem isso, qualquer um com a URL cria/apaga evento real no Google
+    // Calendar do escritório (achado da auditoria de 2026-09-17) —
+    // callers reais são o frontend logado e o cron horário
+    // (sync-advbox-calendar-hourly, que manda X-Cron-Secret).
+    const { authorized } = await requireStaffOrInternal(req, {
+      internalSecretEnvVar: 'CRON_INTERNAL_SECRET',
+      internalSecretHeader: 'X-Cron-Secret',
+    });
+    if (!authorized) {
+      return new Response(JSON.stringify({ error: 'Não autorizado' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const body = await req.json();
     const { action, user_id, compromisso_id, google_event_id } = body;
 
