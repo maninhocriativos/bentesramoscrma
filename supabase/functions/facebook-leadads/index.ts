@@ -1,6 +1,7 @@
 const serve = Deno.serve;
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { fetchWithTimeout, TIMEOUT } from '../_shared/fetch-helper.ts';
+import { requireStaffOrInternal } from '../_shared/auth-guard.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -46,6 +47,20 @@ serve(async (req) => {
       const payload = await req.json();
       
       if (payload.action === 'sync' && Array.isArray(payload.leads)) {
+        // Sem isso, qualquer um com a URL insere lead falso direto em
+        // leads_juridicos, sem passar pela Graph API de verdade (achado
+        // da auditoria de 2026-09-17) — nenhum caller real encontrado
+        // em lugar nenhum do código pra essa branch específica; o resto
+        // da função (handshake GET, webhook normal via leadgen_id)
+        // fica intocado.
+        const { authorized } = await requireStaffOrInternal(req);
+        if (!authorized) {
+          return new Response(JSON.stringify({ error: 'Não autorizado' }), {
+            status: 401,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
         const results = [];
         for (const lead of payload.leads) {
           const nome = lead.nome || lead.name;

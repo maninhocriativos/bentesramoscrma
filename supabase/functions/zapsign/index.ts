@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
+import { requireStaffOrInternal } from '../_shared/auth-guard.ts';
 
 const ZAPSIGN_BASE = 'https://api.zapsign.com.br/api/v1';
 
@@ -26,6 +27,19 @@ serve(async (req) => {
   }
 
   try {
+    // Sem isso, qualquer um com a URL cria/cancela documento de
+    // assinatura real da conta ZapSign do escritório (achado da
+    // auditoria de 2026-09-17) — único caller real é o frontend
+    // logado (tela de Contratos). O /webhook acima, do próprio ZapSign,
+    // fica de fora dessa checagem de propósito — não manda JWT nenhum.
+    const { authorized } = await requireStaffOrInternal(req);
+    if (!authorized) {
+      return new Response(JSON.stringify({ error: 'Não autorizado' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const body = await req.json();
     const { action, ...params } = body;
 
