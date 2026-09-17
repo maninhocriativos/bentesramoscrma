@@ -275,7 +275,7 @@ export function useChatSubscribers({ userId, onNewSubscriber, onSubscriberUpdate
     try {
       const { error } = await supabase
         .from('manychat_subscribers')
-        .update({ assigned_to: memberId })
+        .update({ assigned_to: memberId } as any)
         .eq('subscriber_id', subscriberId);
 
       if (error) throw error;

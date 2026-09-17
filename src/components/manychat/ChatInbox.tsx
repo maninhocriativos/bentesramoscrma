@@ -1574,7 +1574,7 @@ const ManyChatInboxContent = () => {
   const assignConversation = async (memberId: string) => {
     if (!selectedSubscriber) return;
     try {
-      const { error } = await supabase.from("manychat_subscribers").update({ assigned_to: memberId }).eq("subscriber_id", selectedSubscriber.subscriber_id);
+      const { error } = await supabase.from("manychat_subscribers").update({ assigned_to: memberId } as any).eq("subscriber_id", selectedSubscriber.subscriber_id);
       if (error) throw error;
       const teamMembers = getTeamWithStatus();
       const member = teamMembers.find(m => m.id === memberId);

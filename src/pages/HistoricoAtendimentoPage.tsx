@@ -42,10 +42,8 @@ interface TagEvent {
 
 type HistoricoEvent = AtendimentoEvent | TagEvent;
 
-interface SubscriberInfo { nome: string; telefone: string; linha_whatsapp: string | null; created_at: string | null; }
+interface SubscriberInfo { nome: string; telefone: string; linha_whatsapp: string | null; }
 
-// "Cliente chegou" = criação do subscriber, que coincide com a 1ª mensagem
-// dele (confirmado nos dados: mesma hora, diferença de segundos).
 function formatEspera(ms: number): string {
   const min = Math.round(ms / 60000);
   if (min < 1) return '<1min';
@@ -71,6 +69,7 @@ export default function HistoricoAtendimentoPage() {
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<HistoricoEvent[]>([]);
   const [subscribers, setSubscribers] = useState<Record<string, SubscriberInfo>>({});
+  const [inboundBySubscriber, setInboundBySubscriber] = useState<Record<string, number[]>>({});
   const [staff, setStaff] = useState<Staff[]>([]);
 
   const [dateFrom, setDateFrom] = useState(todayManausStr());
@@ -125,15 +124,36 @@ export default function HistoricoAtendimentoPage() {
 
     const subIds = Array.from(new Set(merged.map(e => e.subscriber_id)));
     if (subIds.length > 0) {
-      const { data: subs } = await supabase
-        .from('manychat_subscribers')
-        .select('subscriber_id, nome, telefone, linha_whatsapp, created_at')
-        .in('subscriber_id', subIds);
+      const [{ data: subs }, { data: inbound }] = await Promise.all([
+        supabase
+          .from('manychat_subscribers')
+          .select('subscriber_id, nome, telefone, linha_whatsapp')
+          .in('subscriber_id', subIds),
+        // Janela de alguns dias antes do período pra achar a mensagem que
+        // disparou o atendimento, mesmo se ela chegou um pouco antes do
+        // filtro de data selecionado.
+        supabase
+          .from('manychat_mensagens')
+          .select('subscriber_id, created_at')
+          .in('subscriber_id', subIds)
+          .eq('direcao', 'entrada')
+          .gte('created_at', new Date(new Date(fromISO).getTime() - 3 * 86400000).toISOString())
+          .lte('created_at', toISO)
+          .order('created_at', { ascending: true })
+          .limit(5000),
+      ]);
       const map: Record<string, SubscriberInfo> = {};
-      ((subs || []) as any[]).forEach(s => { map[s.subscriber_id] = { nome: s.nome || s.subscriber_id, telefone: s.telefone || '', linha_whatsapp: s.linha_whatsapp, created_at: s.created_at || null }; });
+      ((subs || []) as any[]).forEach(s => { map[s.subscriber_id] = { nome: s.nome || s.subscriber_id, telefone: s.telefone || '', linha_whatsapp: s.linha_whatsapp }; });
       setSubscribers(map);
+
+      const inboundMap: Record<string, number[]> = {};
+      ((inbound || []) as any[]).forEach(m => {
+        (inboundMap[m.subscriber_id] ||= []).push(new Date(m.created_at).getTime());
+      });
+      setInboundBySubscriber(inboundMap);
     } else {
       setSubscribers({});
+      setInboundBySubscriber({});
     }
 
     setLoading(false);
@@ -177,15 +197,29 @@ export default function HistoricoAtendimentoPage() {
       .sort((a, b) => a.created_at.localeCompare(b.created_at));
   }, [events, selectedClient]);
 
-  // Tempo de espera de um evento "primeiro_atendimento": diferença entre a chegada
-  // do cliente (created_at do subscriber) e o momento em que alguém assumiu.
+  // Tempo de espera de um evento "primeiro_atendimento": diferença entre a
+  // última mensagem do cliente antes do atendimento ser assumido e o
+  // momento em que alguém assumiu. Usava `subscribers[...].created_at`
+  // (data em que o CONTATO foi criado no CRM — meses/anos atrás pra
+  // clientes recorrentes, nunca existiu no tipo) em vez de
+  // `inboundBySubscriber` (já buscado certinho, com a mensagem que
+  // realmente disparou o atendimento, mas nunca usado) — por isso o badge
+  // de espera nunca aparecia.
   const esperaMs = useCallback((e: AtendimentoEvent): number | null => {
     if (e.action !== 'primeiro_atendimento') return null;
-    const chegada = subscribers[e.subscriber_id]?.created_at;
-    if (!chegada) return null;
-    const ms = new Date(e.created_at).getTime() - new Date(chegada).getTime();
+    const inbound = inboundBySubscriber[e.subscriber_id];
+    if (!inbound || inbound.length === 0) return null;
+    const eventoMs = new Date(e.created_at).getTime();
+    // inboundBySubscriber vem em ordem crescente — pega a última mensagem
+    // do cliente até o momento em que o atendimento foi assumido.
+    let chegadaMs: number | null = null;
+    for (const t of inbound) {
+      if (t <= eventoMs) chegadaMs = t; else break;
+    }
+    if (chegadaMs == null) return null;
+    const ms = eventoMs - chegadaMs;
     return ms >= 0 ? ms : null;
-  }, [subscribers]);
+  }, [inboundBySubscriber]);
 
   const porAtendente = useMemo(() => {
     const map = new Map<string, { nome: string; iniciados: number; handoffs: number; tags: number; esperaSomaMs: number; esperaCount: number }>();

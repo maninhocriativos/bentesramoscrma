@@ -2123,6 +2123,57 @@ compartilham o mesmo `mid`) + índice único. `instagram-webhook` e
 agora bateria de frente com as duplicatas já existentes); limpeza é
 decisão separada, à parte, perguntar ao usuário antes.
 
+**Índices de FK sem cobertura**: banco tem ~44 colunas de foreign key sem
+índice (`processos.cliente_id`, `honorarios.processo_id`, etc.). Adicionei
+só `interacoes.processo_id`/`cliente_id` (migration
+`20260917152000_interacoes_indices_fk.sql`) — as únicas com evidência
+direta de tempo real gasto em `pg_stat_statements`. As outras 42 ficam de
+fora por ora, sem prova de custo real hoje.
+
+**2 bugs reais achados via typecheck completo** (delego pra agente
+Explore triar os 106 erros de TS, mesmo raciocínio do bug do PDF de
+ontem — nem todo erro "de tipo desatualizado" é ruído):
+1. `manychat_subscribers.assigned_to` (recurso "Direcionar conversa pra
+   colega" no Chat Interno) gravava numa coluna que **nunca existiu** no
+   banco — toda tentativa de uso falhava com "Não foi possível direcionar
+   a conversa". Corrigido com migration
+   (`20260917154500_manychat_subscribers_assigned_to.sql`, coluna uuid,
+   mesma convenção de `attending_by`/`last_attended_by`) + cast `as any`
+   nos 2 pontos de escrita (`useChatSubscribers.ts`, `ChatInbox.tsx`).
+2. `HistoricoAtendimentoPage.tsx`: o badge de "tempo de espera até
+   atender" sempre voltava `null` — usava
+   `subscribers[...].created_at` (data em que o CONTATO foi criado no
+   CRM, campo que nem existe no tipo) em vez de `inboundBySubscriber`
+   (a mensagem que realmente disparou o atendimento — já buscada
+   certinha, mas nunca usada em lugar nenhum, um recurso deixado pela
+   metade). Corrigido usando `inboundBySubscriber` de verdade. Testado ao
+   vivo: "Tempo médio até atender: 9h5min" e badges por atendente
+   (12h9min, 7h29min, 2h18min) passaram a aparecer — antes ficavam
+   sempre em branco.
+
+**ACHADO CRÍTICO DE SEGURANÇA, ainda não corrigido — decisão do
+usuário sobre prioridade/escopo**: 54 das 79 edge functions rodam com
+`verify_jwt = false` (necessário pra webhooks externos de verdade, mas
+perigoso pra quem não tem proteção própria nenhuma). Auditoria via
+agente encontrou ~17 funções **sem nenhuma autenticação e com escrita/
+envio livre, alvo escolhido por quem chama** — inclui `zapsign` (criar/
+cancelar documento de assinatura real da conta do escritório),
+`zapi-send` (mandar/bloquear WhatsApp como o escritório pra qualquer
+número), `send-invite-email` (mandar e-mail de phishing com remetente
+oficial "Bentes & Ramos"), `calendar-sync` (apagar evento real do
+Google Calendar), `ai-chat`/`isa-actions` (ler/escrever dado sensível
+via tool-calling sem auth), `api-hub`, `campaign-optin-dispatch`,
+`isa-reply-manychat`, `isa-escritorio-reply`, `instagram-send`,
+`facebook-leadads` (branch sync), `drive-sync`, `isa-system-data`
+(vaza PII sem nem escrever nada). Dezenas de outras (automações de
+disparo em massa) são de severidade menor (não dá pro invasor escolher
+o alvo, mas ainda queima crédito de API/dispara envio real se
+chamada repetidamente). Ver relatório completo do agente na memória do
+Claude — não corrigido nesta sessão por ser um volume grande de
+mudança em funções críticas de negócio (WhatsApp, assinatura
+eletrônica, agenda), contrariando o pedido explícito de "sem quebrar
+nada"; decisão de prioridade/escopo fica com o usuário.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
