@@ -1,4 +1,5 @@
 const serve = Deno.serve;
+import { requireStaffOrInternal } from '../_shared/auth-guard.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -506,6 +507,18 @@ serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
+    // Sem isso, qualquer um com a URL conversa com o agente de IA interno
+    // (Donn@/Isa) e, via tool-calling, lê/grava dado sensível do CRM
+    // (achado da auditoria de 2026-09-17) — único caller real é o
+    // frontend logado (/assistente).
+    const { authorized } = await requireStaffOrInternal(req);
+    if (!authorized) {
+      return new Response(JSON.stringify({ error: 'Não autorizado' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY não configurada');
 
     const { message, threadId: clientThreadId, lead_id, phone, persona } = await req.json();

@@ -1,6 +1,7 @@
 import "npm:@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { requireStaffOrInternal } from "../_shared/auth-guard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -487,6 +488,20 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
+    // Sem isso, qualquer um com a URL consulta CNJ à vontade, consumindo
+    // crédito pago (Escavador/DataJud) por conta do escritório, e pode
+    // persistir/criar lead direto no banco com persistir:true (achado da
+    // auditoria de 2026-09-17) — callers reais são o frontend logado e
+    // outras edge functions (processo-auto-sync/intimacoes-oab), que já
+    // mandam a service-role key.
+    const { authorized } = await requireStaffOrInternal(req);
+    if (!authorized) {
+      return new Response(JSON.stringify({ error: 'Não autorizado' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const body = await req.json();
     const numeroProcesso      = body.numero_processo || body.numeroProcesso;
     const cpf                 = body.cpf;

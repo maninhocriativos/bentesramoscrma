@@ -1,5 +1,6 @@
 const serve = Deno.serve;
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { requireStaffOrInternal } from '../_shared/auth-guard.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -175,6 +176,18 @@ serve(async (req: Request) => {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
+    // Sem isso, qualquer um com a URL dispara resposta de IA vinculada a
+    // qualquer lead_id (enumerável) (achado da auditoria de 2026-09-17) —
+    // único caller real é o zapi-webhook, server-to-server, já manda a
+    // service-role key.
+    const { authorized } = await requireStaffOrInternal(req);
+    if (!authorized) {
+      return new Response(JSON.stringify({ error: 'Não autorizado' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const body = await req.json();
     const { lead_id, mensagem, subscriber_nome } = body;
 

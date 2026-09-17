@@ -1,6 +1,7 @@
 const serve = Deno.serve;
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { normalizeOutgoingWhatsappMarkdown } from "../_shared/zapi-helper.ts";
+import { requireStaffOrInternal } from "../_shared/auth-guard.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -80,6 +81,19 @@ serve(async (req: Request) => {
   let dedupeKey: string | undefined;
 
   try {
+    // Sem isso, qualquer um com a URL manda/bloqueia WhatsApp como o
+    // escritório pra qualquer número (achado da auditoria de
+    // 2026-09-17) — callers reais são o frontend logado e outras edge
+    // functions (generate-kit/isa-actions/isa-reply-manychat), que já
+    // mandam a service-role key.
+    const { authorized } = await requireStaffOrInternal(req);
+    if (!authorized) {
+      return new Response(JSON.stringify({ success: false, error: 'Não autorizado' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const { to_phone, message, type = 'text', provider = 'zapi', lead_id, file_name, instance_id, message_id, caption, dedupe_key } = await req.json();
     dedupeKey = dedupe_key;
 

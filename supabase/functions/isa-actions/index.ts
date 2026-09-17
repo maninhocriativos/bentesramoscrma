@@ -1,7 +1,8 @@
 const serve = Deno.serve;
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { 
-  formatarDataHora, 
+import { requireStaffOrInternal } from '../_shared/auth-guard.ts';
+import {
+  formatarDataHora,
   formatarData, 
   formatarHora, 
   getProximaSegundaUtc, 
@@ -212,6 +213,19 @@ serve(async (req) => {
   }
 
   try {
+    // Sem isso, qualquer um com a URL cria/altera compromisso, tarefa,
+    // interação de qualquer lead, ou manda contrato/documento pendente
+    // (achado da auditoria de 2026-09-17) — callers reais são o frontend
+    // logado (fila de ações da Isa) e o ai-chat (server-to-server, já
+    // manda a service-role key).
+    const { authorized } = await requireStaffOrInternal(req);
+    if (!authorized) {
+      return new Response(JSON.stringify({ error: 'Não autorizado' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);

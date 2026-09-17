@@ -1,6 +1,7 @@
 const serve = Deno.serve;
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { formatarDataHora, formatarData, formatarHora } from '../_shared/timezone-helpers.ts';
+import { requireStaffOrInternal } from '../_shared/auth-guard.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -18,6 +19,18 @@ serve(async (req) => {
   }
 
   try {
+    // Sem isso, qualquer um com a URL lê nome/telefone/status de cliente,
+    // compromisso e tarefa vinculados a caso jurídico, sem escrever nada
+    // (achado da auditoria de 2026-09-17) — único caller real é o
+    // frontend logado (/assistente).
+    const { authorized } = await requireStaffOrInternal(req);
+    if (!authorized) {
+      return new Response(JSON.stringify({ error: 'Não autorizado' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);

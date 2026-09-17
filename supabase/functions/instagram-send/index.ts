@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { requireStaffOrInternal } from "../_shared/auth-guard.ts";
 
 // Envia mensagem (resposta do atendente) para um contato do Instagram via
 // Graph API, e registra a saída em manychat_mensagens para o inbox.
@@ -84,6 +85,17 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Sem isso, qualquer um com a URL manda DM como o escritório pra
+    // qualquer contato do Instagram (achado da auditoria de 2026-09-17) —
+    // único caller real é o Chat Interno, usuário logado.
+    const { authorized } = await requireStaffOrInternal(req);
+    if (!authorized) {
+      return new Response(JSON.stringify({ success: false, error: "Não autorizado" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     if (!IG_TOKEN) throw new Error("INSTAGRAM_ACCESS_TOKEN não configurado");
 
     // Aceita texto OU mídia (imagem/vídeo/áudio/documento) via media_url.
