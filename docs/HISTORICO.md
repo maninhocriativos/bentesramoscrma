@@ -2228,6 +2228,41 @@ Faltam Fase 3 (calendar-sync/drive-sync/campaign-optin-dispatch — cron
 usa a anon key hoje, precisa de secret dedicado + migration nova) e
 Fase 4 (zapsign split action/webhook + facebook-leadads branch sync).
 
+**Fase 3 concluída**: criado secret `CRON_INTERNAL_SECRET` (aleatório,
+64 hex) via Management API — não precisou de nenhuma ação no painel.
+Guard aplicado em `calendar-sync`/`drive-sync`/`campaign-optin-dispatch`
+com a opção de aceitar esse secret via header `X-Cron-Secret`. Migration
+nova reagenda os 3 `pg_cron` jobs (`sync-advbox-calendar-hourly`,
+`drive-auto-sync-polling`, `campaign-batch-processor`) mantendo a
+Authorization (anon key) que já tinham e ACRESCENTANDO o header novo —
+testada em `begin/rollback` antes do commit. Testado ao vivo: sem auth →
+401 nos 3; com `X-Cron-Secret` → passou nos 3 (os 400 que vieram eram
+validação de payload incompleto no teste manual, não erro de auth,
+confirmado lendo o corpo da resposta); conferido direto em `cron.job`
+que os 3 jobs reais já rodam com o header novo, nos mesmos horários de
+sempre.
+
+**Fase 4 concluída (último grupo)**: `zapsign` — guard só na parte de
+`action` (criar/cancelar documento); o `/webhook` do próprio ZapSign
+(checado antes no código, retorna cedo) ficou intocado, sem exigir JWT
+nenhum — testado ao vivo: `/webhook` sem nenhum header → 200 (continua
+aberto pro ZapSign); `action` sem auth → 401; `action` com JWT real de
+usuário logado → passou, retornou lista de documentos de verdade da
+conta ZapSign. `facebook-leadads` — guard só na branch
+`action === 'sync'`; handshake GET (`hub.verify_token`) e o resto da
+função ficaram intocados — testado: GET handshake → 200 (continua
+funcionando); `action:'sync'` sem auth → 401.
+
+**Todas as 4 fases do plano de autenticação concluídas e testadas ao
+vivo neste mesmo dia** — 12 edge functions passaram a exigir prova real
+de chamador confiável (JWT de usuário logado, service-role key de outra
+função, ou secret dedicado pro cron), sem quebrar nenhum caller
+legítimo mapeado antes de qualquer mudança. `api-hub` e
+`isa-reply-manychat` continuam fora do escopo (decisão registrada acima,
+dependem de confirmação externa do usuário — quais integrações do
+api-hub estão realmente ativas, e acesso ao painel do ManyChat pro
+secret do isa-reply-manychat).
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
