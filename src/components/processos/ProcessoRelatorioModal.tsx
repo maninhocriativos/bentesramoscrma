@@ -6,6 +6,7 @@ import { X, FileText, Download, Loader2, Scale } from 'lucide-react';
 import { Processo, ProcessoParte, ProcessoMovimento } from '@/types/processos';
 import { Tarefa } from '@/types/tarefas';
 import { supabase } from '@/integrations/supabase/client';
+import { enrichMovements } from '@/lib/cnjMovimentosMap';
 
 interface Despesa { id: string; tipo: string | null; descricao: string | null; valor: number | null; data_despesa: string | null; status: string | null; }
 interface Honorario { id: string; tipo: string | null; valor_total: number | null; valor_entrada: number | null; forma_pagamento: string | null; status: string | null; data_contrato: string | null; }
@@ -54,6 +55,12 @@ export function ProcessoRelatorioModal({ onClose, processo, clienteNome, statusA
   const [contatosLoading, setContatosLoading] = useState(false);
   const [contatosFetched, setContatosFetched] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
+
+  // O relatório renderizava `m.descricao`, campo que nem existe em
+  // ProcessoMovimento (o campo certo é `nome`) — toda movimentação saía
+  // com a linha de descrição em branco no PDF. Usar o mesmo enriquecimento
+  // (título humano + código CNJ) já usado no modal de edição do processo.
+  const movimentosEnriquecidos = useMemo(() => enrichMovements(movimentos), [movimentos]);
 
   const toggleSecao = (k: SecaoKey) => setSecoesAtivas(prev => {
     const next = new Set(prev);
@@ -266,10 +273,13 @@ export function ProcessoRelatorioModal({ onClose, processo, clienteNome, statusA
                   <p style={{ fontSize: 12, color: '#9ca3af', fontFamily: 'Arial, sans-serif' }}>Nenhuma movimentação registrada.</p>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {movimentos.slice(0, 40).map((m, i) => (
-                      <div key={i} style={{ fontFamily: 'Arial, sans-serif', paddingBottom: 8, borderBottom: i < Math.min(movimentos.length, 40) - 1 ? '1px solid #f0ebe3' : 'none' }}>
+                    {movimentosEnriquecidos.slice(0, 40).map((m, i) => (
+                      <div key={i} style={{ fontFamily: 'Arial, sans-serif', paddingBottom: 8, borderBottom: i < Math.min(movimentosEnriquecidos.length, 40) - 1 ? '1px solid #f0ebe3' : 'none' }}>
                         <div style={{ fontSize: 10, color: '#8a7260', marginBottom: 2 }}>{m.dataHora}</div>
-                        <div style={{ fontSize: 12, color: '#1e1008', lineHeight: 1.5 }}>{m.descricao}</div>
+                        <div style={{ fontSize: 12, color: '#1e1008', lineHeight: 1.5, fontWeight: 600 }}>{m.titulo_humano}</div>
+                        {m.complemento && (
+                          <div style={{ fontSize: 11, color: '#8a7260', lineHeight: 1.5, marginTop: 1 }}>{m.complemento}</div>
+                        )}
                       </div>
                     ))}
                     {movimentos.length > 40 && (

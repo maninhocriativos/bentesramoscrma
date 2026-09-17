@@ -2069,6 +2069,22 @@ específico — o fix já resolve a informação estar certa pra TODOS os
 códigos, só a categorização visual fina (cor do badge, ícone) fica
 genérica ("outros") pros códigos fora da lista curada.
 
+**Usuário perguntou "isso vale pra todas as atualizações?"** — auditoria
+completa de todo lugar que renderiza movimentação: `ProcessoModalExpanded`,
+`ProcessoSidePanel`, `LeadDetailModal`, `MovimentosRecentes` já usavam
+`enrichMovements()` corretamente, então já herdaram o fix acima
+automaticamente. **Achado bug separado, mais grave**: o
+`ProcessoRelatorioModal.tsx` (relatório em PDF) tinha implementação
+própria que renderizava `m.descricao` — campo que **nem existe** no tipo
+`ProcessoMovimento` (o campo certo é `nome`) — ou seja, a seção de
+Movimentações do PDF saía com a descrição sempre em branco, pra todo
+processo, desde sempre (esse era inclusive o erro de TS "pré-existente,
+não relacionado" que apareceu em todo typecheck da sessão — na real era
+sintoma direto desse bug). Corrigido usando `enrichMovements()` também
+aqui, igual ao resto do app. Testado ao vivo: PDF agora mostra título +
+complemento certos ("Decurso de Prazo", "Redistribuição — prevenção;
+remessa de execução cível...", etc.) em vez de linha em branco.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.
