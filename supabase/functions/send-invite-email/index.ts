@@ -1,3 +1,5 @@
+import { requireStaffOrInternal } from "../_shared/auth-guard.ts";
+
 const serve = Deno.serve;
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
@@ -21,6 +23,18 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
+    // Sem isso, qualquer um com a URL manda e-mail de phishing usando o
+    // remetente oficial "Bentes & Ramos" (achado da auditoria de
+    // 2026-09-17) — só usuário logado no CRM chama isso hoje, nenhum
+    // outro caller a proteger.
+    const { authorized } = await requireStaffOrInternal(req);
+    if (!authorized) {
+      return new Response(JSON.stringify({ success: false, error: "Não autorizado" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
     const { email, role, inviteLink }: InviteEmailRequest = await req.json();
 
     console.log(`Sending invite email to ${email} with role ${role}`);
