@@ -1890,6 +1890,37 @@ cadastro). Testado ao vivo com Playwright usando um dos 3 processos
 afetados: relatório passou a mostrar "ANDREIA DA SILVA FIGUEIREDO" +
 Vara/Comarca + Advogado corretamente.
 
+### 2026-09-16 (mesmo dia, sessão seguinte) — "Baixar PDF" do relatório travava sem fazer nada
+
+Usuário reportou que clicar em "Baixar PDF" no relatório do processo "fica
+travado na tela do mesmo jeito, não muda nada" — nem gera erro, nem baixa.
+
+**Causa raiz, achada com Playwright (`elementFromPoint` no centro do
+botão)**: `document.body` ganha `style="pointer-events: none"` (inline,
+via JS) enquanto o modal de edição do Processo (Radix `Dialog`) está
+aberto — mecanismo do próprio Radix pra bloquear clique em qualquer coisa
+fora do dialog. O Radix reativa isso só no PRÓPRIO conteúdo do dialog
+(`pointer-events: auto` inline). O `ProcessoRelatorioModal` é renderizado
+como outro portal direto pro `<body>` (`createPortal`, não é filho do
+Dialog) — como não tinha esse `pointer-events: auto` de volta, herdava o
+`none` do body inteiro. Resultado: o relatório aparecia normal na tela
+(z-index 10000, acima do dialog), mas estava **inerte de verdade** — todo
+clique nele (inclusive "Baixar PDF") atravessava direto pro dialog de
+processo por trás, sem nenhum efeito visível.
+
+**Corrigido**: adicionado `pointerEvents: 'auto'` no wrapper do portal em
+`ProcessoRelatorioModal.tsx`. Testado ao vivo: clique em "Baixar PDF"
+agora dispara o evento de download de verdade (`processo-....pdf`) e o
+botão volta ao estado normal.
+
+**Risco latente pra lembrar**: `AgendaPDFModal.tsx` e um trecho de
+`FollowupPage.tsx` usam o mesmíssimo padrão de portal (mesmo
+`position:fixed`/`zIndex`/`createPortal` pro body) mas hoje só são abertos
+diretamente da página, nunca de dentro de outro Radix Dialog — por isso
+não sofrem esse bug agora. **Se algum dia passarem a ser abertos de dentro
+de um Dialog, vão ter o mesmo problema** — aplicar o mesmo
+`pointerEvents: 'auto'` nesse momento.
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.

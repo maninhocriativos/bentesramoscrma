@@ -112,9 +112,16 @@ export function ProcessoRelatorioModal({ onClose, processo, clienteNome, statusA
   // Portal direto pro body: um ancestral (PageTransition) aplica um
   // transform que quebra position:fixed (mesmo bug já visto e documentado
   // nas Petições — o fixed vira relativo a esse ancestral e some/corta).
+  //
+  // pointerEvents: 'auto' é necessário porque o modal de Processo por trás
+  // (Radix Dialog) seta `pointer-events: none` no <body> inteiro enquanto
+  // está aberto, e só reativa no seu próprio conteúdo — nosso portal, sendo
+  // outro filho direto do body, herdava esse `none` e ficava com TODO o
+  // relatório clicável na aparência mas inerte de verdade (botão "Baixar
+  // PDF" não disparava nada, cliques atravessavam pro dialog de trás).
   return createPortal(
     <div
-      style={{ position: 'fixed', inset: 0, background: 'rgba(20,10,0,0.7)', zIndex: 10000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '20px 12px', overflow: 'auto', backdropFilter: 'blur(6px)' }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(20,10,0,0.7)', zIndex: 10000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '20px 12px', overflow: 'auto', backdropFilter: 'blur(6px)', pointerEvents: 'auto' }}
       onClick={onClose}
     >
       <div
