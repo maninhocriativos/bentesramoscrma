@@ -1959,6 +1959,50 @@ achados nessa mesma tela (que foram provados com evidência direta —
 raciocínio de causa provável + baixo risco da mudança, não por reprodução
 confirmada. Avisar o usuário pra testar de novo depois do deploy.
 
+### 2026-09-17 (mesmo dia, sessão seguinte) — Barra ainda quebrada + partes somem de processos + relatório reestruturado de vez
+
+Usuário confirmou que a barra "continua da mesma forma" (fix anterior não
+resolveu) e reportou 2 problemas novos na página de Processos: muitos
+processos aparecendo "Sem identificação" na coluna Cliente/Partes, e
+processos onde partes cadastradas manualmente estavam **sumindo**.
+
+**Achado grave — causa raiz de partes sumindo (dado real sendo apagado)**:
+`persistirProcesso()` em `consulta-processos/index.ts` (chamada por TODO
+sync — manual, `processo-auto-sync` cron a cada 72h, `intimacoes-oab`)
+gravava `partes_json: processo.partes.length ? processo.partes : null` —
+**sobrescrita incondicional**. Quando a fonte externa (comum no DataJud,
+que às vezes só traz movimentações sem detalhar as partes) não retornava
+nenhuma parte NESSA chamada específica, o campo inteiro era apagado —
+mesmo partes cadastradas manualmente pelo usuário. `processo-auto-sync`
+tinha o MESMO bug (`partes_json: proc.partes || []`) e nem carregava o
+`partes_json` atual na busca inicial pra ter como comparar. O frontend já
+tinha a proteção certa nesse ponto (`mergePartesPreservandoManual` no
+botão manual "Atualizar CNJ"), mas os 2 pontos automatizados não.
+**Corrigido nos 2 lugares**, replicando a mesma lógica de merge (por nome
+normalizado, preserva quem não veio na resposta da API).
+
+**Escala medida no banco antes de generalizar**: de 1.106 processos
+ativos, **45 sem nenhuma identificação de cliente** (nome/lead/partes) e
+**949 (86%) já sincronizados pela API mas sem nenhuma parte salva** —
+consistente com o bug rodando há tempo. Não dá pra saber quantos desses
+949 tinham partes e perderam vs. nunca tiveram retorno da fonte (sem
+histórico/auditoria) — o fix impede que piore, recuperação do que já foi
+perdido é decisão separada (ressincronizar consome crédito Escavador).
+
+**Relatório do Processo reestruturado de vez** (a barra de rolagem não
+melhorou com o fix de bordas do dia anterior): trocado o `createPortal`
+manual cru por um `Dialog` de verdade do Radix
+(`@radix-ui/react-dialog` direto, sem o wrapper genérico de
+`components/ui/dialog.tsx` pra manter o visual customizado). Isso resolve
+a causa raiz dos 2 sintomas relacionados de uma vez só — o Radix passa a
+tratar esse modal como parte do próprio sistema de dialogs (empilha
+corretamente no `lockStack` do `react-remove-scroll`, vira o "ativo", e
+seu conteúdo ganha `pointer-events:auto` automaticamente, sem precisar de
+gambiarra manual). Confirmado ao vivo: clicar nas pílulas e "Baixar PDF"
+funciona, Esc agora fecha o modal (não fechava antes, bônus), e o modal de
+edição por trás fica corretamente bloqueado enquanto o relatório está
+aberto (antes ficava "furado").
+
 ## 4. Pendências abertas (consolidado em 2026-09-07)
 
 Ordem aproximada de prioridade. Ao fechar uma, mova pra linha do tempo com a data.

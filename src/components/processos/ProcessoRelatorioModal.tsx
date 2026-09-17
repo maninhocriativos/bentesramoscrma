@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
-import { createPortal } from 'react-dom';
+import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { X, FileText, Download, Loader2, Scale } from 'lucide-react';
@@ -109,30 +109,37 @@ export function ProcessoRelatorioModal({ onClose, processo, clienteNome, statusA
     }
   }, [processo]);
 
-  // Portal direto pro body: um ancestral (PageTransition) aplica um
-  // transform que quebra position:fixed (mesmo bug já visto e documentado
-  // nas Petições — o fixed vira relativo a esse ancestral e some/corta).
-  //
-  // pointerEvents: 'auto' é necessário porque o modal de Processo por trás
-  // (Radix Dialog) seta `pointer-events: none` no <body> inteiro enquanto
-  // está aberto, e só reativa no seu próprio conteúdo — nosso portal, sendo
-  // outro filho direto do body, herdava esse `none` e ficava com TODO o
-  // relatório clicável na aparência mas inerte de verdade (botão "Baixar
-  // PDF" não disparava nada, cliques atravessavam pro dialog de trás).
-  return createPortal(
-    <div
-      style={{ position: 'fixed', inset: 0, background: 'rgba(20,10,0,0.7)', zIndex: 10000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '20px 12px', overflow: 'auto', backdropFilter: 'blur(6px)', pointerEvents: 'auto' }}
-      onClick={onClose}
-    >
-      <div
-        style={{ background: '#faf7f2', borderRadius: 20, width: '100%', maxWidth: 860, boxShadow: '0 40px 100px rgba(20,10,0,0.45)' }}
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Sem overflow:hidden no card: quando um ancestral com border-radius +
-            overflow:hidden envolve um filho com overflow-y:auto, o Chromium
-            recorta/quebra o hit-test da barra de rolagem nativa do filho —
-            dá pra ver a barra, mas arrastar não move nada. Em vez disso, cada
-            seção que toca uma borda arredonda só a própria ponta. */}
+  // Dialog do Radix de verdade (não createPortal cru) — resolve, de raiz,
+  // 2 bugs em cascata que apareceram quando isso era um portal manual
+  // sibling do Dialog de edição do processo (que fica aberto por trás):
+  // 1) o Dialog de baixo seta pointer-events:none no <body> inteiro
+  //    enquanto está aberto (só reativa no próprio conteúdo) — nosso
+  //    portal manual herdava isso e ficava inerte a clique.
+  // 2) o scroll-lock do Radix (react-remove-scroll) empilha por instância
+  //    de RemoveScroll — um Dialog de verdade aqui entra na pilha
+  //    corretamente e vira o "ativo", em vez de ficar de fora do sistema.
+  // Usando Dialog de verdade, o próprio Radix cuida dos dois automaticamente.
+  return (
+    <DialogPrimitive.Root open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay
+          style={{ position: 'fixed', inset: 0, background: 'rgba(20,10,0,0.7)', zIndex: 10000, backdropFilter: 'blur(6px)' }}
+        />
+        <DialogPrimitive.Content
+          aria-describedby={undefined}
+          style={{
+            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+            zIndex: 10000, width: 'min(860px, calc(100vw - 24px))', maxHeight: 'calc(100vh - 40px)',
+            overflow: 'hidden', background: '#faf7f2', boxShadow: '0 40px 100px rgba(20,10,0,0.45)', outline: 'none',
+          }}
+        >
+          <DialogPrimitive.Title className="sr-only">Relatório do Processo — PDF</DialogPrimitive.Title>
+        {/* Sem borderRadius+overflow:hidden juntos num ancestral da área
+            rolável: essa combinação recorta o hit-test da barra de rolagem
+            nativa do filho no Chromium (a barra aparece, mas arrastar não
+            move nada). O Content acima só clipa em retângulo (sem cantos
+            arredondados); cada seção que toca uma borda visível arredonda
+            só a própria ponta. */}
         <div style={{ background: 'linear-gradient(135deg, #1e1008, #3d2010)', padding: '16px 22px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTopLeftRadius: 20, borderTopRightRadius: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <FileText size={18} style={{ color: '#c9943a' }} />
@@ -351,8 +358,8 @@ export function ProcessoRelatorioModal({ onClose, processo, clienteNome, statusA
 
           </div>
         </div>
-      </div>
-    </div>,
-    document.body
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 }

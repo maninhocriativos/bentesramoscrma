@@ -53,6 +53,30 @@ function parseDataISO(val: string): string | null {
   return null;
 }
 
+// Preserva partes já cadastradas (manuais ou de sync anterior) quando a
+// fonte externa não retorna nenhuma parte nesta rodada específica — sem
+// isso, um sync automático que veio "vazio" (comum no DataJud, que às
+// vezes só traz movimentações sem detalhar polo) apagava partes_json
+// inteiro a cada 72h, mesmo as adicionadas manualmente pelo usuário.
+// Mesma lógica já usada no botão manual "Atualizar CNJ" do frontend
+// (mergePartesPreservandoManual em ProcessoModalExpanded.tsx).
+function mergePartesPreservandoManual(apiPartes: any[], prevPartes: any[]): any[] {
+  const normalize = (s: string) => (s || "").toLowerCase().trim();
+  const prevByName = new Map(prevPartes.map((p) => [normalize(p.nome), p]));
+  const apiNames = new Set(apiPartes.map((p) => normalize(p.nome)));
+  const atualizadas = apiPartes.map((apiParte) => {
+    const existente = prevByName.get(normalize(apiParte.nome));
+    if (!existente) return apiParte;
+    return {
+      ...apiParte,
+      celular: existente.celular || apiParte.celular,
+      telefone_adicional: existente.telefone_adicional || apiParte.telefone_adicional,
+    };
+  });
+  const manuaisSemMatch = prevPartes.filter((p) => !apiNames.has(normalize(p.nome)));
+  return [...atualizadas, ...manuaisSemMatch];
+}
+
 function parseDataBR(dataBR: string): string {
   // Aceita dd/mm/yyyy ou ISO
   const match = dataBR?.match(/(\d{2})\/(\d{2})\/(\d{4})/);
@@ -79,7 +103,7 @@ serve(async (req) => {
 
     let query = supabase
       .from("processos")
-      .select("id, numero_processo, cliente_id, titulo_acao, status, ultima_consulta_api_at, sync_priority, sync_error_count, notificacao_ativa, movimentos_json")
+      .select("id, numero_processo, cliente_id, titulo_acao, status, ultima_consulta_api_at, sync_priority, sync_error_count, notificacao_ativa, movimentos_json, partes_json")
       .not("numero_processo", "is", null);
 
     if (processoId) query = query.eq("id", processoId);
@@ -222,7 +246,7 @@ serve(async (req) => {
             grau:                     proc.grau,
             assunto:                  proc.assuntos?.[0]?.nome,
             valor_causa:              proc.valorCausa,
-            partes_json:              proc.partes || [],
+            partes_json:              mergePartesPreservandoManual(proc.partes || [], processo.partes_json || []),
             movimentos_json:          proc.movimentos || [],
             dados_datajud:            proc.fonteRaw,
             fonte_preferida:          proc.fonte,

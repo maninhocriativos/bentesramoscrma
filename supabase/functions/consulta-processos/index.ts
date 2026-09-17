@@ -313,6 +313,30 @@ async function resolverClienteId(nomeCliente: string): Promise<string | null> {
   return novoLead?.id ?? null;
 }
 
+// Preserva partes já cadastradas (manuais ou de sync anterior) quando a
+// fonte externa não retorna nenhuma parte nesta consulta específica — sem
+// isso, qualquer chamador desta função (processo-auto-sync, intimacoes-oab,
+// busca manual no frontend) apagava partes_json inteiro sempre que a fonte
+// (comum no DataJud, que às vezes só traz movimentações sem detalhar polo)
+// vinha sem partes dessa vez. Mesma lógica usada no botão manual "Atualizar
+// CNJ" do frontend (mergePartesPreservandoManual em ProcessoModalExpanded.tsx).
+function mergePartesPreservandoManual(apiPartes: any[], prevPartes: any[]): any[] {
+  const normalize = (s: string) => (s || '').toLowerCase().trim();
+  const prevByName = new Map(prevPartes.map((p) => [normalize(p.nome), p]));
+  const apiNames = new Set(apiPartes.map((p) => normalize(p.nome)));
+  const atualizadas = apiPartes.map((apiParte) => {
+    const existente = prevByName.get(normalize(apiParte.nome));
+    if (!existente) return apiParte;
+    return {
+      ...apiParte,
+      celular: existente.celular || apiParte.celular,
+      telefone_adicional: existente.telefone_adicional || apiParte.telefone_adicional,
+    };
+  });
+  const manuaisSemMatch = prevPartes.filter((p) => !apiNames.has(normalize(p.nome)));
+  return [...atualizadas, ...manuaisSemMatch];
+}
+
 async function persistirProcesso(processo: any, processoIdExistente?: string | null, advogadoResponsavel?: string): Promise<{ id: string; movimentacoesNovas: number }> {
   const cnjNorm = normalizarCNJ(processo.cnj);
   const cacheValidUntil = new Date(Date.now() + 30 * 60 * 1000).toISOString();
@@ -338,7 +362,6 @@ async function persistirProcesso(processo: any, processoIdExistente?: string | n
     fonte_raw:               processo.fonteRaw || null,
     dados_datajud:           processo.fonteRaw || null,
     ultima_consulta_api_at:  nowIso,
-    partes_json:             Array.isArray(processo.partes) && processo.partes.length > 0 ? processo.partes : null,
     movimentos_json:         Array.isArray(processo.movimentos) && processo.movimentos.length > 0 ? processo.movimentos : null,
     cache_valid_until:       cacheValidUntil,
     updated_at:              nowIso,
@@ -368,7 +391,11 @@ async function persistirProcesso(processo: any, processoIdExistente?: string | n
   let processoId: string;
 
   if (processoIdExistente) {
-    const { data: existing } = await supabase.from('processos').select('nome_cliente, cpf_cliente, cliente_id').eq('id', processoIdExistente).single();
+    const { data: existing } = await supabase.from('processos').select('nome_cliente, cpf_cliente, cliente_id, partes_json').eq('id', processoIdExistente).single();
+    dadosProcesso.partes_json = mergePartesPreservandoManual(
+      Array.isArray(processo.partes) ? processo.partes : [],
+      Array.isArray(existing?.partes_json) ? existing.partes_json : []
+    );
     if (existing?.nome_cliente) { delete dadosProcesso.nome_cliente; delete dadosProcesso.cpf_cliente; }
     if (!existing?.cliente_id) {
       const nomeParaVincular = dadosProcesso.nome_cliente || existing?.nome_cliente;
@@ -383,11 +410,16 @@ async function persistirProcesso(processo: any, processoIdExistente?: string | n
     console.log(`✅ Processo atualizado: ${processoId}`);
   } else {
     // ✅ FIX 2 — fallback por numero_processo quando cnj_normalizado não existe
-    const { data: existingByCnj } = await supabase.from('processos').select('id, nome_cliente, cpf_cliente, cliente_id').eq('cnj_normalizado', cnjNorm).maybeSingle();
+    const { data: existingByCnj } = await supabase.from('processos').select('id, nome_cliente, cpf_cliente, cliente_id, partes_json').eq('cnj_normalizado', cnjNorm).maybeSingle();
     const { data: existingByNumero } = !existingByCnj
-      ? await supabase.from('processos').select('id, nome_cliente, cpf_cliente, cliente_id').eq('numero_processo', processo.cnjFormatado).maybeSingle()
+      ? await supabase.from('processos').select('id, nome_cliente, cpf_cliente, cliente_id, partes_json').eq('numero_processo', processo.cnjFormatado).maybeSingle()
       : { data: null };
     const existing = existingByCnj || existingByNumero;
+
+    dadosProcesso.partes_json = mergePartesPreservandoManual(
+      Array.isArray(processo.partes) ? processo.partes : [],
+      Array.isArray(existing?.partes_json) ? existing.partes_json : []
+    );
 
     if (existing?.nome_cliente) { delete dadosProcesso.nome_cliente; delete dadosProcesso.cpf_cliente; }
 
